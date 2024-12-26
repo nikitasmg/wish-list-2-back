@@ -21,7 +21,7 @@ func Connect() error {
 	}
 
 	DB = db
-	err = db.AutoMigrate(&model.User{}, &model.Present{}, &model.WishList{})
+	err = db.AutoMigrate(&model.User{}, &model.Present{}, &model.Wishlist{})
 	if err != nil {
 		return fmt.Errorf("ошибка миграции: %v", err)
 	}

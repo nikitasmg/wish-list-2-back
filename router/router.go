@@ -1,7 +1,6 @@
 package router
 
 import (
-	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	jwtware "github.com/gofiber/jwt/v2"
@@ -11,10 +10,19 @@ import (
 
 // SetupRoutes setup router api
 func SetupRoutes(app *fiber.App) {
+
+	presentHandlers := handler.NewPresentService()
+	wishlistHandlers := handler.NewWishlistHandlers()
+
 	// Группа обработчиков, которые доступны неавторизованным пользователям
 	publicGroup := app.Group("/api", logger.New())
 	publicGroup.Post("/register", handler.Register)
 	publicGroup.Post("/login", handler.Login)
+
+	// Публичные ручки для отображения вишлиста
+	publicGroup.Get("/present/:wishlistId", presentHandlers.GetAll)
+	publicGroup.Put("/present/reserve/:id", presentHandlers.Reserve)
+	publicGroup.Put("/present/release/:id", presentHandlers.Release)
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 
@@ -23,27 +31,20 @@ func SetupRoutes(app *fiber.App) {
 	authorizedGroup.Use(jwtware.New(jwtware.Config{
 		SigningKey: []byte(jwtSecret),
 		ContextKey: "user",
-		SuccessHandler: func(c *fiber.Ctx) error {
-			// Обработка успешного валидации JWT
-			return c.Next()
-		},
-		ErrorHandler: func(c *fiber.Ctx, err error) error {
-			// Логируем ошибку
-			fmt.Println(c.GetReqHeaders())
-			fmt.Println("JWT Error:", err)
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid or expired JWT"})
-		},
 	}))
 
 	// User
 	authorizedGroup.Get("/me", handler.Me)
 
-	// WishList
-	authorizedGroup.Get("/wishlist", handler.GetAllWishlists)
-	authorizedGroup.Post("/wishlist", handler.CreateWishlist)
-	authorizedGroup.Get("/wishlist/:id", handler.GetWishList)
+	// Wishlist
+	authorizedGroup.Get("/wishlist", wishlistHandlers.GetAll)
+	authorizedGroup.Get("/wishlist/:id", wishlistHandlers.GetOne)
+	authorizedGroup.Post("/wishlist", wishlistHandlers.Create)
+	authorizedGroup.Delete("/wishlist/:id", wishlistHandlers.Delete)
+	authorizedGroup.Patch("/wishlist/:id", wishlistHandlers.Update)
 
 	// Presents
-	authorizedGroup.Post("/present/:id", handler.CreatePresent)
-	authorizedGroup.Get("/present/:id", handler.GetPresents)
+	authorizedGroup.Post("/present/:wishlistId", presentHandlers.Create)
+	authorizedGroup.Delete("/present/:id", presentHandlers.Delete)
+	authorizedGroup.Patch("/present/:id", presentHandlers.Update)
 }

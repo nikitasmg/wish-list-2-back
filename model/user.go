@@ -9,7 +9,7 @@ type User struct {
 	ID        uuid.UUID  `gorm:"primaryKey" json:"id"`
 	Username  string     `gorm:"unique;not null" json:"username" validate:"required"`
 	Password  string     `gorm:"not null" json:"password" validate:"required"`
-	WishLists []WishList `gorm:"foreignKey:UserID" json:"wish_lists"` // связь с wishLists
+	Wishlists []Wishlist `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"` // связь с Wishlists
 }
 
 type Claims struct {

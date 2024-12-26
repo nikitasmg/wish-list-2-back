@@ -7,74 +7,149 @@ import (
 	"main/database"
 	"main/helpers"
 	"main/model"
+	"main/services"
 	"time"
 )
 
-func GetAllWishlists(c *fiber.Ctx) error {
-	err, userID := helpers.GetUserId(c)
-
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	var wishLists []model.WishList
-	result := database.DB.Where("user_id = ?", userID).Find(&wishLists)
-
-	if result.Error != nil {
-		return c.Status(500).JSON(fiber.Map{"error": result.Error.Error()})
-	}
-	return c.Status(200).JSON(fiber.Map{"data": wishLists})
+type WishlistHandlers interface {
+	GetAll(c *fiber.Ctx) error
+	GetOne(c *fiber.Ctx) error
+	Create(c *fiber.Ctx) error
+	Update(c *fiber.Ctx) error
+	Delete(c *fiber.Ctx) error
 }
 
-func CreateWishlist(c *fiber.Ctx) error {
+var wishlistService = services.NewWishlistService()
+
+type wishlistHandlers struct{}
+
+func NewWishlistHandlers() WishlistHandlers {
+	return &wishlistHandlers{}
+}
+
+func (h *wishlistHandlers) GetAll(c *fiber.Ctx) error {
 	err, userID := helpers.GetUserId(c)
 
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	var wishList model.WishList
-	if err = c.BodyParser(&wishList); err != nil {
+	err, wishlists := wishlistService.GetAll(userID)
+
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.Status(200).JSON(fiber.Map{"data": wishlists})
+}
+
+func (h *wishlistHandlers) Create(c *fiber.Ctx) error {
+	err, userID := helpers.GetUserId(c)
+
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	var Wishlist model.Wishlist
+	if err = c.BodyParser(&Wishlist); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
 	}
 	// Создаем новый валидатор
 	validate := validator.New()
 	// Валидируем структуру
-	if err = validate.Struct(wishList); err != nil {
+	if err = validate.Struct(Wishlist); err != nil {
 		// Если есть ошибки валидации, извлекаем их и возвращаем клиенту
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	// Создаем новый список желаемого и сохраняем его в базе данных
-	newWishList := model.WishList{
+	newWishlist := model.Wishlist{
 		ID:          uuid.New(),
 		UserID:      *userID,
-		Title:       wishList.Title,
-		Description: wishList.Description,
-		Cover:       wishList.Cover,
+		Title:       Wishlist.Title,
+		Description: Wishlist.Description,
+		Cover:       Wishlist.Cover,
+		ColorScheme: Wishlist.ColorScheme,
 		CreatedAt:   time.Now(),
 	}
 	// Сохраняем новый список желаемого в базе данных
-	if err = database.DB.Create(&newWishList).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create wishlist"})
+	if err = database.DB.Create(&newWishlist).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create Wishlist"})
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"data": newWishList})
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"data": newWishlist})
 }
 
-func GetWishList(c *fiber.Ctx) error {
+func (h *wishlistHandlers) GetOne(c *fiber.Ctx) error {
 	id := c.Params("id")
-	wishListId, err := uuid.Parse(id) // Преобразуем строку в uuid.UUID
+	WishlistId, err := uuid.Parse(id) // Преобразуем строку в uuid.UUID
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid wishlist ID"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid Wishlist ID"})
 	}
 
-	wishList := model.WishList{ID: wishListId}
-	result := database.DB.First(wishList)
+	err, data := wishlistService.GetOne(WishlistId)
 
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.Status(200).JSON(fiber.Map{"data": data})
+}
+
+func (h *wishlistHandlers) Delete(c *fiber.Ctx) error {
+	id := c.Params("id")
+	WishlistId, err := uuid.Parse(id)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid Wishlist ID"})
+	}
+	Wishlist := model.Wishlist{ID: WishlistId}
+	result := database.DB.Delete(&Wishlist)
 	if result.Error != nil {
 		return c.Status(404).JSON(fiber.Map{"error": result.Error.Error()})
 	}
+	return c.Status(200).JSON(fiber.Map{"data": true})
+}
 
-	return c.Status(200).JSON(fiber.Map{"data": wishList})
+func (h *wishlistHandlers) Update(c *fiber.Ctx) error {
+	id := c.Params("id")
+	WishlistId, err := uuid.Parse(id)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid Wishlist ID"})
+	}
+
+	// Пытаемся найти существующий список желаемого
+	Wishlist := model.Wishlist{ID: WishlistId}
+	result := database.DB.First(&Wishlist)
+
+	if result.Error != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Wishlist not found"})
+	}
+
+	// Создаем новую структуру для обновления
+	updateData := model.Wishlist{}
+	if err = c.BodyParser(&updateData); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
+	}
+
+	// Обновляем только те поля, которые были предоставлены
+	if updateData.Title != "" {
+		Wishlist.Title = updateData.Title
+	}
+	if updateData.Description != "" {
+		Wishlist.Description = updateData.Description
+	}
+	if updateData.Cover != "" {
+		Wishlist.Cover = updateData.Cover
+	}
+	if updateData.ColorScheme != "" {
+		Wishlist.ColorScheme = updateData.ColorScheme
+	}
+
+	Wishlist.UpdatedAt = time.Now()
+
+	// Сохраняем обновления в базе данных
+	if err := database.DB.Save(&Wishlist).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update Wishlist"})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"data": Wishlist})
 }
