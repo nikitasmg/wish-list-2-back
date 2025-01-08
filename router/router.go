@@ -5,14 +5,15 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	jwtware "github.com/gofiber/jwt/v2"
 	"main/handler"
+	"main/pkg/minio"
 	"os"
 )
 
 // SetupRoutes setup router api
-func SetupRoutes(app *fiber.App) {
+func SetupRoutes(app *fiber.App, minio minio.Client) {
 
-	presentHandlers := handler.NewPresentService()
-	wishlistHandlers := handler.NewWishlistHandlers()
+	presentHandlers := handler.NewPresentService(minio)
+	wishlistHandlers := handler.NewWishlistHandlers(minio)
 
 	// Группа обработчиков, которые доступны неавторизованным пользователям
 	publicGroup := app.Group("/api", logger.New())

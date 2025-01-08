@@ -44,11 +44,16 @@ func Register(c *fiber.Ctx) error {
 		// Если есть ошибки валидации, извлекаем их и возвращаем клиенту
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
+	var currentUser model.User
+	err := database.DB.Where("username = ?", user.Username).First(&currentUser).Error
+	if err == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Пользователь с таким username уже существует"})
+	}
 	// Хеширование пароля
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	result := database.DB.Create(&model.User{ID: uuid.New(), Username: user.Username, Password: string(hashedPassword)})
 	if result.Error != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Could not register user"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Не удалось зарегистрировать пользователя"})
 	}
 
 	tokenString, err := setToken(user)
@@ -69,7 +74,7 @@ func Login(c *fiber.Ctx) error {
 	result := database.DB.Where("username = ?", user.Username).First(&currentUser)
 
 	if result.Error != nil || bcrypt.CompareHashAndPassword([]byte(currentUser.Password), []byte(user.Password)) != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid credentials"})
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Неверный логин или пароль"})
 	}
 
 	tokenString, err := setToken(user)

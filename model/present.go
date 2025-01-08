@@ -17,3 +17,10 @@ type Present struct {
 	UpdatedAt   time.Time `gorm:"not null" json:"updatedAt"`
 	WishlistID  uuid.UUID `gorm:"not null" json:"wishlistId"` // внешний ключ на Wishlist
 }
+
+type CreatePresent struct {
+	Title       string `gorm:"not null" json:"title" form:"title" validate:"required"` // название подарка
+	Description string `json:"description" form:"description"`                         // описание подарка
+	Link        string `gorm:"not null" json:"link" form:"link" validate:"required"`   // ссылка на обложку
+	File        []byte `gorm:"not null" json:"file" form:"file"`
+}

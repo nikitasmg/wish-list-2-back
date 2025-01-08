@@ -12,9 +12,10 @@ import (
 
 var DB *gorm.DB
 
-// функция подключения к базе данных
+// Connect функция подключения к базе данных
 func Connect() error {
-	connStr := "user=username dbname=wishListDatabase sslmode=disable password=password"
+	connStr := "host=postgres port=5432 user=postgres password=postgres dbname=wishlist_db sslmode=disable"
+
 	db, err := gorm.Open(postgres.Open(connStr), &gorm.Config{})
 	if err != nil {
 		return fmt.Errorf("ошибка подключения к БД: %v", err)

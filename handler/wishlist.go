@@ -7,6 +7,7 @@ import (
 	"main/database"
 	"main/helpers"
 	"main/model"
+	"main/pkg/minio"
 	"main/services"
 	"time"
 )
@@ -21,10 +22,14 @@ type WishlistHandlers interface {
 
 var wishlistService = services.NewWishlistService()
 
-type wishlistHandlers struct{}
+type wishlistHandlers struct {
+	minioClient minio.Client
+}
 
-func NewWishlistHandlers() WishlistHandlers {
-	return &wishlistHandlers{}
+func NewWishlistHandlers(minioClient minio.Client) WishlistHandlers {
+	return &wishlistHandlers{
+		minioClient: minioClient,
+	}
 }
 
 func (h *wishlistHandlers) GetAll(c *fiber.Ctx) error {
@@ -37,9 +42,9 @@ func (h *wishlistHandlers) GetAll(c *fiber.Ctx) error {
 	err, wishlists := wishlistService.GetAll(userID)
 
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.Status(200).JSON(fiber.Map{"data": wishlists})
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"data": wishlists})
 }
 
 func (h *wishlistHandlers) Create(c *fiber.Ctx) error {
@@ -49,7 +54,7 @@ func (h *wishlistHandlers) Create(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	var Wishlist model.Wishlist
+	var Wishlist model.CreateWishlist
 	if err = c.BodyParser(&Wishlist); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
 	}
@@ -60,14 +65,14 @@ func (h *wishlistHandlers) Create(c *fiber.Ctx) error {
 		// Если есть ошибки валидации, извлекаем их и возвращаем клиенту
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-
+	url, err := h.minioClient.CreateOneHandler(c)
 	// Создаем новый список желаемого и сохраняем его в базе данных
 	newWishlist := model.Wishlist{
 		ID:          uuid.New(),
 		UserID:      *userID,
 		Title:       Wishlist.Title,
 		Description: Wishlist.Description,
-		Cover:       Wishlist.Cover,
+		Cover:       url,
 		ColorScheme: Wishlist.ColorScheme,
 		CreatedAt:   time.Now(),
 	}
@@ -89,7 +94,7 @@ func (h *wishlistHandlers) GetOne(c *fiber.Ctx) error {
 	err, data := wishlistService.GetOne(WishlistId)
 
 	if err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	return c.Status(200).JSON(fiber.Map{"data": data})
@@ -99,21 +104,21 @@ func (h *wishlistHandlers) Delete(c *fiber.Ctx) error {
 	id := c.Params("id")
 	WishlistId, err := uuid.Parse(id)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid Wishlist ID"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Не верный формат UUID"})
 	}
 	Wishlist := model.Wishlist{ID: WishlistId}
 	result := database.DB.Delete(&Wishlist)
 	if result.Error != nil {
-		return c.Status(404).JSON(fiber.Map{"error": result.Error.Error()})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": result.Error.Error()})
 	}
-	return c.Status(200).JSON(fiber.Map{"data": true})
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"data": true})
 }
 
 func (h *wishlistHandlers) Update(c *fiber.Ctx) error {
 	id := c.Params("id")
 	WishlistId, err := uuid.Parse(id)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid Wishlist ID"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Не верный формат UUID"})
 	}
 
 	// Пытаемся найти существующий список желаемого
@@ -121,11 +126,11 @@ func (h *wishlistHandlers) Update(c *fiber.Ctx) error {
 	result := database.DB.First(&Wishlist)
 
 	if result.Error != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Wishlist not found"})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Вишлист с таким ID не сущуесвтует"})
 	}
 
 	// Создаем новую структуру для обновления
-	updateData := model.Wishlist{}
+	updateData := model.CreateWishlist{}
 	if err = c.BodyParser(&updateData); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
 	}
@@ -137,8 +142,12 @@ func (h *wishlistHandlers) Update(c *fiber.Ctx) error {
 	if updateData.Description != "" {
 		Wishlist.Description = updateData.Description
 	}
-	if updateData.Cover != "" {
-		Wishlist.Cover = updateData.Cover
+	if updateData.File != nil {
+		url, err := h.minioClient.CreateOneHandler(c)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		}
+		Wishlist.Cover = url
 	}
 	if updateData.ColorScheme != "" {
 		Wishlist.ColorScheme = updateData.ColorScheme

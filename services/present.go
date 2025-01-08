@@ -17,7 +17,6 @@ func NewPresentService() PresentService {
 	return &presentService{}
 }
 
-// GetOne получает один элемент желаемого списка по ID
 func (w *presentService) GetOne(id uuid.UUID) (error, model.Present) {
 	present := model.Present{ID: id}
 	result := database.DB.First(&present)

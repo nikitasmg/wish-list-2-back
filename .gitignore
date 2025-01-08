@@ -1,2 +1,54 @@
-# .gitignore
+# Go binaries
+/bin/
+/obj/
+
+# Go specific
+*.test
+*.out
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Dependency directories (remove the comment if you are using vendoring)
+# vendor/
+
+# You might want to include your Go module cache
+go.sum
+
+# PostgreSQL data folder
+pgdata/
+
+# MinIO configuration and data
+.minio/
+.minerestore/
+
+# IDE files
+*.idea/
+*.vscode/
+*.swp
+
+# Log files
+*.log
+
+# Environmental variable files
 .env
+.env.local
+.env.*.local
+
+# Coverage files
+coverage.out
+*.cov
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Ignore build artifacts
+/build/
+
+# Ignore any other generated files
+*.zip
+*.tar.gz
