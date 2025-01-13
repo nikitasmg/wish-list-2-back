@@ -21,7 +21,7 @@ func SetupRoutes(app *fiber.App, minio minio.Client) {
 	publicGroup.Post("/login", handler.Login)
 
 	// Публичные ручки для отображения вишлиста
-	publicGroup.Get("/present/:wishlistId", presentHandlers.GetAll)
+	publicGroup.Get("/wishlist/:wishlistId/presents", presentHandlers.GetAll)
 	publicGroup.Put("/present/reserve/:id", presentHandlers.Reserve)
 	publicGroup.Put("/present/release/:id", presentHandlers.Release)
 
@@ -36,16 +36,18 @@ func SetupRoutes(app *fiber.App, minio minio.Client) {
 
 	// User
 	authorizedGroup.Get("/me", handler.Me)
+	authorizedGroup.Get("/logout", handler.Logout)
 
 	// Wishlist
 	authorizedGroup.Get("/wishlist", wishlistHandlers.GetAll)
 	authorizedGroup.Get("/wishlist/:id", wishlistHandlers.GetOne)
 	authorizedGroup.Post("/wishlist", wishlistHandlers.Create)
 	authorizedGroup.Delete("/wishlist/:id", wishlistHandlers.Delete)
-	authorizedGroup.Patch("/wishlist/:id", wishlistHandlers.Update)
+	authorizedGroup.Put("/wishlist/:id", wishlistHandlers.Update)
 
 	// Presents
 	authorizedGroup.Post("/present/:wishlistId", presentHandlers.Create)
+	authorizedGroup.Get("/present/:id", presentHandlers.GetOne)
 	authorizedGroup.Delete("/present/:id", presentHandlers.Delete)
-	authorizedGroup.Patch("/present/:id", presentHandlers.Update)
+	authorizedGroup.Put("/present/:id", presentHandlers.Update)
 }

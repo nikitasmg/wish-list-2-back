@@ -43,8 +43,8 @@ func (m *minioClient) CreateOne(file helpers.FileDataType) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("ошибка при создании URL для объекта %s (ID: %s): %v", file.FileName, objectID, err)
 	}
-
-	return url.String(), nil
+	localURL := url.Scheme + "://" + "localhost:9000" + url.Path
+	return localURL, nil
 }
 
 // CreateMany создает несколько объектов в хранилище MinIO из переданных данных.

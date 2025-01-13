@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 	"main/database"
+	"main/helpers"
 	"main/model"
 	"os"
 	"time"
@@ -16,7 +17,6 @@ import (
 var jwtSecret = os.Getenv("JWT_SECRET")
 
 func setToken(user model.User) (string, error) {
-	database.DB.First(&user)
 	claims := &model.Claims{
 		Username: user.Username,
 		Id:       user.ID,
@@ -36,32 +36,50 @@ func Register(c *fiber.Ctx) error {
 	if err := c.BodyParser(&user); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
 	}
+
 	// Создаем новый валидатор
 	validate := validator.New()
 
 	// Валидируем структуру
 	if err := validate.Struct(user); err != nil {
-		// Если есть ошибки валидации, извлекаем их и возвращаем клиенту
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
+
 	var currentUser model.User
 	err := database.DB.Where("username = ?", user.Username).First(&currentUser).Error
 	if err == nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Пользователь с таким username уже существует"})
 	}
+
 	// Хеширование пароля
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-	result := database.DB.Create(&model.User{ID: uuid.New(), Username: user.Username, Password: string(hashedPassword)})
+	newUser := model.User{
+		ID:       uuid.New(),
+		Username: user.Username,
+		Password: string(hashedPassword),
+	}
+	result := database.DB.Create(&newUser)
 	if result.Error != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Не удалось зарегистрировать пользователя"})
 	}
 
-	tokenString, err := setToken(user)
+	tokenString, err := setToken(newUser)
 
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Could not create token"})
 	}
-	return c.JSON(fiber.Map{"token": tokenString})
+
+	// Установка токена в куку
+	c.Cookie(&fiber.Cookie{
+		Name:     "token",
+		Value:    tokenString,
+		Expires:  time.Now().Add(time.Hour * 24 * 30), // Установите желаемое время жизни куки
+		Secure:   false,                               // Используйте true, если сайт работает по HTTPS
+		HTTPOnly: true,
+		SameSite: fiber.CookieSameSiteLaxMode,
+	})
+
+	return c.JSON(fiber.Map{"message": "User registered successfully"})
 }
 
 func Login(c *fiber.Ctx) error {
@@ -77,14 +95,24 @@ func Login(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Неверный логин или пароль"})
 	}
 
-	tokenString, err := setToken(user)
+	tokenString, err := setToken(currentUser)
 
 	if err != nil {
 		log.WithError(err).Error("JWT token signing")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Could not create token"})
 	}
 
-	return c.JSON(fiber.Map{"token": tokenString})
+	// Установка токена в куку
+	c.Cookie(&fiber.Cookie{
+		Name:     "token",
+		Value:    tokenString,
+		Expires:  time.Now().Add(time.Hour * 24 * 30), // Установите желаемое время жизни куки
+		Secure:   false,                               // Используйте true, если сайт работает по HTTPS
+		HTTPOnly: true,
+		SameSite: fiber.CookieSameSiteLaxMode,
+	})
+
+	return c.JSON(fiber.Map{"message": "Login successful"})
 }
 
 func Me(c *fiber.Ctx) error {
@@ -94,4 +122,9 @@ func Me(c *fiber.Ctx) error {
 	}
 	claims := user.Claims.(jwt.MapClaims)
 	return c.Status(200).JSON(fiber.Map{"user": claims})
+}
+
+func Logout(c *fiber.Ctx) error {
+	helpers.ClearCookies(c, "token")
+	return c.Status(200).JSON(fiber.Map{"message": "Logout successful"})
 }

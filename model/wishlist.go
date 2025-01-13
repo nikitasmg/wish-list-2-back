@@ -2,6 +2,7 @@ package model
 
 import (
 	"github.com/google/uuid"
+	"mime/multipart"
 	"time"
 )
 
@@ -19,8 +20,8 @@ type Wishlist struct {
 }
 
 type CreateWishlist struct {
-	Title       string `gorm:"not null" json:"title" validate:"required" form:"title"` // название списка
-	Description string `json:"description" form:"description"`                         // описание списка
-	ColorScheme string `json:"colorScheme" form:"colorScheme"`
-	File        []byte `json:"file" form:"file"`
+	Title       string                `gorm:"not null" json:"title" validate:"required" form:"title"` // название списка
+	Description string                `json:"description" form:"description"`                         // описание списка
+	ColorScheme string                `json:"colorScheme" form:"colorScheme"`
+	File        *multipart.FileHeader `json:"file" form:"file"`
 }

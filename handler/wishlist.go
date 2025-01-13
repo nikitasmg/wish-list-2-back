@@ -121,38 +121,37 @@ func (h *wishlistHandlers) Update(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Не верный формат UUID"})
 	}
 
+	// Создаем новую структуру для обновления
+	var UpdatedData model.CreateWishlist
+	if err = c.BodyParser(&UpdatedData); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input", "details": err.Error()})
+	}
+
 	// Пытаемся найти существующий список желаемого
 	Wishlist := model.Wishlist{ID: WishlistId}
 	result := database.DB.First(&Wishlist)
-
 	if result.Error != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Вишлист с таким ID не сущуесвтует"})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Вишлист с таким ID не существует"})
 	}
 
-	// Создаем новую структуру для обновления
-	updateData := model.CreateWishlist{}
-	if err = c.BodyParser(&updateData); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
-	}
+	file, err := c.FormFile("file")
 
-	// Обновляем только те поля, которые были предоставлены
-	if updateData.Title != "" {
-		Wishlist.Title = updateData.Title
-	}
-	if updateData.Description != "" {
-		Wishlist.Description = updateData.Description
-	}
-	if updateData.File != nil {
+	// Обновляем все поля из запроса
+	Wishlist.Title = UpdatedData.Title
+	Wishlist.Description = UpdatedData.Description
+
+	if file != nil {
 		url, err := h.minioClient.CreateOneHandler(c)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 		}
 		Wishlist.Cover = url
-	}
-	if updateData.ColorScheme != "" {
-		Wishlist.ColorScheme = updateData.ColorScheme
+	} else {
+		// Если файл не передан, можно удалить или оставить старое значение
+		Wishlist.Cover = "" // или ничего не делать, в зависимости от вашей логики
 	}
 
+	Wishlist.ColorScheme = UpdatedData.ColorScheme
 	Wishlist.UpdatedAt = time.Now()
 
 	// Сохраняем обновления в базе данных
