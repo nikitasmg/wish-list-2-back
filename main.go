@@ -33,11 +33,14 @@ func main() {
 	app.Use(logger.New())
 	app.Use(compress.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000",
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowOrigins:     "http://localhost:3000", // или "*" для всех
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Custom-Header",
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-		AllowCredentials: true, // Включаем поддержку куков
+		AllowCredentials: true,
+		ExposeHeaders:    "Content-Length, X-Knowledge-Base",
+		MaxAge:           3600, // 1 час
 	}))
+
 	app.Use(recover.New())
 	app.Use(limiter.New(limiter.Config{
 		Max:        10,
