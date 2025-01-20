@@ -48,6 +48,6 @@ func SetupRoutes(app *fiber.App, minio minio.Client) {
 	// Presents
 	authorizedGroup.Post("/present/:wishlistId", presentHandlers.Create)
 	authorizedGroup.Get("/present/:id", presentHandlers.GetOne)
-	authorizedGroup.Delete("/present/:id", presentHandlers.Delete)
+	authorizedGroup.Delete("/present/:wishlistId/:id", presentHandlers.Delete)
 	authorizedGroup.Put("/present/:id", presentHandlers.Update)
 }

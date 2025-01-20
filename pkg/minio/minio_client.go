@@ -39,6 +39,7 @@ func (m *minioClient) InitMinio() error {
 	// Создание контекста с возможностью отмены операции
 	ctx := context.Background()
 	var err error
+
 	// Подключение к Minio с использованием имени пользователя и пароля
 	m.mc, err = minio.New(config.AppConfig.MinioEndpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(config.AppConfig.MinioRootUser, config.AppConfig.MinioRootPassword, ""),
@@ -55,6 +56,24 @@ func (m *minioClient) InitMinio() error {
 	}
 	if !exists {
 		err := m.mc.MakeBucket(ctx, config.AppConfig.BucketName, minio.MakeBucketOptions{})
+		if err != nil {
+			return err
+		}
+
+		// Установка политики доступа для публичного доступа
+		policy := `{
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::` + config.AppConfig.BucketName + `/*"
+                }
+            ]
+        }`
+
+		err = m.mc.SetBucketPolicy(ctx, config.AppConfig.BucketName, policy)
 		if err != nil {
 			return err
 		}

@@ -13,8 +13,8 @@ type Present struct {
 	Reserved    bool      `json:"reserved"`                                  // статус резервирования
 	Cover       string    `json:"cover"`
 	Link        string    `gorm:"not null" json:"link" validate:"required"` // ссылка на обложку
-	CreatedAt   time.Time `gorm:"not null" json:"createdAt"`
-	UpdatedAt   time.Time `gorm:"not null" json:"updatedAt"`
+	CreatedAt   time.Time `gorm:"autoCreateTime" json:"createdAt"`
+	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 	WishlistID  uuid.UUID `gorm:"not null" json:"wishlistId"` // внешний ключ на Wishlist
 }
 

@@ -25,7 +25,6 @@ import (
 func (m *minioClient) CreateOne(file helpers.FileDataType) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	fmt.Println(m)
 	// Проверка, что клиент Minio инициализирован
 	if m.mc == nil {
 		return "", errors.New("клиент Minio не инициализирован")

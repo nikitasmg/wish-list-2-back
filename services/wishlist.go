@@ -10,6 +10,8 @@ import (
 type WishlistService interface {
 	GetOne(id uuid.UUID) (error, model.Wishlist)
 	GetAll(userID *uuid.UUID) (error, []model.Wishlist)
+	IncreasePresentsCount(id uuid.UUID) (error, model.Wishlist)
+	DecreasePresentsCount(id uuid.UUID) (error, model.Wishlist)
 }
 
 // wishlistService реализация интерфейса WishlistService
@@ -28,7 +30,27 @@ func (w *wishlistService) GetOne(id uuid.UUID) (error, model.Wishlist) {
 }
 
 func (w *wishlistService) GetAll(userID *uuid.UUID) (error, []model.Wishlist) {
-	var Wishlists []model.Wishlist
-	result := database.DB.Where("user_id = ?", userID).Find(&Wishlists)
-	return result.Error, Wishlists
+	var wishlists []model.Wishlist
+	result := database.DB.Where("user_id = ?", userID).Find(&wishlists)
+	return result.Error, wishlists
+}
+
+func (w *wishlistService) IncreasePresentsCount(id uuid.UUID) (error, model.Wishlist) {
+	err, wishlist := w.GetOne(id)
+	if err != nil {
+		return err, model.Wishlist{}
+	}
+	wishlist.PresentsCount += 1
+	result := database.DB.Save(&wishlist)
+	return result.Error, wishlist
+}
+
+func (w *wishlistService) DecreasePresentsCount(id uuid.UUID) (error, model.Wishlist) {
+	err, wishlist := w.GetOne(id)
+	if err != nil {
+		return err, model.Wishlist{}
+	}
+	wishlist.PresentsCount -= 1
+	result := database.DB.Save(&wishlist)
+	return result.Error, wishlist
 }

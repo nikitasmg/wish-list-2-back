@@ -8,7 +8,6 @@ import (
 	"main/model"
 	"main/pkg/minio"
 	"main/services"
-	"time"
 )
 
 type PresentHandlers interface {
@@ -73,6 +72,11 @@ func (h *presentHandlers) Create(c *fiber.Ctx) error {
 		// Если есть ошибки валидации, извлекаем их и возвращаем клиенту
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Вишлист с таким ID не существует"})
 	}
+	err, _ = wishlistService.IncreasePresentsCount(wishlistId)
+	if err != nil {
+		// Если есть ошибки валидации, извлекаем их и возвращаем клиенту
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Ошибка при изменении количества подарков"})
+	}
 	url, err := h.minioClient.CreateOneHandler(c)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
@@ -86,7 +90,6 @@ func (h *presentHandlers) Create(c *fiber.Ctx) error {
 		Cover:       url,
 		Link:        present.Link,
 		Reserved:    false,
-		CreatedAt:   time.Now(),
 	}
 	// Сохраняем новый список желаемого в базе данных
 	if err = database.DB.Create(&newPresent).Error; err != nil {
@@ -98,32 +101,37 @@ func (h *presentHandlers) Create(c *fiber.Ctx) error {
 
 func (h *presentHandlers) GetAll(c *fiber.Ctx) error {
 	id := c.Params("wishlistId")
-	WishlistId, err := uuid.Parse(id) // Преобразуем строку в uuid.UUID
+	wishlistId, err := uuid.Parse(id) // Преобразуем строку в uuid.UUID
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Неверный формат UUID"})
 	}
 
-	err, presents := presentService.GetAll(WishlistId)
-
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	err, wishlist := wishlistService.GetOne(WishlistId)
+	err, presents := presentService.GetAll(wishlistId)
 
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	return c.Status(fiber.StatusOK).JSON(
-		fiber.Map{"data": presents, "settings": fiber.Map{"colorSchema": wishlist.ColorScheme}})
+		fiber.Map{"data": presents})
 }
 
 func (h *presentHandlers) Delete(c *fiber.Ctx) error {
 	id := c.Params("id")
+
 	presentId, err := uuid.Parse(id) // Преобразуем строку в uuid.UUID
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Неверный формат UUID"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Неверный формат UUID подарка"})
+	}
+	wishlistId := c.Params("wishlistId")
+	wishlistParseId, err := uuid.Parse(wishlistId) // Преобразуем строку в uuid.UUID
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Неверный формат UUID вишлиста"})
+	}
+
+	err, _ = wishlistService.DecreasePresentsCount(wishlistParseId)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Ошибка в изменении количества подарков"})
 	}
 
 	result := database.DB.Delete(&model.Present{ID: presentId})
@@ -143,14 +151,14 @@ func (h *presentHandlers) Update(c *fiber.Ctx) error {
 	}
 
 	// Создаем новую структуру для обновления
-	var UpdatedData model.CreatePresent
-	if err = c.BodyParser(&UpdatedData); err != nil {
+	var updatedData model.CreatePresent
+	if err = c.BodyParser(&updatedData); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input", "details": err.Error()})
 	}
 
 	// Пытаемся найти существующий подарок
-	Present := model.Present{ID: presentId}
-	result := database.DB.First(&Present)
+	present := model.Present{ID: presentId}
+	result := database.DB.First(&present)
 	if result.Error != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Подарок с таким ID не существует"})
 	}
@@ -158,29 +166,27 @@ func (h *presentHandlers) Update(c *fiber.Ctx) error {
 	file, err := c.FormFile("file")
 
 	// Обновляем все поля из запроса
-	Present.Title = UpdatedData.Title
-	Present.Description = UpdatedData.Description
-	Present.Link = UpdatedData.Link
+	present.Title = updatedData.Title
+	present.Description = updatedData.Description
+	present.Link = updatedData.Link
 
 	if file != nil {
 		url, err := h.minioClient.CreateOneHandler(c)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 		}
-		Present.Cover = url
+		present.Cover = url
 	} else {
 		// Если файл не передан, можно удалить или оставить старое значение
-		Present.Cover = "" // или ничего не делать, в зависимости от вашей логики
+		present.Cover = "" // или ничего не делать, в зависимости от вашей логики
 	}
 
-	Present.UpdatedAt = time.Now()
-
 	// Сохраняем обновления в базе данных
-	if err := database.DB.Save(&Present).Error; err != nil {
+	if err := database.DB.Save(&present).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update Present"})
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{"data": Present})
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"data": present})
 }
 
 func (h *presentHandlers) Reserve(c *fiber.Ctx) error {

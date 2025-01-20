@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"github.com/go-playground/validator/v10"
+	"errors"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"main/database"
@@ -48,34 +48,67 @@ func (h *wishlistHandlers) GetAll(c *fiber.Ctx) error {
 }
 
 func (h *wishlistHandlers) Create(c *fiber.Ctx) error {
+	// Получаем идентификатор пользователя
 	err, userID := helpers.GetUserId(c)
-
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to retrieve user ID"})
 	}
 
-	var Wishlist model.CreateWishlist
-	if err = c.BodyParser(&Wishlist); err != nil {
+	// Создаем переменную для хранения данных списка желаемого
+	var wishlist model.CreateWishlist
+
+	// Получаем материалы формы
+	if err := c.BodyParser(&wishlist); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
 	}
-	// Создаем новый валидатор
-	validate := validator.New()
-	// Валидируем структуру
-	if err = validate.Struct(Wishlist); err != nil {
-		// Если есть ошибки валидации, извлекаем их и возвращаем клиенту
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+
+	// Заполняем поля структуры из вложенных данных
+	if title := c.FormValue("title"); title != "" {
+		wishlist.Title = title
 	}
+
+	if description := c.FormValue("description"); description != "" {
+		wishlist.Description = description
+	}
+
+	// Получаем значения для настроек
+	wishlist.Settings.ColorScheme = c.FormValue("settings[colorScheme]")
+	wishlist.Settings.ShowGiftAvailability = helpers.StringToBool(c.FormValue("showGiftAvailability"))
+
+	// Получаем значения для местоположения
+	wishlist.Location.Name = c.FormValue("location[name]")
+	wishlist.Location.Link = c.FormValue("location[link]")
+	if timeValue := c.FormValue("location[time]"); timeValue != "" {
+		if t, err := time.Parse(time.RFC3339, timeValue); err == nil {
+			wishlist.Location.Time = t
+		}
+	}
+
+	// Помещаем ваш файл в MinIO или другую файловую систему
 	url, err := h.minioClient.CreateOneHandler(c)
-	// Создаем новый список желаемого и сохраняем его в базе данных
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to upload file"})
+	}
+
+	// Создаем новый список желаемого
 	newWishlist := model.Wishlist{
 		ID:          uuid.New(),
 		UserID:      *userID,
-		Title:       Wishlist.Title,
-		Description: Wishlist.Description,
+		Title:       wishlist.Title,
+		Description: wishlist.Description,
 		Cover:       url,
-		ColorScheme: Wishlist.ColorScheme,
-		CreatedAt:   time.Now(),
+		Settings: model.Settings{
+			ColorScheme:          wishlist.Settings.ColorScheme,
+			ShowGiftAvailability: wishlist.Settings.ShowGiftAvailability,
+		},
+		Location: model.Location{
+			Name: wishlist.Location.Name,
+			Time: wishlist.Location.Time,
+			Link: wishlist.Location.Link,
+		},
+		PresentsCount: 0,
 	}
+
 	// Сохраняем новый список желаемого в базе данных
 	if err = database.DB.Create(&newWishlist).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create Wishlist"})
@@ -86,12 +119,12 @@ func (h *wishlistHandlers) Create(c *fiber.Ctx) error {
 
 func (h *wishlistHandlers) GetOne(c *fiber.Ctx) error {
 	id := c.Params("id")
-	WishlistId, err := uuid.Parse(id) // Преобразуем строку в uuid.UUID
+	wishlistId, err := uuid.Parse(id) // Преобразуем строку в uuid.UUID
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid Wishlist ID"})
 	}
 
-	err, data := wishlistService.GetOne(WishlistId)
+	err, data := wishlistService.GetOne(wishlistId)
 
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
@@ -102,12 +135,12 @@ func (h *wishlistHandlers) GetOne(c *fiber.Ctx) error {
 
 func (h *wishlistHandlers) Delete(c *fiber.Ctx) error {
 	id := c.Params("id")
-	WishlistId, err := uuid.Parse(id)
+	wishlistId, err := uuid.Parse(id)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Не верный формат UUID"})
 	}
-	Wishlist := model.Wishlist{ID: WishlistId}
-	result := database.DB.Delete(&Wishlist)
+	wishlist := model.Wishlist{ID: wishlistId}
+	result := database.DB.Delete(&wishlist)
 	if result.Error != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": result.Error.Error()})
 	}
@@ -116,48 +149,60 @@ func (h *wishlistHandlers) Delete(c *fiber.Ctx) error {
 
 func (h *wishlistHandlers) Update(c *fiber.Ctx) error {
 	id := c.Params("id")
-	WishlistId, err := uuid.Parse(id)
+	wishlistId, err := uuid.Parse(id)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Не верный формат UUID"})
 	}
 
-	// Создаем новую структуру для обновления
-	var UpdatedData model.CreateWishlist
-	if err = c.BodyParser(&UpdatedData); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input", "details": err.Error()})
-	}
-
 	// Пытаемся найти существующий список желаемого
-	Wishlist := model.Wishlist{ID: WishlistId}
-	result := database.DB.First(&Wishlist)
+	wishlist := model.Wishlist{ID: wishlistId}
+	result := database.DB.First(&wishlist)
 	if result.Error != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Вишлист с таким ID не существует"})
 	}
 
-	file, err := c.FormFile("file")
-
-	// Обновляем все поля из запроса
-	Wishlist.Title = UpdatedData.Title
-	Wishlist.Description = UpdatedData.Description
-
-	if file != nil {
-		url, err := h.minioClient.CreateOneHandler(c)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
-		}
-		Wishlist.Cover = url
-	} else {
-		// Если файл не передан, можно удалить или оставить старое значение
-		Wishlist.Cover = "" // или ничего не делать, в зависимости от вашей логики
+	// Создаем новую структуру для обновления
+	var updatedData model.CreateWishlist
+	if err = c.BodyParser(&updatedData); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input", "details": err.Error()})
 	}
 
-	Wishlist.ColorScheme = UpdatedData.ColorScheme
-	Wishlist.UpdatedAt = time.Now()
+	// Теперь showGiftAvailability - это bool переменная
+
+	// Обновляем все поля из запроса
+	wishlist.Title = updatedData.Title
+	wishlist.Description = updatedData.Description
+	wishlist.Settings = model.Settings{
+		ColorScheme:          c.FormValue("settings[colorScheme]"),
+		ShowGiftAvailability: helpers.StringToBool(c.FormValue("settings[showGiftAvailability]")),
+	}
+	wishlist.Location = model.Location{
+		Name: updatedData.Location.Name,
+		Time: updatedData.Location.Time,
+		Link: updatedData.Location.Link,
+	}
+
+	// Получаем файл, если он есть
+	file, err := c.FormFile("file")
+	if err != nil && !errors.Is(err, fiber.ErrBadRequest) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "File processing error"})
+	}
+
+	if file != nil {
+		// Если файл передан, загружаем его
+		url, err := h.minioClient.CreateOneHandler(c)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to upload file"})
+		}
+		wishlist.Cover = url
+	} else {
+		wishlist.Cover = ""
+	}
 
 	// Сохраняем обновления в базе данных
-	if err := database.DB.Save(&Wishlist).Error; err != nil {
+	if err := database.DB.Save(&wishlist).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update Wishlist"})
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{"data": Wishlist})
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"data": wishlist})
 }
