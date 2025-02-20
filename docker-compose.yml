@@ -19,7 +19,7 @@ services:
       timeout: 20s
       retries: 3
     networks:
-      - server
+      - backend  # Используем общую сеть
   
   postgres:
     image: postgres:latest
@@ -56,7 +56,7 @@ services:
       retries: 5
     restart: unless-stopped
     networks:
-      - server
+      - backend  # Подключаем к общей сети
   
   server:
     container_name: server
@@ -69,10 +69,7 @@ services:
     ports:
       - "8080:8080"
     networks:
-      - server
-    depends_on:
-      - postgres
-      - minio
+      - backend  # Подключаем к общей сети
   
   nginx:
     image: nginx:latest
@@ -81,4 +78,18 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - /etc/letsencrypt/live/api.get-my-wishlist.ru/:/etc/nginx/certs/api.get-my-wishlist.ru/
+    depends_on:
+      - server
+    networks:
+      - backend  # Подключаем к общей сети
+
+networks:
+  backend:  # Определяем сеть "backend"
+    driver: bridge
+
+volumes:
+  minio-storage:
+  pgdata:
+    driver: local
