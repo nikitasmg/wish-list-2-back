@@ -82,7 +82,7 @@ services:
     networks:
       - backend
     depends_on:
-      - backend
+      - server
 
 
 networks:
