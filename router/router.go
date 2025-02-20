@@ -16,7 +16,7 @@ func SetupRoutes(app *fiber.App, minio minio.Client) {
 	wishlistHandlers := handler.NewWishlistHandlers(minio)
 
 	// Группа обработчиков, которые доступны неавторизованным пользователям
-	publicGroup := app.Group("/api", logger.New())
+	publicGroup := app.Group("", logger.New())
 	publicGroup.Post("/register", handler.Register)
 	publicGroup.Post("/login", handler.Login)
 
@@ -28,7 +28,7 @@ func SetupRoutes(app *fiber.App, minio minio.Client) {
 	jwtSecret := os.Getenv("JWT_SECRET")
 
 	// Группа обработчиков, которые требуют авторизации
-	authorizedGroup := app.Group("/api", logger.New())
+	authorizedGroup := app.Group("", logger.New())
 	authorizedGroup.Use(jwtware.New(jwtware.Config{
 		SigningKey: []byte(jwtSecret),
 		ContextKey: "user",
