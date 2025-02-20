@@ -32,8 +32,13 @@ func main() {
 	app := fiber.New()
 	app.Use(logger.New())
 	app.Use(compress.New())
+	// Получаем значение переменной окружения PROD_URL
+	prodURL := os.Getenv("PROD_URL")
+	if prodURL == "" {
+		prodURL = "http://localhost:3000" // Значение по умолчанию для разработки
+	}
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000", // или "*" для всех
+		AllowOrigins:     prodURL, // или "*" для всех
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Custom-Header",
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS, PATCH",
 		AllowCredentials: true,
