@@ -75,6 +75,8 @@ services:
     image: nginx:latest
     container_name: nginx_proxy
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Добавьте эту строку
     ports:
       - "80:80"
       - "443:443"
