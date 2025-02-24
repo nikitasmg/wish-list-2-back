@@ -77,6 +77,8 @@ func Register(c *fiber.Ctx) error {
 		Secure:   true,                                // Используйте true, если сайт работает по HTTPS
 		HTTPOnly: true,
 		SameSite: fiber.CookieSameSiteLaxMode,
+		Path:     "/",
+		Domain:   "get-my-wishlist.ru",
 	})
 
 	return c.JSON(fiber.Map{"message": "User registered successfully"})
@@ -110,6 +112,8 @@ func Login(c *fiber.Ctx) error {
 		Secure:   true,                                // Используйте true, если сайт работает по HTTPS
 		HTTPOnly: true,
 		SameSite: fiber.CookieSameSiteLaxMode,
+		Path:     "/",
+		Domain:   "get-my-wishlist.ru",
 	})
 
 	return c.JSON(fiber.Map{"message": "Login successful"})
