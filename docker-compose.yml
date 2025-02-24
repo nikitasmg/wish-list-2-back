@@ -74,7 +74,7 @@ services:
   frontend:
     container_name: frontend
     build:
-      context: /wish-list-2-front/ # Укажите правильный путь
+      context: ../wish-list-2-front/ # Укажите правильный путь
       dockerfile: Dockerfile
     environment:
       - NEXT_PUBLIC_API_URL=https://api.get-my-wishlist.ru
