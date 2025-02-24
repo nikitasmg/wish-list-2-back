@@ -164,22 +164,29 @@ func (h *wishlistHandlers) Update(c *fiber.Ctx) error {
 	// Создаем новую структуру для обновления
 	var updatedData model.CreateWishlist
 	if err = c.BodyParser(&updatedData); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input", "details": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
 	}
 
-	// Теперь showGiftAvailability - это bool переменная
-
-	// Обновляем все поля из запроса
-	wishlist.Title = updatedData.Title
-	wishlist.Description = updatedData.Description
-	wishlist.Settings = model.Settings{
-		ColorScheme:          c.FormValue("settings[colorScheme]"),
-		ShowGiftAvailability: helpers.StringToBool(c.FormValue("settings[showGiftAvailability]")),
+	// Заполняем поля структуры из вложенных данных
+	if title := c.FormValue("title"); title != "" {
+		wishlist.Title = title
+	} else {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Поле Название обязательно"})
 	}
-	wishlist.Location = model.Location{
-		Name: updatedData.Location.Name,
-		Time: updatedData.Location.Time,
-		Link: updatedData.Location.Link,
+
+	wishlist.Description = c.FormValue("description")
+
+	// Получаем значения для настроек
+	wishlist.Settings.ColorScheme = c.FormValue("settings[colorScheme]")
+	wishlist.Settings.ShowGiftAvailability = helpers.StringToBool(c.FormValue("showGiftAvailability"))
+
+	// Получаем значения для местоположения
+	wishlist.Location.Name = c.FormValue("location[name]")
+	wishlist.Location.Link = c.FormValue("location[link]")
+	if timeValue := c.FormValue("location[time]"); timeValue != "" {
+		if t, err := time.Parse(time.RFC3339, timeValue); err == nil {
+			wishlist.Location.Time = t
+		}
 	}
 
 	// Получаем файл, если он есть
@@ -189,14 +196,11 @@ func (h *wishlistHandlers) Update(c *fiber.Ctx) error {
 	}
 
 	if file != nil {
-		// Если файл передан, загружаем его
 		url, err := h.minioClient.CreateOneHandler(c)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to upload file"})
 		}
 		wishlist.Cover = url
-	} else {
-		wishlist.Cover = ""
 	}
 
 	// Сохраняем обновления в базе данных
