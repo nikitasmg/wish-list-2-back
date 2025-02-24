@@ -25,6 +25,7 @@ import (
 func (m *minioClient) CreateOne(file helpers.FileDataType) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
+
 	// Проверка, что клиент Minio инициализирован
 	if m.mc == nil {
 		return "", errors.New("клиент Minio не инициализирован")
@@ -38,12 +39,9 @@ func (m *minioClient) CreateOne(file helpers.FileDataType) (string, error) {
 		return "", fmt.Errorf("ошибка при создании объекта %s (ID: %s): %v", file.FileName, objectID, err)
 	}
 
-	url, err := m.mc.PresignedGetObject(ctx, config.AppConfig.BucketName, objectID, time.Second*24*60*60, nil)
-	if err != nil {
-		return "", fmt.Errorf("ошибка при создании URL для объекта %s (ID: %s): %v", file.FileName, objectID, err)
-	}
-	localURL := url.Scheme + "://" + "localhost:9000" + url.Path
-	return localURL, nil
+	// Возвращаем URL через Nginx
+	url := fmt.Sprintf("https://get-my-wishlist.ru/minio/%s/%s", config.AppConfig.BucketName, objectID)
+	return url, nil
 }
 
 // CreateMany создает несколько объектов в хранилище MinIO из переданных данных.
