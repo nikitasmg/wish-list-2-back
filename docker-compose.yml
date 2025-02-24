@@ -71,6 +71,19 @@ services:
     networks:
       - backend  # Подключаем к общей сети
   
+  frontend:
+    container_name: frontend
+    build:
+      context: /wish-list-2-front/ # Укажите правильный путь
+      dockerfile: Dockerfile
+    environment:
+      - NEXT_PUBLIC_API_URL=https://api.get-my-wishlist.ru
+    networks:
+      - backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+  
   nginx:
     image: nginx:latest
     container_name: nginx_proxy
