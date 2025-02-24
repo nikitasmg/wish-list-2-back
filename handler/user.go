@@ -74,7 +74,7 @@ func Register(c *fiber.Ctx) error {
 		Name:     "token",
 		Value:    tokenString,
 		Expires:  time.Now().Add(time.Hour * 24 * 30), // Установите желаемое время жизни куки
-		Secure:   false,                               // Используйте true, если сайт работает по HTTPS
+		Secure:   true,                                // Используйте true, если сайт работает по HTTPS
 		HTTPOnly: true,
 		SameSite: fiber.CookieSameSiteLaxMode,
 	})
@@ -107,7 +107,7 @@ func Login(c *fiber.Ctx) error {
 		Name:     "token",
 		Value:    tokenString,
 		Expires:  time.Now().Add(time.Hour * 24 * 30), // Установите желаемое время жизни куки
-		Secure:   false,                               // Используйте true, если сайт работает по HTTPS
+		Secure:   true,                                // Используйте true, если сайт работает по HTTPS
 		HTTPOnly: true,
 		SameSite: fiber.CookieSameSiteLaxMode,
 	})

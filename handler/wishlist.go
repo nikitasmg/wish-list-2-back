@@ -84,7 +84,7 @@ func (h *wishlistHandlers) Create(c *fiber.Ctx) error {
 		}
 	}
 
-	// Помещаем ваш файл в MinIO или другую файловую систему
+	// Помещаем файл в MinIO
 	url, err := h.minioClient.CreateOneHandler(c)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to upload file"})
