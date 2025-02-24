@@ -37,8 +37,10 @@ func main() {
 	if prodURL == "" {
 		prodURL = "http://localhost:3000" // Значение по умолчанию для разработки
 	}
+	allowOrigins := prodURL + ",http://localhost:3000"
+
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     prodURL, // или "*" для всех
+		AllowOrigins:     allowOrigins, // или "*" для всех
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Custom-Header",
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS, PATCH",
 		AllowCredentials: true,
