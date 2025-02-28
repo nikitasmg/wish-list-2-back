@@ -19,6 +19,7 @@ func SetupRoutes(app *fiber.App, minio minio.Client) {
 	publicGroup := app.Group("", logger.New())
 	publicGroup.Post("/register", handler.Register)
 	publicGroup.Post("/login", handler.Login)
+	publicGroup.Post("/auth", handler.Authenticate)
 
 	// Публичные ручки для отображения вишлиста
 	publicGroup.Get("/wishlist/:wishlistId/presents", presentHandlers.GetAll)
