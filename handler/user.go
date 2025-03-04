@@ -234,6 +234,7 @@ func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) (bo
 	h.Write([]byte(dataCheckString))
 	expectedHash := hex.EncodeToString(h.Sum(nil))
 
+	fmt.Println(expectedHash, "hash", hash)
 	// 4. Сравниваем полученный hash с ожидаемым
 	if expectedHash != hash {
 		return false, fmt.Errorf("invalid hash")
