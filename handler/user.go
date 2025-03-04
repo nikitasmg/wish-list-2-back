@@ -16,6 +16,7 @@ import (
 	"main/model"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -141,19 +142,17 @@ func Authenticate(c *fiber.Ctx) error {
 	}
 
 	botToken := os.Getenv("BOT_TOKEN")
+	if botToken == "" {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "BOT_TOKEN is not set"})
+	}
 
 	valid, err := verifyTelegramAuth(botToken, data, data.Hash)
-
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	if !valid {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "authentication failed",
-		})
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "authentication failed"})
 	}
 
 	newUser := model.User{
@@ -217,11 +216,9 @@ func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) (bo
 
 	var keys []string
 	for k := range dataMap {
-		if k != "hash" { // Исключаем поле "hash"
-			keys = append(keys, k)
-		}
+		keys = append(keys, k)
 	}
-	sort.Strings(keys) // Сортируем ключи в алфавитном порядке
+	sort.Strings(keys)
 
 	var dataCheckStrings []string
 	for _, k := range keys {
@@ -243,10 +240,11 @@ func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) (bo
 	}
 
 	// 5. Проверяем, что данные не устарели (например, auth_date не старше 1 дня)
-	authDate, err := time.Parse(time.RFC3339, dataMap["auth_date"])
+	authTimestamp, err := strconv.ParseInt(dataMap["auth_date"], 10, 64)
 	if err != nil {
-		return false, fmt.Errorf("invalid auth_date format")
+		return false, fmt.Errorf("invalid auth_date format: %v", err)
 	}
+	authDate := time.Unix(authTimestamp, 0)
 	if time.Since(authDate) > 24*time.Hour {
 		return false, fmt.Errorf("auth data is too old")
 	}
