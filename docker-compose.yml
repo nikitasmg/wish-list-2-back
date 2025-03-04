@@ -65,6 +65,7 @@ services:
     environment:
       JWT_SECRET: "${JWT_SECRET}"
       PROD_URL: "${PROD_URL}"
+      BOT_TOKEN: "${BOT_TOKEN}"
     build:
       context: .
     ports:
