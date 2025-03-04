@@ -8,9 +8,14 @@ import (
 func ClearCookies(c *fiber.Ctx, key ...string) {
 	for i := range key {
 		c.Cookie(&fiber.Cookie{
-			Name:    key[i],
-			Expires: time.Now().Add(-time.Hour * 24),
-			Value:   "",
+			Name:     key[i],
+			Expires:  time.Now().Add(-time.Hour * 24),
+			Value:    "",
+			Secure:   true,
+			HTTPOnly: true,
+			SameSite: fiber.CookieSameSiteLaxMode,
+			Path:     "/",
+			Domain:   "get-my-wishlist.ru",
 		})
 	}
 }
