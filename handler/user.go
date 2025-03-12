@@ -20,11 +20,12 @@ import (
 var jwtSecret = os.Getenv("JWT_SECRET")
 
 type TelegramAuthData struct {
-	ID        string `json:"id"`         // ID пользователя
+	ID        int64  `json:"id"`         // ID пользователя
 	FirstName string `json:"first_name"` // Имя пользователя
-	Username  string `json:"username"`   // Имя пользователя (username)
-	AuthDate  string `json:"auth_date"`  // Время авторизации в формате RFC3339
-	Hash      string `json:"hash"`       // Хэш для проверки подлинности
+	LastName  string `json:"last_name"`
+	Username  string `json:"username"`  // Имя пользователя (username)
+	AuthDate  int64  `json:"auth_date"` // Время авторизации в формате RFC3339
+	Hash      string `json:"hash"`      // Хэш для проверки подлинности
 }
 
 func setToken(user model.User) (string, error) {
@@ -206,27 +207,11 @@ func Authenticate(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "BOT_TOKEN is not set"})
 	}
 
-	// Преобразование ID из строки в int64
-	userID, err := strconv.ParseInt(data.ID, 10, 64)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid user ID format",
-		})
-	}
-
-	// Преобразование AuthDate из строки в int64
-	authDate, err := strconv.ParseInt(data.AuthDate, 10, 64)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid auth date format",
-		})
-	}
-
 	creds := tgverifier.Credentials{
-		ID:        userID,
+		ID:        data.ID,
 		FirstName: data.FirstName,
 		Username:  data.Username,
-		AuthDate:  authDate,
+		AuthDate:  data.AuthDate,
 		Hash:      data.Hash,
 	}
 
@@ -238,8 +223,8 @@ func Authenticate(c *fiber.Ctx) error {
 
 	newUser := model.User{
 		ID:       uuid.New(),
-		Username: data.Username,
-		Password: data.ID,
+		Username: strconv.FormatInt(data.ID, 10),
+		Password: strconv.FormatInt(data.ID, 10),
 	}
 
 	var currentUser model.User
