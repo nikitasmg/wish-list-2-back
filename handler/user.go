@@ -47,62 +47,55 @@ func setToken(user model.User) (string, error) {
 }
 
 // verifyTelegramAuth проверяет подпись данных от Telegram.
-func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) error {
-	// 1. Создаем мапу и сортируем ключи по алфавиту
-	dataMap := map[string]string{
-		"auth_date":  data.AuthDate,
-		"first_name": data.FirstName,
-		"id":         data.ID,
-		"username":   data.Username,
-	}
+func verifyTelegramAuth(botToken string, authData map[string]string, receivedHash string) error {
+	// 1. Извлекаем hash и удаляем его из данных
+	delete(authData, "hash")
 
-	// Сортируем ключи алфавитно
-	var keys []string
-	for k := range dataMap {
+	// 2. Сортируем ключи в алфавитном порядке
+	keys := make([]string, 0, len(authData))
+	for k := range authData {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys) // ["auth_date", "first_name", "id", "username"]
+	sort.Strings(keys)
 
-	// Формируем data-check-string
-	var dataCheckStrings []string
-	for _, k := range keys {
-		dataCheckStrings = append(dataCheckStrings, fmt.Sprintf("%s=%s", k, dataMap[k]))
+	// 3. Формируем data-check-string
+	var dataCheckArr []string
+	for _, key := range keys {
+		dataCheckArr = append(dataCheckArr, fmt.Sprintf("%s=%s", key, authData[key]))
 	}
-	dataCheckString := strings.Join(dataCheckStrings, "\n")
+	dataCheckString := strings.Join(dataCheckArr, "\n")
 
-	// Отладочный вывод (убедитесь, что разделители \n, а не \r\n)
-	log.Printf("DataCheckString (raw): %#v", dataCheckString)
+	// Отладочный вывод
+	log.Printf("DataCheckString:\n%s", dataCheckString)
 	log.Printf("DataCheckString (hex): %x", []byte(dataCheckString))
 
-	// 2. Вычисляем secret_key
+	// 4. Вычисляем секретный ключ (SHA256 от токена бота)
 	secretKey := sha256.Sum256([]byte(botToken))
-	log.Printf("secretKey (hex): %x", secretKey[:])
+	log.Printf("SecretKey (hex): %x", secretKey[:])
 
-	// 3. Вычисляем HMAC-SHA256
+	// 5. Вычисляем HMAC-SHA256
 	h := hmac.New(sha256.New, secretKey[:])
 	h.Write([]byte(dataCheckString))
 	expectedHash := hex.EncodeToString(h.Sum(nil))
+	expectedHash = strings.ToLower(expectedHash) // Telegram использует lowercase
 
-	// Приводим хэши к нижнему регистру
-	expectedHash = strings.ToLower(expectedHash)
-	hash = strings.ToLower(hash)
-
-	log.Printf("expectedHash: %s", expectedHash)
-	log.Printf("received hash: %s", hash)
-
-	// 4. Сравниваем хэши
-	if expectedHash != hash {
-		return fmt.Errorf("invalid hash")
+	// 6. Сравниваем хэши
+	receivedHash = strings.ToLower(receivedHash)
+	if expectedHash != receivedHash {
+		return fmt.Errorf("invalid hash (expected: %s, received: %s)", expectedHash, receivedHash)
 	}
 
-	// 5. Проверяем auth_date
-	authTimestamp, err := strconv.ParseInt(data.AuthDate, 10, 64)
+	// 7. Проверяем auth_date
+	authDate, ok := authData["auth_date"]
+	if !ok {
+		return fmt.Errorf("auth_date is missing")
+	}
+	authTimestamp, err := strconv.ParseInt(authDate, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid auth_date: %v", err)
 	}
-	authTime := time.Unix(authTimestamp, 0)
-	if time.Since(authTime) > 24*time.Hour {
-		return fmt.Errorf("auth data expired")
+	if time.Since(time.Unix(authTimestamp, 0)) > 24*time.Hour {
+		return fmt.Errorf("auth data is too old")
 	}
 
 	return nil
@@ -208,7 +201,14 @@ func Authenticate(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "BOT_TOKEN is not set"})
 	}
 
-	err := verifyTelegramAuth(botToken, data, data.Hash)
+	dataMap := map[string]string{
+		"auth_date":  data.AuthDate,
+		"first_name": data.FirstName,
+		"id":         data.ID,
+		"username":   data.Username,
+	}
+
+	err := verifyTelegramAuth(botToken, dataMap, data.Hash)
 	if err != nil {
 		log.Println("Ошибка в проверке хэша")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "authentication failed"})
