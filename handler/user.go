@@ -69,7 +69,7 @@ func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) err
 		dataCheckStrings = append(dataCheckStrings, fmt.Sprintf("%s=%s", k, dataMap[k]))
 	}
 	dataCheckString := strings.Join(dataCheckStrings, "\n")
-	log.Printf("dataCheckString: %+v\n", dataCheckString)
+	log.Printf("DataCheckStrings:\n%s\n", dataCheckString)
 	// 2. Вычисляем secret_key как SHA256 от токена бота
 	secretKey := sha256.Sum256([]byte(botToken))
 
@@ -77,8 +77,8 @@ func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) err
 	h := hmac.New(sha256.New, secretKey[:])
 	h.Write([]byte(dataCheckString))
 	expectedHash := hex.EncodeToString(h.Sum(nil))
-
-	log.Println(expectedHash, "hash", hash, dataMap, "data map")
+	log.Printf("expectedHash: %s", botToken)
+	log.Println(expectedHash, "hash", hash)
 	// 4. Сравниваем полученный hash с ожидаемым
 	if expectedHash != hash {
 		return fmt.Errorf("invalid hash")
