@@ -15,6 +15,7 @@ import (
 	"main/helpers"
 	"main/model"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -47,28 +48,43 @@ func setToken(user model.User) (string, error) {
 
 // verifyTelegramAuth проверяет подпись данных от Telegram.
 func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) error {
-	// 1. Формируем data-check-string
-	dataCheckStrings := []string{
-		fmt.Sprintf("auth_date=%s", data.AuthDate),
-		fmt.Sprintf("first_name=%s", data.FirstName),
-		fmt.Sprintf("id=%s", data.ID),
-		fmt.Sprintf("username=%s", data.Username),
+	// 1. Создаем мапу и сортируем ключи по алфавиту
+	dataMap := map[string]string{
+		"auth_date":  data.AuthDate,
+		"first_name": data.FirstName,
+		"id":         data.ID,
+		"username":   data.Username,
+	}
+
+	// Сортируем ключи алфавитно
+	var keys []string
+	for k := range dataMap {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys) // ["auth_date", "first_name", "id", "username"]
+
+	// Формируем data-check-string
+	var dataCheckStrings []string
+	for _, k := range keys {
+		dataCheckStrings = append(dataCheckStrings, fmt.Sprintf("%s=%s", k, dataMap[k]))
 	}
 	dataCheckString := strings.Join(dataCheckStrings, "\n")
 
-	// Отладочный вывод
-	log.Printf("DataCheckString (raw):\n%#v", dataCheckString)       // Вывод строки как есть, включая спецсимволы
-	log.Printf("DataCheckString (hex): %x", []byte(dataCheckString)) // Байтовое представление
+	// Отладочный вывод (убедитесь, что разделители \n, а не \r\n)
+	log.Printf("DataCheckString (raw): %#v", dataCheckString)
+	log.Printf("DataCheckString (hex): %x", []byte(dataCheckString))
 
 	// 2. Вычисляем secret_key
 	secretKey := sha256.Sum256([]byte(botToken))
-	log.Printf("secretKey (hex): %x", secretKey[:]) // Проверяем секретный ключ
+	log.Printf("secretKey (hex): %x", secretKey[:])
 
-	// 3. Вычисляем HMAC
+	// 3. Вычисляем HMAC-SHA256
 	h := hmac.New(sha256.New, secretKey[:])
 	h.Write([]byte(dataCheckString))
 	expectedHash := hex.EncodeToString(h.Sum(nil))
-	expectedHash = strings.ToLower(expectedHash) // Нормализуем регистр
+
+	// Приводим хэши к нижнему регистру
+	expectedHash = strings.ToLower(expectedHash)
 	hash = strings.ToLower(hash)
 
 	log.Printf("expectedHash: %s", expectedHash)
