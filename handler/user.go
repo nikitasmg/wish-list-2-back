@@ -47,7 +47,7 @@ func setToken(user model.User) (string, error) {
 }
 
 // verifyTelegramAuth проверяет подпись данных от Telegram.
-func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) (bool, error) {
+func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) error {
 	// 1. Создаем data-check-string
 	dataMap := map[string]string{
 		"id":         data.ID,
@@ -55,6 +55,8 @@ func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) (bo
 		"username":   data.Username,
 		"auth_date":  data.AuthDate,
 	}
+
+	log.Println(dataMap, "data map")
 
 	var keys []string
 	for k := range dataMap {
@@ -79,20 +81,20 @@ func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) (bo
 	log.Println(expectedHash, "hash", hash)
 	// 4. Сравниваем полученный hash с ожидаемым
 	if expectedHash != hash {
-		return false, fmt.Errorf("invalid hash")
+		return fmt.Errorf("invalid hash")
 	}
 
 	// 5. Проверяем, что данные не устарели (например, auth_date не старше 1 дня)
 	authTimestamp, err := strconv.ParseInt(dataMap["auth_date"], 10, 64)
 	if err != nil {
-		return false, fmt.Errorf("invalid auth_date format: %v", err)
+		return fmt.Errorf("invalid auth_date format: %v", err)
 	}
 	authDate := time.Unix(authTimestamp, 0)
 	if time.Since(authDate) > 24*time.Hour {
-		return false, fmt.Errorf("auth data is too old")
+		return fmt.Errorf("auth data is too old")
 	}
 
-	return true, nil
+	return nil
 }
 
 func Register(c *fiber.Ctx) error {
@@ -195,14 +197,9 @@ func Authenticate(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "BOT_TOKEN is not set"})
 	}
 
-	valid, err := verifyTelegramAuth(botToken, data, data.Hash)
+	err := verifyTelegramAuth(botToken, data, data.Hash)
 	if err != nil {
 		log.Println("Ошибка в проверке хэша")
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	if !valid {
-		log.Println("Не валидный хэш")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "authentication failed"})
 	}
 
