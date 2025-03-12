@@ -76,7 +76,7 @@ func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) (bo
 	h.Write([]byte(dataCheckString))
 	expectedHash := hex.EncodeToString(h.Sum(nil))
 
-	fmt.Println(expectedHash, "hash", hash)
+	log.Println(expectedHash, "hash", hash)
 	// 4. Сравниваем полученный hash с ожидаемым
 	if expectedHash != hash {
 		return false, fmt.Errorf("invalid hash")
@@ -197,12 +197,12 @@ func Authenticate(c *fiber.Ctx) error {
 
 	valid, err := verifyTelegramAuth(botToken, data, data.Hash)
 	if err != nil {
-		fmt.Println("Ошибка в проверке хэша")
+		log.Println("Ошибка в проверке хэша")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	if !valid {
-		fmt.Println("Не валидный хэш")
+		log.Println("Не валидный хэш")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "authentication failed"})
 	}
 
