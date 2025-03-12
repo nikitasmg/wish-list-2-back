@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
+	"io"
 	"main/database"
 	"main/helpers"
 	"main/model"
@@ -65,25 +67,34 @@ func verifyTelegramAuth(botToken string, authData map[string]string, receivedHas
 	}
 	dataCheckString := strings.Join(dataCheckArr, "\n")
 
-	// Отладочный вывод
-	log.Printf("DataCheckString:\n%s", dataCheckString)
-	log.Printf("DataCheckString (hex): %x", []byte(dataCheckString))
-
-	// 4. Вычисляем секретный ключ (SHA256 от токена бота)
-	secretKey := sha256.Sum256([]byte(botToken))
-	log.Printf("SecretKey (hex): %x", secretKey[:])
-
-	// 5. Вычисляем HMAC-SHA256
-	h := hmac.New(sha256.New, secretKey[:])
-	h.Write([]byte(dataCheckString))
-	expectedHash := hex.EncodeToString(h.Sum(nil))
-	expectedHash = strings.ToLower(expectedHash) // Telegram использует lowercase
-
-	// 6. Сравниваем хэши
-	receivedHash = strings.ToLower(receivedHash)
-	if expectedHash != receivedHash {
-		return fmt.Errorf("invalid hash (expected: %s, received: %s)", expectedHash, receivedHash)
+	sha256hash := sha256.New()
+	io.WriteString(sha256hash, botToken)
+	hmachash := hmac.New(sha256.New, sha256hash.Sum(nil))
+	io.WriteString(hmachash, dataCheckString)
+	ss := hex.EncodeToString(hmachash.Sum(nil))
+	if receivedHash != ss {
+		return errors.New("Invalid signature")
 	}
+
+	//// Отладочный вывод
+	//log.Printf("DataCheckString:\n%s", dataCheckString)
+	//log.Printf("DataCheckString (hex): %x", []byte(dataCheckString))
+	//
+	//// 4. Вычисляем секретный ключ (SHA256 от токена бота)
+	//secretKey := sha256.Sum256([]byte(botToken))
+	//log.Printf("SecretKey (hex): %x", secretKey[:])
+	//
+	//// 5. Вычисляем HMAC-SHA256
+	//h := hmac.New(sha256.New, secretKey[:])
+	//h.Write([]byte(dataCheckString))
+	//expectedHash := hex.EncodeToString(h.Sum(nil))
+	//expectedHash = strings.ToLower(expectedHash) // Telegram использует lowercase
+	//
+	//// 6. Сравниваем хэши
+	//receivedHash = strings.ToLower(receivedHash)
+	//if expectedHash != receivedHash {
+	//	return fmt.Errorf("invalid hash (expected: %s, received: %s)", expectedHash, receivedHash)
+	//}
 
 	// 7. Проверяем auth_date
 	authDate, ok := authData["auth_date"]
@@ -209,6 +220,7 @@ func Authenticate(c *fiber.Ctx) error {
 	}
 
 	err := verifyTelegramAuth(botToken, dataMap, data.Hash)
+
 	if err != nil {
 		log.Println("Ошибка в проверке хэша")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "authentication failed"})
