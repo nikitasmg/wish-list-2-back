@@ -47,26 +47,30 @@ func setToken(user model.User) (string, error) {
 
 // verifyTelegramAuth проверяет подпись данных от Telegram.
 func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) error {
-	// 1. Создаем data-check-string в строго заданном порядке
+	// 1. Формируем data-check-string
 	dataCheckStrings := []string{
 		fmt.Sprintf("auth_date=%s", data.AuthDate),
 		fmt.Sprintf("first_name=%s", data.FirstName),
 		fmt.Sprintf("id=%s", data.ID),
 		fmt.Sprintf("username=%s", data.Username),
 	}
-
 	dataCheckString := strings.Join(dataCheckStrings, "\n")
-	log.Printf("DataCheckString:\n%s", dataCheckString) // Убрал лишний \n в конце
 
-	// 2. Вычисляем secret_key как SHA256 от токена бота
+	// Отладочный вывод
+	log.Printf("DataCheckString (raw):\n%#v", dataCheckString)       // Вывод строки как есть, включая спецсимволы
+	log.Printf("DataCheckString (hex): %x", []byte(dataCheckString)) // Байтовое представление
+
+	// 2. Вычисляем secret_key
 	secretKey := sha256.Sum256([]byte(botToken))
+	log.Printf("secretKey (hex): %x", secretKey[:]) // Проверяем секретный ключ
 
-	// 3. Вычисляем HMAC-SHA256 от data-check-string
+	// 3. Вычисляем HMAC
 	h := hmac.New(sha256.New, secretKey[:])
 	h.Write([]byte(dataCheckString))
 	expectedHash := hex.EncodeToString(h.Sum(nil))
+	expectedHash = strings.ToLower(expectedHash) // Нормализуем регистр
+	hash = strings.ToLower(hash)
 
-	// Исправлено: выводим expectedHash, а не botToken
 	log.Printf("expectedHash: %s", expectedHash)
 	log.Printf("received hash: %s", hash)
 
