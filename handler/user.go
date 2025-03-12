@@ -15,7 +15,6 @@ import (
 	"main/helpers"
 	"main/model"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -48,50 +47,42 @@ func setToken(user model.User) (string, error) {
 
 // verifyTelegramAuth проверяет подпись данных от Telegram.
 func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) error {
-	// 1. Создаем data-check-string
-	dataMap := map[string]string{
-		"id":         data.ID,
-		"first_name": data.FirstName,
-		"username":   data.Username,
-		"auth_date":  data.AuthDate,
+	// 1. Создаем data-check-string в строго заданном порядке
+	dataCheckStrings := []string{
+		fmt.Sprintf("auth_date=%s", data.AuthDate),
+		fmt.Sprintf("first_name=%s", data.FirstName),
+		fmt.Sprintf("id=%s", data.ID),
+		fmt.Sprintf("username=%s", data.Username),
 	}
 
-	log.Printf("DataMap: %+v\n", dataMap)
-
-	var keys []string
-	for k := range dataMap {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	var dataCheckStrings []string
-	for _, k := range keys {
-		dataCheckStrings = append(dataCheckStrings, fmt.Sprintf("%s=%s", k, dataMap[k]))
-	}
 	dataCheckString := strings.Join(dataCheckStrings, "\n")
-	log.Printf("DataCheckStrings:\n%s\n", dataCheckString)
+	log.Printf("DataCheckString:\n%s", dataCheckString) // Убрал лишний \n в конце
+
 	// 2. Вычисляем secret_key как SHA256 от токена бота
 	secretKey := sha256.Sum256([]byte(botToken))
 
-	// 3. Вычисляем HMAC-SHA256 от data-check-string с использованием secret_key
+	// 3. Вычисляем HMAC-SHA256 от data-check-string
 	h := hmac.New(sha256.New, secretKey[:])
 	h.Write([]byte(dataCheckString))
 	expectedHash := hex.EncodeToString(h.Sum(nil))
-	log.Printf("expectedHash: %s", botToken)
-	log.Println(expectedHash, "hash", hash)
-	// 4. Сравниваем полученный hash с ожидаемым
+
+	// Исправлено: выводим expectedHash, а не botToken
+	log.Printf("expectedHash: %s", expectedHash)
+	log.Printf("received hash: %s", hash)
+
+	// 4. Сравниваем хэши
 	if expectedHash != hash {
 		return fmt.Errorf("invalid hash")
 	}
 
-	// 5. Проверяем, что данные не устарели (например, auth_date не старше 1 дня)
-	authTimestamp, err := strconv.ParseInt(dataMap["auth_date"], 10, 64)
+	// 5. Проверяем auth_date
+	authTimestamp, err := strconv.ParseInt(data.AuthDate, 10, 64)
 	if err != nil {
-		return fmt.Errorf("invalid auth_date format: %v", err)
+		return fmt.Errorf("invalid auth_date: %v", err)
 	}
-	authDate := time.Unix(authTimestamp, 0)
-	if time.Since(authDate) > 24*time.Hour {
-		return fmt.Errorf("auth data is too old")
+	authTime := time.Unix(authTimestamp, 0)
+	if time.Since(authTime) > 24*time.Hour {
+		return fmt.Errorf("auth data expired")
 	}
 
 	return nil
