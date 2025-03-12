@@ -56,7 +56,7 @@ func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) err
 		"auth_date":  data.AuthDate,
 	}
 
-	log.Println(dataMap, "data map")
+	log.Printf("DataMap: %+v\n", dataMap)
 
 	var keys []string
 	for k := range dataMap {
@@ -69,7 +69,7 @@ func verifyTelegramAuth(botToken string, data TelegramAuthData, hash string) err
 		dataCheckStrings = append(dataCheckStrings, fmt.Sprintf("%s=%s", k, dataMap[k]))
 	}
 	dataCheckString := strings.Join(dataCheckStrings, "\n")
-
+	log.Printf("dataCheckString: %+v\n", dataCheckString)
 	// 2. Вычисляем secret_key как SHA256 от токена бота
 	secretKey := sha256.Sum256([]byte(botToken))
 
