@@ -224,14 +224,16 @@ func Authenticate(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Authentication failed"})
 	}
 
+	userId := strconv.FormatInt(data.ID, 10)
+
 	newUser := model.User{
 		ID:       uuid.New(),
-		Username: strconv.FormatInt(data.ID, 10),
-		Password: strconv.FormatInt(data.ID, 10),
+		Username: userId,
+		Password: userId,
 	}
 
 	var currentUser model.User
-	result := database.DB.Where("username = ?", newUser.Username).First(&currentUser)
+	result := database.DB.Where("username = ?", userId).First(&currentUser)
 
 	if result.Error != nil {
 		database.DB.Create(&newUser)
