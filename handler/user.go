@@ -234,12 +234,16 @@ func Authenticate(c *fiber.Ctx) error {
 
 	var currentUser model.User
 	result := database.DB.Where("username = ?", userId).First(&currentUser)
-
+	var (
+		tokenString string
+		err         error
+	)
 	if result.Error != nil {
 		database.DB.Create(&newUser)
+		tokenString, err = setToken(newUser)
+	} else {
+		tokenString, err = setToken(currentUser)
 	}
-
-	tokenString, err := setToken(newUser)
 
 	if err != nil {
 		log.WithError(err).Error("JWT token signing")

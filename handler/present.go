@@ -93,7 +93,7 @@ func (h *presentHandlers) Create(c *fiber.Ctx) error {
 	}
 	// Сохраняем новый список желаемого в базе данных
 	if err = database.DB.Create(&newPresent).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create Wishlist"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create Present"})
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"data": newPresent})
