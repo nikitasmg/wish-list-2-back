@@ -73,7 +73,7 @@ func (h *wishlistHandlers) Create(c *fiber.Ctx) error {
 
 	// Получаем значения для настроек
 	wishlist.Settings.ColorScheme = c.FormValue("settings[colorScheme]")
-	wishlist.Settings.ShowGiftAvailability = helpers.StringToBool(c.FormValue("showGiftAvailability"))
+	wishlist.Settings.ShowGiftAvailability = helpers.StringToBool(c.FormValue("settings[showGiftAvailability]"))
 
 	// Получаем значения для местоположения
 	wishlist.Location.Name = c.FormValue("location[name]")
@@ -178,7 +178,7 @@ func (h *wishlistHandlers) Update(c *fiber.Ctx) error {
 
 	// Получаем значения для настроек
 	wishlist.Settings.ColorScheme = c.FormValue("settings[colorScheme]")
-	wishlist.Settings.ShowGiftAvailability = helpers.StringToBool(c.FormValue("showGiftAvailability"))
+	wishlist.Settings.ShowGiftAvailability = helpers.StringToBool(c.FormValue("settings[showGiftAvailability]"))
 
 	// Получаем значения для местоположения
 	wishlist.Location.Name = c.FormValue("location[name]")
