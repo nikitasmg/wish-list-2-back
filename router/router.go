@@ -25,6 +25,7 @@ func SetupRoutes(app *fiber.App, minio minio.Client) {
 	publicGroup.Get("/wishlist/:wishlistId/presents", presentHandlers.GetAll)
 	publicGroup.Put("/present/reserve/:id", presentHandlers.Reserve)
 	publicGroup.Put("/present/release/:id", presentHandlers.Release)
+	publicGroup.Get("/wishlist/:id", wishlistHandlers.GetOne)
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 
@@ -41,7 +42,6 @@ func SetupRoutes(app *fiber.App, minio minio.Client) {
 
 	// Wishlist
 	authorizedGroup.Get("/wishlist", wishlistHandlers.GetAll)
-	authorizedGroup.Get("/wishlist/:id", wishlistHandlers.GetOne)
 	authorizedGroup.Post("/wishlist", wishlistHandlers.Create)
 	authorizedGroup.Delete("/wishlist/:id", wishlistHandlers.Delete)
 	authorizedGroup.Put("/wishlist/:id", wishlistHandlers.Update)
