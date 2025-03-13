@@ -23,6 +23,7 @@ type TelegramAuthData struct {
 	ID        int64  `json:"id"`         // ID пользователя
 	FirstName string `json:"first_name"` // Имя пользователя
 	LastName  string `json:"last_name"`
+	PhotoURL  string `json:"photo_url"`
 	Username  string `json:"username"`  // Имя пользователя (username)
 	AuthDate  int64  `json:"auth_date"` // Время авторизации в формате RFC3339
 	Hash      string `json:"hash"`      // Хэш для проверки подлинности
@@ -210,6 +211,8 @@ func Authenticate(c *fiber.Ctx) error {
 	creds := tgverifier.Credentials{
 		ID:        data.ID,
 		FirstName: data.FirstName,
+		LastName:  data.LastName,
+		PhotoURL:  data.PhotoURL,
 		Username:  data.Username,
 		AuthDate:  data.AuthDate,
 		Hash:      data.Hash,
