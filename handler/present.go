@@ -9,6 +9,7 @@ import (
 	"main/pkg/minio"
 	"main/services"
 	"strconv"
+	"strings"
 )
 
 type PresentHandlers interface {
@@ -86,8 +87,10 @@ func (h *presentHandlers) Create(c *fiber.Ctx) error {
 	var priceFloat *float64
 
 	if price := c.FormValue("price"); price != "" {
+		price = strings.Replace(present.Price, ",", ".", 1) // Заменяем запятую на точку
+		price = strings.ReplaceAll(price, " ", "")
 		// Преобразование строки в float64
-		float, err := strconv.ParseFloat(present.Prise, 64)
+		float, err := strconv.ParseFloat(price, 64)
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Неверный формат цены"})
 		}
@@ -104,7 +107,7 @@ func (h *presentHandlers) Create(c *fiber.Ctx) error {
 		Description: present.Description,
 		Cover:       url,
 		Link:        present.Link,
-		Prise:       priceFloat,
+		Price:       priceFloat,
 		Reserved:    false,
 	}
 	// Сохраняем новый список желаемого в базе данных
@@ -187,14 +190,16 @@ func (h *presentHandlers) Update(c *fiber.Ctx) error {
 	present.Link = updatedData.Link
 
 	if price := c.FormValue("price"); price != "" {
+		price = strings.Replace(updatedData.Price, ",", ".", 1) // Заменяем запятую на точку
+		price = strings.ReplaceAll(price, " ", "")
 		// Преобразование строки в float64
-		priceFloat, err := strconv.ParseFloat(updatedData.Prise, 64)
+		priceFloat, err := strconv.ParseFloat(price, 64)
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Неверный формат цены"})
 		}
-		present.Prise = &priceFloat
+		present.Price = &priceFloat
 	} else {
-		present.Prise = nil
+		present.Price = nil
 	}
 
 	if file != nil {
