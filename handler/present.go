@@ -8,6 +8,7 @@ import (
 	"main/model"
 	"main/pkg/minio"
 	"main/services"
+	"strconv"
 )
 
 type PresentHandlers interface {
@@ -81,6 +82,20 @@ func (h *presentHandlers) Create(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
+
+	var priceFloat *float64
+
+	if price := c.FormValue("price"); price != "" {
+		// Преобразование строки в float64
+		float, err := strconv.ParseFloat(present.Prise, 64)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Неверный формат цены"})
+		}
+		priceFloat = &float
+	} else {
+		priceFloat = nil
+	}
+
 	// Создаем новый подарок желаемого и сохраняем его в базе данных
 	newPresent := model.Present{
 		ID:          uuid.New(),
@@ -89,7 +104,7 @@ func (h *presentHandlers) Create(c *fiber.Ctx) error {
 		Description: present.Description,
 		Cover:       url,
 		Link:        present.Link,
-		Prise:       present.Prise,
+		Prise:       priceFloat,
 		Reserved:    false,
 	}
 	// Сохраняем новый список желаемого в базе данных
@@ -170,7 +185,17 @@ func (h *presentHandlers) Update(c *fiber.Ctx) error {
 	present.Title = updatedData.Title
 	present.Description = updatedData.Description
 	present.Link = updatedData.Link
-	present.Prise = updatedData.Prise
+
+	if price := c.FormValue("price"); price != "" {
+		// Преобразование строки в float64
+		priceFloat, err := strconv.ParseFloat(updatedData.Prise, 64)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Неверный формат цены"})
+		}
+		present.Prise = &priceFloat
+	} else {
+		present.Prise = nil
+	}
 
 	if file != nil {
 		url, err := h.minioClient.CreateOneHandler(c)
