@@ -89,6 +89,7 @@ func (h *presentHandlers) Create(c *fiber.Ctx) error {
 		Description: present.Description,
 		Cover:       url,
 		Link:        present.Link,
+		Prise:       present.Prise,
 		Reserved:    false,
 	}
 	// Сохраняем новый список желаемого в базе данных
@@ -169,6 +170,7 @@ func (h *presentHandlers) Update(c *fiber.Ctx) error {
 	present.Title = updatedData.Title
 	present.Description = updatedData.Description
 	present.Link = updatedData.Link
+	present.Prise = updatedData.Prise
 
 	if file != nil {
 		url, err := h.minioClient.CreateOneHandler(c)
