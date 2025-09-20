@@ -105,12 +105,11 @@ services:
   
   certbot:
     image: certbot/certbot
+    ports:
+      - "80:80"  # Certbot будет слушать порт 80 самостоятельно
     volumes:
-      - ./certbot/www:/var/www/certbot
       - ./certbot/conf:/etc/letsencrypt
-    command: certonly --webroot -w /var/www/certbot --email nvsmagin@mail.ru -d get-my-wishlist.ru -d api.get-my-wishlist.ru --agree-tos --noninteractive
-    depends_on:
-      - nginx
+    command: certonly --standalone --email nvsmagin@mail.ru -d get-my-wishlist.ru -d api.get-my-wishlist.ru --agree-tos --noninteractive
     networks:
       - backend
 
