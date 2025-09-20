@@ -103,48 +103,52 @@ services:
       - backend
     restart: unless-stopped
     depends_on:
-      - frontend
-      - server
-      - minio
+      certbot:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+  
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    volumes:
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
     command: >
       /bin/sh -c "
-      # Ждем запуска frontend
-      while ! nc -z frontend 3000; do
-        echo 'Waiting for frontend...';
-        sleep 1;
-      done;
+      # Ждем доступности nginx на порту 80
+      while ! nc -z nginx 80; do
+        echo 'Waiting for nginx...'
+        sleep 2
+      done
       
-      # Запускаем nginx с временной конфигурацией
-      cp /etc/nginx/conf.d/temporary.conf /etc/nginx/conf.d/default.conf;
-      nginx -g 'daemon off;' &
-      
-      # Ждем запуска nginx
-      sleep 5;
-      
-      # Получаем сертификаты
+      # Пытаемся получить сертификаты
       certbot certonly --webroot -w /var/www/certbot \
         --email nvsmagin@mail.ru \
         -d get-my-wishlist.ru -d api.get-my-wishlist.ru \
-        --agree-tos --noninteractive --force-renewal;
+        --agree-tos --noninteractive --keep-until-expiring
       
-      # Переключаемся на основную конфигурацию
-      cp /etc/nginx/conf.d/permanent.conf /etc/nginx/conf.d/default.conf;
-      
-      # Перезапускаем nginx
-      nginx -s reload;
-      
-      # Ожидаем завершения
-      wait
+      # Проверяем успешность получения сертификатов
+      if [ -f /etc/letsencrypt/live/get-my-wishlist.ru/fullchain.pem ]; then
+        echo 'Certificates obtained successfully'
+        exit 0
+      else
+        echo 'Failed to obtain certificates'
+        exit 1
+      fi
       "
-    
-  certbot:
-      image: certbot/certbot
-      volumes:
-        - ./certbot/www:/var/www/certbot
-        - ./certbot/conf:/etc/letsencrypt
-      entrypoint: "/bin/true"  # Отключаем автоматический запуск certbot
-      networks:
-        - backend
+    healthcheck:
+      test: ["CMD", "test", "-f", "/etc/letsencrypt/live/get-my-wishlist.ru/fullchain.pem"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    depends_on:
+      nginx:
+        condition: service_started
+    networks:
+      - backend
+
 networks:
   backend:
     driver: bridge

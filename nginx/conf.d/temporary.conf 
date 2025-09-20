@@ -8,8 +8,8 @@ server {
         allow all;
     }
 
+    # Все остальные запросы перенаправляем на временную заглушку
     location / {
-        # Временный заглушка для всех остальных запросов
         return 200 'Temporary server for certificate issuance';
         add_header Content-Type text/plain;
     }
