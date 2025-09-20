@@ -93,7 +93,7 @@ services:
     container_name: nginx_proxy
     ports:
       - "80:80"
-      - "443:443"
+      # Пока не открываем 443 порт
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
@@ -102,24 +102,13 @@ services:
     networks:
       - backend
     restart: unless-stopped
-    depends_on:
-      - frontend
-      - server
-      - minio
   
   certbot:
     image: certbot/certbot
     volumes:
       - ./certbot/www:/var/www/certbot
       - ./certbot/conf:/etc/letsencrypt
-    entrypoint: "/bin/sh -c"
-    command: |
-      -c '
-        certbot certonly --webroot -w /var/www/certbot \
-        --email nvsmagin@mail.ru \
-        -d get-my-wishlist.ru -d api.get-my-wishlist.ru \
-        --agree-tos --noninteractive --force-renewal
-      '
+    command: certonly --webroot -w /var/www/certbot --email nvsmagin@mail.ru -d get-my-wishlist.ru -d api.get-my-wishlist.ru --agree-tos --noninteractive
     depends_on:
       - nginx
     networks:
