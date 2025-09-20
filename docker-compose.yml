@@ -102,6 +102,7 @@ services:
     networks:
       - backend
     restart: unless-stopped
+    # Убрал depends_on, чтобы избежать циклических зависимостей
   
   certbot:
     image: certbot/certbot
@@ -109,38 +110,9 @@ services:
     volumes:
       - ./certbot/www:/var/www/certbot
       - ./certbot/conf:/etc/letsencrypt
-    command: >
-      /bin/sh -c "
-      # Ждем доступности nginx на порту 80
-      while ! nc -z nginx 80; do
-        echo 'Waiting for nginx...'
-        sleep 2
-      done
-      
-      # Пытаемся получить сертификаты
-      certbot certonly --webroot -w /var/www/certbot \
-        --email nvsmagin@mail.ru \
-        -d get-my-wishlist.ru -d api.get-my-wishlist.ru \
-        --agree-tos --noninteractive --keep-until-expiring
-      
-      # Проверяем успешность получения сертификатов
-      if [ -f /etc/letsencrypt/live/get-my-wishlist.ru/fullchain.pem ]; then
-        echo 'Certificates obtained successfully'
-        exit 0
-      else
-        echo 'Failed to obtain certificates'
-        exit 1
-      fi
-      "
-    healthcheck:
-      test: ["CMD", "test", "-f", "/etc/letsencrypt/live/get-my-wishlist.ru/fullchain.pem"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
     networks:
       - backend
-
+      
 networks:
   backend:
     driver: bridge
