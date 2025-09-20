@@ -86,22 +86,50 @@ services:
     ports:
       - "3000:3000"
   
+#  nginx:
+#    image: nginx:latest
+#    container_name: nginx_proxy
+#    restart: unless-stopped
+#    extra_hosts:
+#      - "host.docker.internal:host-gateway"  # Добавляем специальный хост
+#    ports:
+#      - "80:80"
+#      - "443:443"
+#    volumes:
+#      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+#      - ./nginx/certs:/etc/nginx/certs
+#    networks:
+#      - backend
   nginx:
-    image: nginx:latest
-    container_name: nginx_proxy
-    restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"  # Добавляем специальный хост
+    image: nginx:alpine
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
-      - ./nginx/certs:/etc/nginx/certs
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+    networks:
+      - backend
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+    entrypoint: "/bin/sh -c"
+    command: |
+      -c '
+        certbot certonly --webroot -w /var/www/certbot \
+        --email nvsmagin@mail.ru \
+        -d get-my-wishlist.ru -d api.get-my-wishlist.ru \
+        --agree-tos --noninteractive --force-renewal
+      '
+    depends_on:
+      - nginx
     networks:
       - backend
       
-
 networks:
   backend:
     driver: bridge
