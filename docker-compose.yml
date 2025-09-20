@@ -102,11 +102,6 @@ services:
     networks:
       - backend
     restart: unless-stopped
-    depends_on:
-      certbot:
-        condition: service_healthy
-      frontend:
-        condition: service_started
   
   certbot:
     image: certbot/certbot
