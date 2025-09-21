@@ -108,6 +108,10 @@ services:
     volumes:
       - ./certbot/www:/var/www/certbot
       - ./certbot/conf:/etc/letsencrypt
+    command: certbot certonly --webroot -w /var/www/certbot \
+      --email nvsmagin@mail.ru \
+      -d get-my-wishlist.ru -d api.get-my-wishlist.ru \
+      --agree-tos --noninteractive --keep-until-expiring
     depends_on:
       - nginx
     networks:
