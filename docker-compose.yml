@@ -86,7 +86,6 @@ services:
     networks:
       - backend
     restart: unless-stopped
-    # Убрал ports, так как доступ через nginx
   
   nginx:
     image: nginx:alpine
@@ -102,7 +101,6 @@ services:
     networks:
       - backend
     restart: unless-stopped
-    # Убрал depends_on, чтобы избежать циклических зависимостей
   
   certbot:
     image: certbot/certbot
