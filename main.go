@@ -33,16 +33,16 @@ func main() {
 	app.Use(logger.New())
 	app.Use(compress.New())
 
-	var allowedOrigin string
-	env := os.Getenv("APP_ENV")
-	if env == "production" {
-		allowedOrigin = "https://get-my-wishlist.ru"
-	} else {
-		allowedOrigin = "http://localhost:3000"
-	}
+	//var allowedOrigin string
+	//env := os.Getenv("APP_ENV")
+	//if env == "production" {
+	//	allowedOrigin = "https://get-my-wishlist.ru"
+	//} else {
+	//	allowedOrigin = "http://localhost:3000"
+	//}
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     allowedOrigin, // или "*" для всех
+		AllowOrigins:     "https://get-my-wishlist.ru", // или "*" для всех
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Custom-Header",
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS, PATCH",
 		AllowCredentials: true,
