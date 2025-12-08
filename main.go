@@ -32,15 +32,17 @@ func main() {
 	app := fiber.New()
 	app.Use(logger.New())
 	app.Use(compress.New())
-	// Получаем значение переменной окружения PROD_URL
-	prodURL := os.Getenv("PROD_URL")
-	if prodURL == "" {
-		prodURL = "http://localhost:3000" // Значение по умолчанию для разработки
+
+	var allowedOrigin string
+	env := os.Getenv("APP_ENV")
+	if env == "production" {
+		allowedOrigin = "https://get-my-wishlist.ru"
+	} else {
+		allowedOrigin = "http://localhost:3000"
 	}
-	allowOrigins := prodURL + ",http://localhost:3000"
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     allowOrigins, // или "*" для всех
+		AllowOrigins:     allowedOrigin, // или "*" для всех
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Custom-Header",
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS, PATCH",
 		AllowCredentials: true,
