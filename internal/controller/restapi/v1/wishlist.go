@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"encoding/json"
 	"io"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"main/internal/controller/restapi/v1/response"
+	"main/internal/entity"
 	"main/internal/usecase"
 )
 
@@ -45,6 +47,19 @@ func (h *wishlistHandler) getOne(c *fiber.Ctx) error {
 	return c.JSON(response.Data(wishlist))
 }
 
+func (h *wishlistHandler) getByShortID(c *fiber.Ctx) error {
+	shortID := c.Params("shortId")
+	if shortID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("shortId is required"))
+	}
+
+	wishlist, err := h.uc.GetByShortID(c.Context(), shortID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(response.Error(err.Error()))
+	}
+	return c.JSON(response.Data(wishlist))
+}
+
 func (h *wishlistHandler) create(c *fiber.Ctx) error {
 	userID, err := getUserID(c)
 	if err != nil {
@@ -64,6 +79,45 @@ func (h *wishlistHandler) create(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
 	}
 	return c.Status(fiber.StatusCreated).JSON(response.Data(wishlist))
+}
+
+func (h *wishlistHandler) createConstructor(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
+
+	input, err := h.parseConstructorInput(c)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+	}
+	if input.Title == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("title is required"))
+	}
+
+	wishlist, err := h.uc.CreateConstructor(c.Context(), userID, input)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+	}
+	return c.Status(fiber.StatusCreated).JSON(response.Data(wishlist))
+}
+
+func (h *wishlistHandler) updateBlocks(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid wishlist ID"))
+	}
+
+	var blocks []entity.Block
+	if err := c.BodyParser(&blocks); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid blocks JSON"))
+	}
+
+	wishlist, err := h.uc.UpdateBlocks(c.Context(), id, blocks)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+	}
+	return c.JSON(response.Data(wishlist))
 }
 
 func (h *wishlistHandler) update(c *fiber.Ctx) error {
@@ -103,6 +157,7 @@ func (h *wishlistHandler) parseWishlistInput(c *fiber.Ctx) (usecase.CreateWishli
 	input := usecase.CreateWishlistInput{
 		Title:                c.FormValue("title"),
 		Description:          c.FormValue("description"),
+		CoverURL:             c.FormValue("cover_url"),
 		ColorScheme:          c.FormValue("settings[colorScheme]"),
 		ShowGiftAvailability: stringToBool(c.FormValue("settings[showGiftAvailability]")),
 		LocationName:         c.FormValue("location[name]"),
@@ -128,6 +183,50 @@ func (h *wishlistHandler) parseWishlistInput(c *fiber.Ctx) (usecase.CreateWishli
 		}
 		input.CoverData = data
 		input.CoverName = file.Filename
+	}
+
+	return input, nil
+}
+
+func (h *wishlistHandler) parseConstructorInput(c *fiber.Ctx) (usecase.CreateConstructorInput, error) {
+	var body struct {
+		Title                string         `json:"title"`
+		Description          string         `json:"description"`
+		CoverURL             string         `json:"cover_url"`
+		ColorScheme          string         `json:"color_scheme"`
+		ShowGiftAvailability bool           `json:"show_gift_availability"`
+		LocationName         string         `json:"location_name"`
+		LocationLink         string         `json:"location_link"`
+		LocationTime         string         `json:"location_time"`
+		Blocks               []entity.Block `json:"blocks"`
+	}
+
+	if err := c.BodyParser(&body); err != nil {
+		return usecase.CreateConstructorInput{}, err
+	}
+
+	input := usecase.CreateConstructorInput{
+		Title:                body.Title,
+		Description:          body.Description,
+		CoverURL:             body.CoverURL,
+		ColorScheme:          body.ColorScheme,
+		ShowGiftAvailability: body.ShowGiftAvailability,
+		LocationName:         body.LocationName,
+		LocationLink:         body.LocationLink,
+		Blocks:               body.Blocks,
+	}
+
+	if body.LocationTime != "" {
+		if t, err := time.Parse(time.RFC3339, body.LocationTime); err == nil {
+			input.LocationTime = t
+		}
+	}
+
+	// Ensure block Data fields are valid JSON
+	for i := range input.Blocks {
+		if input.Blocks[i].Data == nil {
+			input.Blocks[i].Data = json.RawMessage("{}")
+		}
 	}
 
 	return input, nil

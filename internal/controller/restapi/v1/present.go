@@ -129,6 +129,7 @@ func (h *presentHandler) parsePresentInput(c *fiber.Ctx) (usecase.CreatePresentI
 		Description: c.FormValue("description"),
 		Link:        c.FormValue("link"),
 		PriceStr:    c.FormValue("price"),
+		CoverURL:    c.FormValue("cover_url"),
 	}
 
 	file, err := c.FormFile("file")
