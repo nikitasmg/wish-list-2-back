@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(dir:*)",
+      "Bash(where:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "Bash(go build:*)"
+    ]
+  }
+}

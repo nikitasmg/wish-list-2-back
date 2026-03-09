@@ -1,0 +1,99 @@
+package persistent
+
+import "main/internal/entity"
+
+// User
+
+func toUserEntity(m UserModel) entity.User {
+	return entity.User{
+		ID:       m.ID,
+		Username: m.Username,
+		Password: m.Password,
+	}
+}
+
+func toUserModel(u entity.User) UserModel {
+	return UserModel{
+		ID:       u.ID,
+		Username: u.Username,
+		Password: u.Password,
+	}
+}
+
+// Wishlist
+
+func toWishlistEntity(m WishlistModel) entity.Wishlist {
+	return entity.Wishlist{
+		ID:          m.ID,
+		Title:       m.Title,
+		Description: m.Description,
+		Cover:       m.Cover,
+		UserID:      m.UserID,
+		Settings: entity.Settings{
+			ColorScheme:          m.Settings.ColorScheme,
+			ShowGiftAvailability: m.Settings.ShowGiftAvailability,
+		},
+		Location: entity.Location{
+			Name: m.Location.Name,
+			Link: m.Location.Link,
+			Time: m.Location.Time,
+		},
+		PresentsCount: m.PresentsCount,
+		CreatedAt:     m.CreatedAt,
+		UpdatedAt:     m.UpdatedAt,
+	}
+}
+
+func toWishlistModel(w entity.Wishlist) WishlistModel {
+	return WishlistModel{
+		ID:          w.ID,
+		Title:       w.Title,
+		Description: w.Description,
+		Cover:       w.Cover,
+		UserID:      w.UserID,
+		Settings: SettingsJSON{
+			ColorScheme:          w.Settings.ColorScheme,
+			ShowGiftAvailability: w.Settings.ShowGiftAvailability,
+		},
+		Location: LocationJSON{
+			Name: w.Location.Name,
+			Link: w.Location.Link,
+			Time: w.Location.Time,
+		},
+		PresentsCount: w.PresentsCount,
+		CreatedAt:     w.CreatedAt,
+		UpdatedAt:     w.UpdatedAt,
+	}
+}
+
+// Present
+
+func toPresentEntity(m PresentModel) entity.Present {
+	return entity.Present{
+		ID:          m.ID,
+		Title:       m.Title,
+		Description: m.Description,
+		Reserved:    m.Reserved,
+		Cover:       m.Cover,
+		Link:        m.Link,
+		Price:       m.Price,
+		CreatedAt:   m.CreatedAt,
+		UpdatedAt:   m.UpdatedAt,
+		WishlistID:  m.WishlistID,
+	}
+}
+
+func toPresentModel(p entity.Present) PresentModel {
+	return PresentModel{
+		ID:          p.ID,
+		Title:       p.Title,
+		Description: p.Description,
+		Reserved:    p.Reserved,
+		Cover:       p.Cover,
+		Link:        p.Link,
+		Price:       p.Price,
+		CreatedAt:   p.CreatedAt,
+		UpdatedAt:   p.UpdatedAt,
+		WishlistID:  p.WishlistID,
+	}
+}

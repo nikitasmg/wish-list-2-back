@@ -1,0 +1,78 @@
+package app
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/gofiber/fiber/v2"
+
+	"main/config"
+	"main/internal/controller/restapi"
+	"main/internal/repo/persistent"
+	presentUC "main/internal/usecase/present"
+	userUC "main/internal/usecase/user"
+	wishlistUC "main/internal/usecase/wishlist"
+	"main/pkg/hasher"
+	minioPkg "main/pkg/minio"
+	"main/pkg/postgres"
+)
+
+func Run(cfg *config.Config) {
+	// Database
+	db, err := postgres.New(cfg.DB)
+	if err != nil {
+		log.Fatalf("postgres: %v", err)
+	}
+
+	// AutoMigrate
+	if err := db.AutoMigrate(
+		&persistent.UserModel{},
+		&persistent.WishlistModel{},
+		&persistent.PresentModel{},
+	); err != nil {
+		log.Fatalf("automigrate: %v", err)
+	}
+
+	// MinIO
+	fileStorage, err := minioPkg.New(cfg.Minio, cfg.App.CORSOrigin)
+	if err != nil {
+		log.Fatalf("minio: %v", err)
+	}
+
+	// Repositories
+	userRepo := persistent.NewUserRepo(db)
+	wishlistRepo := persistent.NewWishlistRepo(db)
+	presentRepo := persistent.NewPresentRepo(db)
+
+	// Hasher
+	pwHasher := hasher.New()
+
+	// Use Cases
+	userUseCase := userUC.New(userRepo, pwHasher, cfg.Auth.JWTSecret, cfg.Auth.BotToken)
+	wishlistUseCase := wishlistUC.New(wishlistRepo, fileStorage)
+	presentUseCase := presentUC.New(presentRepo, wishlistRepo, fileStorage)
+
+	// HTTP server
+	app := fiber.New()
+	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase)
+
+	// Graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		if err := app.Listen(fmt.Sprintf(":%s", cfg.App.Port)); err != nil {
+			log.Printf("server stopped: %v", err)
+		}
+	}()
+
+	log.Printf("Server started on :%s", cfg.App.Port)
+	<-quit
+	log.Println("Shutting down server...")
+	if err := app.Shutdown(); err != nil {
+		log.Printf("server shutdown error: %v", err)
+	}
+}
