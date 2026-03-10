@@ -34,13 +34,9 @@ func (uc *presentUseCase) Create(ctx context.Context, wishlistID uuid.UUID, inpu
 		return entity.Present{}, errors.New("вишлист с таким ID не существует")
 	}
 
-	var coverURL string
-	if len(input.CoverData) > 0 {
-		url, err := uc.fileStorage.Upload(input.CoverName, input.CoverData)
-		if err != nil {
-			return entity.Present{}, fmt.Errorf("upload cover: %w", err)
-		}
-		coverURL = url
+	coverURL, err := uc.resolveCover(input.CoverData, input.CoverName, input.CoverURL)
+	if err != nil {
+		return entity.Present{}, err
 	}
 
 	price, err := parsePrice(input.PriceStr)
@@ -94,15 +90,11 @@ func (uc *presentUseCase) Update(ctx context.Context, id uuid.UUID, input usecas
 	}
 	p.Price = price
 
-	if len(input.CoverData) > 0 {
-		url, err := uc.fileStorage.Upload(input.CoverName, input.CoverData)
-		if err != nil {
-			return entity.Present{}, fmt.Errorf("upload cover: %w", err)
-		}
-		p.Cover = url
-	} else {
-		p.Cover = ""
+	coverURL, err := uc.resolveCover(input.CoverData, input.CoverName, input.CoverURL)
+	if err != nil {
+		return entity.Present{}, err
 	}
+	p.Cover = coverURL
 
 	if err := uc.presentRepo.Update(ctx, p); err != nil {
 		return entity.Present{}, fmt.Errorf("update present: %w", err)
@@ -140,6 +132,17 @@ func (uc *presentUseCase) Release(ctx context.Context, id uuid.UUID) error {
 	}
 	p.Reserved = false
 	return uc.presentRepo.Update(ctx, p)
+}
+
+func (uc *presentUseCase) resolveCover(data []byte, name, url string) (string, error) {
+	if len(data) > 0 {
+		uploaded, err := uc.fileStorage.Upload(name, data)
+		if err != nil {
+			return "", fmt.Errorf("upload cover: %w", err)
+		}
+		return uploaded, nil
+	}
+	return url, nil
 }
 
 func parsePrice(s string) (*float64, error) {

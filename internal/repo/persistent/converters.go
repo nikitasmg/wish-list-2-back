@@ -1,6 +1,10 @@
 package persistent
 
-import "main/internal/entity"
+import (
+	"encoding/json"
+
+	"main/internal/entity"
+)
 
 // User
 
@@ -23,6 +27,21 @@ func toUserModel(u entity.User) UserModel {
 // Wishlist
 
 func toWishlistEntity(m WishlistModel) entity.Wishlist {
+	var shortID string
+	if m.ShortID != nil {
+		shortID = *m.ShortID
+	}
+
+	var blocks []entity.Block
+	for _, b := range m.Blocks {
+		blocks = append(blocks, entity.Block{
+			Type:           b.Type,
+			Position:       b.Position,
+			MobilePosition: b.MobilePosition,
+			Data:           b.Data,
+		})
+	}
+
 	return entity.Wishlist{
 		ID:          m.ID,
 		Title:       m.Title,
@@ -39,12 +58,34 @@ func toWishlistEntity(m WishlistModel) entity.Wishlist {
 			Time: m.Location.Time,
 		},
 		PresentsCount: m.PresentsCount,
+		ShortID:       shortID,
+		Blocks:        blocks,
 		CreatedAt:     m.CreatedAt,
 		UpdatedAt:     m.UpdatedAt,
 	}
 }
 
 func toWishlistModel(w entity.Wishlist) WishlistModel {
+	var shortID *string
+	if w.ShortID != "" {
+		s := w.ShortID
+		shortID = &s
+	}
+
+	var blocks BlocksJSON
+	for _, b := range w.Blocks {
+		data := b.Data
+		if data == nil {
+			data = json.RawMessage("{}")
+		}
+		blocks = append(blocks, blockJSON{
+			Type:           b.Type,
+			Position:       b.Position,
+			MobilePosition: b.MobilePosition,
+			Data:           data,
+		})
+	}
+
 	return WishlistModel{
 		ID:          w.ID,
 		Title:       w.Title,
@@ -61,6 +102,8 @@ func toWishlistModel(w entity.Wishlist) WishlistModel {
 			Time: w.Location.Time,
 		},
 		PresentsCount: w.PresentsCount,
+		ShortID:       shortID,
+		Blocks:        blocks,
 		CreatedAt:     w.CreatedAt,
 		UpdatedAt:     w.UpdatedAt,
 	}

@@ -28,8 +28,10 @@ type WishlistModel struct {
 	Settings      SettingsJSON `gorm:"type:json"`
 	Location      LocationJSON `gorm:"type:json"`
 	PresentsCount uint
-	CreatedAt     time.Time `gorm:"autoCreateTime"`
-	UpdatedAt     time.Time `gorm:"autoUpdateTime"`
+	ShortID       *string    `gorm:"uniqueIndex;column:short_id"`
+	Blocks        BlocksJSON `gorm:"type:jsonb"`
+	CreatedAt     time.Time  `gorm:"autoCreateTime"`
+	UpdatedAt     time.Time  `gorm:"autoUpdateTime"`
 }
 
 func (WishlistModel) TableName() string { return "wishlists" }
@@ -85,4 +87,33 @@ func (l *LocationJSON) Scan(value interface{}) error {
 
 func (l LocationJSON) Value() (driver.Value, error) {
 	return json.Marshal(l)
+}
+
+// BlocksJSON — JSONB-тип для хранения массива блоков конструктора
+type BlocksJSON []blockJSON
+
+type blockJSON struct {
+	Type           string          `json:"type"`
+	Position       int             `json:"position"`
+	MobilePosition *int            `json:"mobile_position"`
+	Data           json.RawMessage `json:"data"`
+}
+
+func (b *BlocksJSON) Scan(value interface{}) error {
+	if value == nil {
+		*b = nil
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New("failed to scan BlocksJSON")
+	}
+	return json.Unmarshal(bytes, b)
+}
+
+func (b BlocksJSON) Value() (driver.Value, error) {
+	if b == nil {
+		return nil, nil
+	}
+	return json.Marshal(b)
 }

@@ -13,6 +13,7 @@ import (
 	"main/internal/controller/restapi"
 	"main/internal/repo/persistent"
 	presentUC "main/internal/usecase/present"
+	uploadUC "main/internal/usecase/upload"
 	userUC "main/internal/usecase/user"
 	wishlistUC "main/internal/usecase/wishlist"
 	"main/pkg/hasher"
@@ -54,10 +55,11 @@ func Run(cfg *config.Config) {
 	userUseCase := userUC.New(userRepo, pwHasher, cfg.Auth.JWTSecret, cfg.Auth.BotToken)
 	wishlistUseCase := wishlistUC.New(wishlistRepo, fileStorage)
 	presentUseCase := presentUC.New(presentRepo, wishlistRepo, fileStorage)
+	uploadUseCase := uploadUC.New(fileStorage)
 
 	// HTTP server
 	app := fiber.New()
-	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase)
+	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)

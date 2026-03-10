@@ -15,17 +15,31 @@ type AuthResult struct {
 	User  entity.User
 }
 
-// CreateWishlistInput — входные данные для создания/обновления вишлиста
+// CreateWishlistInput — входные данные для создания/обновления простого вишлиста
 type CreateWishlistInput struct {
-	Title       string
-	Description string
-	CoverData   []byte
-	CoverName   string
-	ColorScheme string
+	Title                string
+	Description          string
+	CoverData            []byte
+	CoverName            string
+	CoverURL             string // URL картинки as-is (альтернатива CoverData)
+	ColorScheme          string
 	ShowGiftAvailability bool
-	LocationName string
-	LocationLink string
-	LocationTime time.Time
+	LocationName         string
+	LocationLink         string
+	LocationTime         time.Time
+}
+
+// CreateConstructorInput — входные данные для создания/обновления вишлиста-конструктора
+type CreateConstructorInput struct {
+	Title                string
+	Description          string
+	CoverURL             string
+	ColorScheme          string
+	ShowGiftAvailability bool
+	LocationName         string
+	LocationLink         string
+	LocationTime         time.Time
+	Blocks               []entity.Block
 }
 
 // CreatePresentInput — входные данные для создания/обновления подарка
@@ -36,6 +50,7 @@ type CreatePresentInput struct {
 	PriceStr    string
 	CoverData   []byte
 	CoverName   string
+	CoverURL    string // URL картинки as-is (альтернатива CoverData)
 }
 
 // TelegramAuthInput — входные данные для Telegram-авторизации
@@ -49,6 +64,17 @@ type TelegramAuthInput struct {
 	Hash      string
 }
 
+// UploadResult — результат загрузки файла
+type UploadResult struct {
+	URL string
+}
+
+// BulkUploadResult — результат массовой загрузки
+type BulkUploadResult struct {
+	Index int
+	URL   string
+}
+
 // UserUseCase — бизнес-логика пользователей
 type UserUseCase interface {
 	Register(ctx context.Context, username, password string) (AuthResult, error)
@@ -60,9 +86,12 @@ type UserUseCase interface {
 // WishlistUseCase — бизнес-логика вишлистов
 type WishlistUseCase interface {
 	Create(ctx context.Context, userID uuid.UUID, input CreateWishlistInput) (entity.Wishlist, error)
+	CreateConstructor(ctx context.Context, userID uuid.UUID, input CreateConstructorInput) (entity.Wishlist, error)
 	GetByID(ctx context.Context, id uuid.UUID) (entity.Wishlist, error)
+	GetByShortID(ctx context.Context, shortID string) (entity.Wishlist, error)
 	GetAllByUser(ctx context.Context, userID uuid.UUID) ([]entity.Wishlist, error)
 	Update(ctx context.Context, id uuid.UUID, input CreateWishlistInput) (entity.Wishlist, error)
+	UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block) (entity.Wishlist, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
@@ -75,4 +104,17 @@ type PresentUseCase interface {
 	Delete(ctx context.Context, wishlistID, id uuid.UUID) error
 	Reserve(ctx context.Context, id uuid.UUID) error
 	Release(ctx context.Context, id uuid.UUID) error
+}
+
+// UploadUseCase — загрузка файлов
+type UploadUseCase interface {
+	Upload(ctx context.Context, name string, data []byte) (UploadResult, error)
+	BulkUpload(ctx context.Context, files []FileInput) ([]BulkUploadResult, error)
+}
+
+// FileInput — входной файл для загрузки
+type FileInput struct {
+	Index int
+	Name  string
+	Data  []byte
 }

@@ -34,6 +34,14 @@ func (r *wishlistRepo) GetByID(ctx context.Context, id uuid.UUID) (entity.Wishli
 	return toWishlistEntity(m), nil
 }
 
+func (r *wishlistRepo) GetByShortID(ctx context.Context, shortID string) (entity.Wishlist, error) {
+	var m WishlistModel
+	if err := r.db.WithContext(ctx).First(&m, "short_id = ?", shortID).Error; err != nil {
+		return entity.Wishlist{}, fmt.Errorf("wishlistRepo.GetByShortID: %w", err)
+	}
+	return toWishlistEntity(m), nil
+}
+
 func (r *wishlistRepo) GetAllByUserID(ctx context.Context, userID uuid.UUID) ([]entity.Wishlist, error) {
 	var models []WishlistModel
 	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).Find(&models).Error; err != nil {

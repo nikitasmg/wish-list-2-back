@@ -17,6 +17,7 @@ type UserRepo interface {
 type WishlistRepo interface {
 	Create(ctx context.Context, wishlist entity.Wishlist) error
 	GetByID(ctx context.Context, id uuid.UUID) (entity.Wishlist, error)
+	GetByShortID(ctx context.Context, shortID string) (entity.Wishlist, error)
 	GetAllByUserID(ctx context.Context, userID uuid.UUID) ([]entity.Wishlist, error)
 	Update(ctx context.Context, wishlist entity.Wishlist) error
 	Delete(ctx context.Context, id uuid.UUID) error

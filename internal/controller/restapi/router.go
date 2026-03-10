@@ -22,6 +22,7 @@ func NewRouter(
 	userUC usecase.UserUseCase,
 	wishlistUC usecase.WishlistUseCase,
 	presentUC usecase.PresentUseCase,
+	uploadUC usecase.UploadUseCase,
 ) {
 	app.Use(logger.New())
 	app.Use(compress.New())
@@ -44,5 +45,5 @@ func NewRouter(
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
-	v1.NewRouter(app, cfg.Auth.JWTSecret, cfg.Auth.CookieDomain, userUC, wishlistUC, presentUC)
+	v1.NewRouter(app, cfg.Auth.JWTSecret, cfg.Auth.CookieDomain, userUC, wishlistUC, presentUC, uploadUC)
 }
