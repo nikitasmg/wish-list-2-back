@@ -93,12 +93,20 @@ func toWishlistModel(w entity.Wishlist) WishlistModel {
 			if data == nil {
 				data = json.RawMessage("{}")
 			}
+			colSpanW := b.ColSpan
+			if colSpanW < 1 {
+				colSpanW = 1
+			}
+			rowSpanW := b.RowSpan
+			if rowSpanW < 1 {
+				rowSpanW = 1
+			}
 			blocks = append(blocks, blockJSON{
 				Type:           b.Type,
 				Position:       b.Position,
 				MobilePosition: b.MobilePosition,
-				ColSpan:        b.ColSpan,
-				RowSpan:        b.RowSpan,
+				ColSpan:        colSpanW,
+				RowSpan:        rowSpanW,
 				Data:           data,
 			})
 		}

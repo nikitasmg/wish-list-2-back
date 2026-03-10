@@ -47,6 +47,8 @@ func TestWishlistConverter_RoundTrip_WithBlocks(t *testing.T) {
 				Type:           "text",
 				Position:       0,
 				MobilePosition: &mobilePos,
+				ColSpan:        2,
+				RowSpan:        3,
 				Data:           json.RawMessage(`{"text":"hello"}`),
 			},
 		},
@@ -61,6 +63,8 @@ func TestWishlistConverter_RoundTrip_WithBlocks(t *testing.T) {
 	assert.Equal(t, w.Blocks[0].Type, got.Blocks[0].Type)
 	assert.Equal(t, w.Blocks[0].Position, got.Blocks[0].Position)
 	assert.Equal(t, w.Blocks[0].MobilePosition, got.Blocks[0].MobilePosition)
+	assert.Equal(t, w.Blocks[0].ColSpan, got.Blocks[0].ColSpan)
+	assert.Equal(t, w.Blocks[0].RowSpan, got.Blocks[0].RowSpan)
 }
 
 func TestWishlistConverter_RoundTrip_NilBlocks(t *testing.T) {
@@ -72,6 +76,28 @@ func TestWishlistConverter_RoundTrip_NilBlocks(t *testing.T) {
 	}
 	got := toWishlistEntity(toWishlistModel(w))
 	assert.Empty(t, got.Blocks)
+}
+
+func TestWishlistConverter_Block_SpanDefaults(t *testing.T) {
+	w := entity.Wishlist{
+		ID:     uuid.New(),
+		Title:  "Span Defaults Test",
+		UserID: uuid.New(),
+		Blocks: []entity.Block{
+			{
+				Type:     "text",
+				Position: 0,
+				ColSpan:  0,
+				RowSpan:  0,
+				Data:     json.RawMessage(`{"text":"test"}`),
+			},
+		},
+	}
+
+	got := toWishlistEntity(toWishlistModel(w))
+	assert.Len(t, got.Blocks, 1)
+	assert.Equal(t, 1, got.Blocks[0].ColSpan)
+	assert.Equal(t, 1, got.Blocks[0].RowSpan)
 }
 
 func TestPresentConverter_RoundTrip(t *testing.T) {

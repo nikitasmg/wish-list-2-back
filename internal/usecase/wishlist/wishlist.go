@@ -201,6 +201,12 @@ func validateBlocks(blocks []entity.Block) error {
 		if !entity.ValidBlockTypes[b.Type] {
 			return fmt.Errorf("block[%d]: unknown type %q", i, b.Type)
 		}
+		if b.ColSpan > 2 {
+			return fmt.Errorf("block[%d]: colSpan %d exceeds maximum of 2", i, b.ColSpan)
+		}
+		if b.RowSpan > 3 {
+			return fmt.Errorf("block[%d]: rowSpan %d exceeds maximum of 3", i, b.RowSpan)
+		}
 	}
 	return nil
 }
