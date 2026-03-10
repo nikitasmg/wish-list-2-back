@@ -8,21 +8,23 @@ import (
 )
 
 type Settings struct {
-	ColorScheme          string
-	ShowGiftAvailability bool
+	ColorScheme          string `json:"colorScheme"`
+	ShowGiftAvailability bool   `json:"showGiftAvailability"`
 }
 
 type Location struct {
-	Name string
-	Link string
-	Time time.Time
+	Name string    `json:"name"`
+	Link string    `json:"link"`
+	Time time.Time `json:"time"`
 }
 
 // Block — один блок конструктора вишлиста
 type Block struct {
 	Type           string          `json:"type"`
 	Position       int             `json:"position"`
-	MobilePosition *int            `json:"mobile_position"`
+	MobilePosition *int            `json:"mobilePosition"`
+	ColSpan        int             `json:"colSpan"`   // 1 or 2, default 1
+	RowSpan        int             `json:"rowSpan"`   // 1–3, default 1
 	Data           json.RawMessage `json:"data"`
 }
 
@@ -38,16 +40,16 @@ var ValidBlockTypes = map[string]bool{
 }
 
 type Wishlist struct {
-	ID            uuid.UUID
-	Title         string
-	Description   string
-	Cover         string
-	UserID        uuid.UUID
-	Settings      Settings
-	Location      Location
-	PresentsCount uint
-	ShortID       string  // короткий публичный ID вида abc-def-ghi (nullable в БД)
-	Blocks        []Block // nil = простой вишлист
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID            uuid.UUID `json:"id"`
+	Title         string    `json:"title"`
+	Description   string    `json:"description"`
+	Cover         string    `json:"cover"`
+	UserID        uuid.UUID `json:"userId"`
+	Settings      Settings  `json:"settings"`
+	Location      Location  `json:"location"`
+	PresentsCount uint      `json:"presentsCount"`
+	ShortID       string    `json:"shortId"`  // короткий публичный ID вида abc-def-ghi (nullable в БД)
+	Blocks        []Block   `json:"blocks"`   // nil = простой вишлист
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }

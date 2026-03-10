@@ -33,13 +33,26 @@ func toWishlistEntity(m WishlistModel) entity.Wishlist {
 	}
 
 	var blocks []entity.Block
-	for _, b := range m.Blocks {
-		blocks = append(blocks, entity.Block{
-			Type:           b.Type,
-			Position:       b.Position,
-			MobilePosition: b.MobilePosition,
-			Data:           b.Data,
-		})
+	if m.Blocks != nil {
+		blocks = make([]entity.Block, 0, len(m.Blocks))
+		for _, b := range m.Blocks {
+			colSpan := b.ColSpan
+			if colSpan < 1 {
+				colSpan = 1
+			}
+			rowSpan := b.RowSpan
+			if rowSpan < 1 {
+				rowSpan = 1
+			}
+			blocks = append(blocks, entity.Block{
+				Type:           b.Type,
+				Position:       b.Position,
+				MobilePosition: b.MobilePosition,
+				ColSpan:        colSpan,
+				RowSpan:        rowSpan,
+				Data:           b.Data,
+			})
+		}
 	}
 
 	return entity.Wishlist{
@@ -73,17 +86,22 @@ func toWishlistModel(w entity.Wishlist) WishlistModel {
 	}
 
 	var blocks BlocksJSON
-	for _, b := range w.Blocks {
-		data := b.Data
-		if data == nil {
-			data = json.RawMessage("{}")
+	if w.Blocks != nil {
+		blocks = make(BlocksJSON, 0, len(w.Blocks))
+		for _, b := range w.Blocks {
+			data := b.Data
+			if data == nil {
+				data = json.RawMessage("{}")
+			}
+			blocks = append(blocks, blockJSON{
+				Type:           b.Type,
+				Position:       b.Position,
+				MobilePosition: b.MobilePosition,
+				ColSpan:        b.ColSpan,
+				RowSpan:        b.RowSpan,
+				Data:           data,
+			})
 		}
-		blocks = append(blocks, blockJSON{
-			Type:           b.Type,
-			Position:       b.Position,
-			MobilePosition: b.MobilePosition,
-			Data:           data,
-		})
 	}
 
 	return WishlistModel{
