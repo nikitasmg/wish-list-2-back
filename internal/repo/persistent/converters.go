@@ -64,6 +64,7 @@ func toWishlistEntity(m WishlistModel) entity.Wishlist {
 		Settings: entity.Settings{
 			ColorScheme:          m.Settings.ColorScheme,
 			ShowGiftAvailability: m.Settings.ShowGiftAvailability,
+			PresentsLayout:       m.Settings.PresentsLayout,
 		},
 		Location: entity.Location{
 			Name: m.Location.Name,
@@ -121,6 +122,7 @@ func toWishlistModel(w entity.Wishlist) WishlistModel {
 		Settings: SettingsJSON{
 			ColorScheme:          w.Settings.ColorScheme,
 			ShowGiftAvailability: w.Settings.ShowGiftAvailability,
+			PresentsLayout:       w.Settings.PresentsLayout,
 		},
 		Location: LocationJSON{
 			Name: w.Location.Name,

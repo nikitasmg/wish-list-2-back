@@ -160,6 +160,7 @@ func (h *wishlistHandler) parseWishlistInput(c *fiber.Ctx) (usecase.CreateWishli
 		CoverURL:             c.FormValue("cover_url"),
 		ColorScheme:          c.FormValue("settings[colorScheme]"),
 		ShowGiftAvailability: stringToBool(c.FormValue("settings[showGiftAvailability]")),
+		PresentsLayout:       c.FormValue("settings[presentsLayout]"),
 		LocationName:         c.FormValue("location[name]"),
 		LocationLink:         c.FormValue("location[link]"),
 	}
@@ -195,6 +196,7 @@ func (h *wishlistHandler) parseConstructorInput(c *fiber.Ctx) (usecase.CreateCon
 		CoverURL             string         `json:"cover_url"`
 		ColorScheme          string         `json:"color_scheme"`
 		ShowGiftAvailability bool           `json:"show_gift_availability"`
+		PresentsLayout       string         `json:"presents_layout"`
 		LocationName         string         `json:"location_name"`
 		LocationLink         string         `json:"location_link"`
 		LocationTime         string         `json:"location_time"`
@@ -211,6 +213,7 @@ func (h *wishlistHandler) parseConstructorInput(c *fiber.Ctx) (usecase.CreateCon
 		CoverURL:             body.CoverURL,
 		ColorScheme:          body.ColorScheme,
 		ShowGiftAvailability: body.ShowGiftAvailability,
+		PresentsLayout:       body.PresentsLayout,
 		LocationName:         body.LocationName,
 		LocationLink:         body.LocationLink,
 		Blocks:               body.Blocks,

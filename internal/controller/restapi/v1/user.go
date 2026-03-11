@@ -14,10 +14,11 @@ import (
 type userHandler struct {
 	uc           usecase.UserUseCase
 	cookieDomain string
+	secureCookie bool
 }
 
-func newUserHandler(uc usecase.UserUseCase, cookieDomain string) *userHandler {
-	return &userHandler{uc: uc, cookieDomain: cookieDomain}
+func newUserHandler(uc usecase.UserUseCase, cookieDomain string, secureCookie bool) *userHandler {
+	return &userHandler{uc: uc, cookieDomain: cookieDomain, secureCookie: secureCookie}
 }
 
 func (h *userHandler) register(c *fiber.Ctx) error {
@@ -90,7 +91,7 @@ func (h *userHandler) logout(c *fiber.Ctx) error {
 		Name:     "token",
 		Value:    "",
 		Expires:  time.Now().Add(-time.Hour * 24),
-		Secure:   true,
+		Secure:   h.secureCookie,
 		HTTPOnly: true,
 		SameSite: fiber.CookieSameSiteLaxMode,
 		Path:     "/",
@@ -104,7 +105,7 @@ func (h *userHandler) setTokenCookie(c *fiber.Ctx, token string) {
 		Name:     "token",
 		Value:    token,
 		Expires:  time.Now().Add(time.Hour * 24 * 30),
-		Secure:   true,
+		Secure:   h.secureCookie,
 		HTTPOnly: true,
 		SameSite: fiber.CookieSameSiteLaxMode,
 		Path:     "/",

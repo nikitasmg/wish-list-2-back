@@ -134,5 +134,5 @@ func TestGetByShortID_Success(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&result)
 	data, ok := result["data"].(map[string]interface{})
 	require.True(t, ok)
-	assert.Equal(t, "abc-def-ghi", data["ShortID"])
+	assert.Equal(t, "abc-def-ghi", data["shortId"])
 }

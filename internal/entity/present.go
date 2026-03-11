@@ -7,14 +7,14 @@ import (
 )
 
 type Present struct {
-	ID          uuid.UUID
-	Title       string
-	Description string
-	Reserved    bool
-	Cover       string
-	Link        string
-	Price       *float64
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	WishlistID  uuid.UUID
+	ID          uuid.UUID `json:"id"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Reserved    bool      `json:"reserved"`
+	Cover       string    `json:"cover"`
+	Link        string    `json:"link"`
+	Price       *float64  `json:"price"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	WishlistID  uuid.UUID `json:"wishlistId"`
 }

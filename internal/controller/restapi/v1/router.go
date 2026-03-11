@@ -11,6 +11,7 @@ func NewRouter(
 	router fiber.Router,
 	jwtSecret string,
 	cookieDomain string,
+	secureCookie bool,
 	userUC usecase.UserUseCase,
 	wishlistUC usecase.WishlistUseCase,
 	presentUC usecase.PresentUseCase,
@@ -18,7 +19,7 @@ func NewRouter(
 ) {
 	api := router.Group("/api/v1")
 
-	userH := newUserHandler(userUC, cookieDomain)
+	userH := newUserHandler(userUC, cookieDomain, secureCookie)
 	wishlistH := newWishlistHandler(wishlistUC)
 	presentH := newPresentHandler(presentUC)
 	uploadH := newUploadHandler(uploadUC)

@@ -46,6 +46,7 @@ func (uc *wishlistUseCase) Create(ctx context.Context, userID uuid.UUID, input u
 		Settings: entity.Settings{
 			ColorScheme:          input.ColorScheme,
 			ShowGiftAvailability: input.ShowGiftAvailability,
+			PresentsLayout:       input.PresentsLayout,
 		},
 		Location: entity.Location{
 			Name: input.LocationName,
@@ -82,6 +83,7 @@ func (uc *wishlistUseCase) CreateConstructor(ctx context.Context, userID uuid.UU
 		Settings: entity.Settings{
 			ColorScheme:          input.ColorScheme,
 			ShowGiftAvailability: input.ShowGiftAvailability,
+			PresentsLayout:       input.PresentsLayout,
 		},
 		Location: entity.Location{
 			Name: input.LocationName,
@@ -122,6 +124,7 @@ func (uc *wishlistUseCase) Update(ctx context.Context, id uuid.UUID, input useca
 	w.Settings = entity.Settings{
 		ColorScheme:          input.ColorScheme,
 		ShowGiftAvailability: input.ShowGiftAvailability,
+		PresentsLayout:       input.PresentsLayout,
 	}
 	w.Location = entity.Location{
 		Name: input.LocationName,

@@ -10,6 +10,7 @@ import (
 type Settings struct {
 	ColorScheme          string `json:"colorScheme"`
 	ShowGiftAvailability bool   `json:"showGiftAvailability"`
+	PresentsLayout       string `json:"presentsLayout"` // "list" | "grid3" | "grid2", default "list"
 }
 
 type Location struct {

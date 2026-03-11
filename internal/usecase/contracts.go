@@ -24,6 +24,7 @@ type CreateWishlistInput struct {
 	CoverURL             string // URL картинки as-is (альтернатива CoverData)
 	ColorScheme          string
 	ShowGiftAvailability bool
+	PresentsLayout       string
 	LocationName         string
 	LocationLink         string
 	LocationTime         time.Time
@@ -36,6 +37,7 @@ type CreateConstructorInput struct {
 	CoverURL             string
 	ColorScheme          string
 	ShowGiftAvailability bool
+	PresentsLayout       string
 	LocationName         string
 	LocationLink         string
 	LocationTime         time.Time

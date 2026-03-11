@@ -45,5 +45,5 @@ func NewRouter(
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
-	v1.NewRouter(app, cfg.Auth.JWTSecret, cfg.Auth.CookieDomain, userUC, wishlistUC, presentUC, uploadUC)
+	v1.NewRouter(app, cfg.Auth.JWTSecret, cfg.Auth.CookieDomain, cfg.App.Env == "production", userUC, wishlistUC, presentUC, uploadUC)
 }

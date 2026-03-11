@@ -56,6 +56,7 @@ func (PresentModel) TableName() string { return "presents" }
 type SettingsJSON struct {
 	ColorScheme          string `json:"colorScheme"`
 	ShowGiftAvailability bool   `json:"showGiftAvailability"`
+	PresentsLayout       string `json:"presentsLayout"`
 }
 
 func (s *SettingsJSON) Scan(value interface{}) error {
