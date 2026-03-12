@@ -136,9 +136,7 @@ func (uc *wishlistUseCase) Update(ctx context.Context, id uuid.UUID, input useca
 	if err != nil {
 		return entity.Wishlist{}, err
 	}
-	if coverURL != "" {
-		w.Cover = coverURL
-	}
+	w.Cover = coverURL
 
 	if err := uc.wishlistRepo.Update(ctx, w); err != nil {
 		return entity.Wishlist{}, fmt.Errorf("update wishlist: %w", err)
