@@ -1,0 +1,43 @@
+version: '3.8'
+
+# Только инфраструктура для локальной разработки.
+# Бэк запускай нативно: go run ./cmd/app
+# Фронт запускай нативно: pnpm dev
+
+services:
+  minio:
+    container_name: minio
+    image: minio/minio:latest
+    command: server --console-address ":9001" /data/
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: root
+      MINIO_ROOT_PASSWORD: minio_password
+    volumes:
+      - minio-dev:/data
+    networks:
+      - dev
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres_dev
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: wishlist_db
+    ports:
+      - "5430:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    networks:
+      - dev
+
+networks:
+  dev:
+    driver: bridge
+
+volumes:
+  minio-dev:
+  pgdata-dev:

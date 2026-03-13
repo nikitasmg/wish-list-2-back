@@ -42,6 +42,10 @@ Go backend using **Fiber v2** web framework with **GORM + PostgreSQL** and **Min
 
 **Database:** GORM auto-migrates all models on startup. PostgreSQL 17.
 
+## Related Projects
+
+- **Frontend:** `C:\Users\nvsma\OneDrive\Документы\projects\wish-list-2-front`
+
 ## Infrastructure
 
 - `docker-compose.yml` — 6 services: postgres, minio, server, frontend (wish-list-2-front), nginx, certbot

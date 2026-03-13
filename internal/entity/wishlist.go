@@ -38,6 +38,13 @@ var ValidBlockTypes = map[string]bool{
 	"location":     true,
 	"color_scheme": true,
 	"timing":       true,
+	"agenda":       true,
+	"gallery":      true,
+	"quote":        true,
+	"divider":      true,
+	"contact":      true,
+	"video":        true,
+	"checklist":    true,
 }
 
 type Wishlist struct {
