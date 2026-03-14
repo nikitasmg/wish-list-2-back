@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"time"
 
 	"main/internal/entity"
 
@@ -31,4 +32,15 @@ type PresentRepo interface {
 	GetAllByWishlistID(ctx context.Context, wishlistID uuid.UUID) ([]entity.Present, error)
 	Update(ctx context.Context, present entity.Present) error
 	Delete(ctx context.Context, id uuid.UUID) error
+}
+
+type ParseRateLimitRepo interface {
+	// IncrementAndCheck atomically increments the counter for userID in the
+	// current hour window and returns the new count.
+	// Pass uuid.Nil for the global counter.
+	IncrementAndCheck(ctx context.Context, userID uuid.UUID, windowStart time.Time) (int, error)
+}
+
+type PresentMetaRepo interface {
+	Upsert(ctx context.Context, meta entity.PresentMeta) error
 }
