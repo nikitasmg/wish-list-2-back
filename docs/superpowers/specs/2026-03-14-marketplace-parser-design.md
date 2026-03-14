@@ -13,7 +13,9 @@ Supported marketplaces: Ozon, Wildberries, Яндекс Маркет. Universal 
 
 ## API
 
-**Endpoint:** `GET /api/v1/parse?url=<encoded-url>` (protected, JWT required)
+### Parse endpoint
+
+`GET /api/v1/parse?url=<encoded-url>` (protected, JWT required)
 
 **Success response (200):**
 ```json
@@ -30,68 +32,90 @@ Supported marketplaces: Ozon, Wildberries, Яндекс Маркет. Universal 
 }
 ```
 
-**Partial result** — if some fields are missing (e.g. price not found), return 200 with available fields. Frontend fills missing fields manually.
+**Partial result:** if some fields are missing after all parsing attempts, return 200 with available fields. Returns 422 only if `title` is empty after all parsing attempts.
 
 **Error responses:**
-- `400` — missing or invalid URL
-- `422` — URL valid but parsing returned nothing useful
-- `429` — rate limit exceeded (header: `Retry-After: 3600`)
-- `504` — parsing timed out (8 second hard limit)
+- `400` — missing or invalid URL (validated in handler before calling usecase)
+- `422` — URL valid but `title` could not be parsed from the page
+- `429` — rate limit exceeded (`Retry-After: 3600` header)
+- `504` — parsing timed out (detected via `errors.Is(err, ErrTimeout)` — see sentinel below)
 
-**Metadata save flow:** When the user creates/updates a present after parsing, the frontend additionally sends `category`, `brand`, `source` fields. These are saved to `present_meta`.
+**URL validation rule (handler layer):** reject if `url` query param is absent, `net/url.Parse` returns an error, host is empty, or scheme is not `http` or `https`. The usecase receives only valid, pre-checked URLs.
+
+**Note on existing Fiber limiter:** `restapi.NewRouter` already applies a global IP-based rate limiter (`Max: 10, Expiration: 1s`). The usecase-layer limiter is additive. A client behind NAT may hit the IP limiter first and receive a different 429 response shape — this is acceptable.
+
+### Timeout error sentinel
+
+`internal/usecase/parse/parse.go` exports:
+```go
+var ErrTimeout = errors.New("parse timeout")
+```
+
+When the 8-second HTTP fetch context deadline is exceeded, the usecase wraps the error: `fmt.Errorf("%w: %w", ErrTimeout, ctx.Err())`. The handler uses `errors.Is(err, ErrTimeout)` to map to 504.
+
+### Metadata save flow
+
+`CreatePresentInput` gains four optional new fields populated by the frontend after a successful parse. The frontend echoes back the original URL it sent to `/parse` as `OriginalURL` — no URL transformation is expected.
+
+```go
+type CreatePresentInput struct {
+    Title       string
+    Description string
+    Link        string
+    PriceStr    string
+    CoverData   []byte
+    CoverName   string
+    CoverURL    string
+    // Parser metadata (optional, populated after /parse call)
+    Category    string
+    Brand       string
+    Source      string // "ozon" | "wildberries" | "yamarket" | "other"
+    OriginalURL string
+}
+```
+
+**Handler validation for metadata fields:**
+- If `Source` is non-empty, reject with 400 if it is not one of the four canonical values.
+- If `Source` is non-empty and `OriginalURL` is empty, reject with 400.
+
+`PresentUseCase.Create`: if `Source` is non-empty, call `PresentMetaRepo.Upsert` with `ParsedAt = time.Now().UTC()`. Upsert failure is logged and does not fail the request.
+`PresentUseCase.Update`:
+- `Source` non-empty → upsert `present_meta`.
+- `Source` empty → leave existing `present_meta` row unchanged. **Never delete `present_meta` on update.**
 
 ---
 
 ## Parsing Strategy
 
-1. **OG parser (always first)** — fetches page HTML, extracts Open Graph tags: `og:title`, `og:description`, `og:image`, `og:price:amount`, plus any marketplace-specific meta tags for category/brand.
-2. **HTML scraper (fallback)** — if `title` or `price` is empty after OG parsing, run a marketplace-specific HTML scraper to extract missing fields.
-3. **Timeout:** 8 seconds via `context.WithTimeout` covering the entire parse attempt.
-4. **Source detection:** URL host determines the parser (`ozon.ru` → Ozon, `wildberries.ru` → Wildberries, `market.yandex.ru` → Яндекс Маркет, anything else → OG-only).
+1. **OG parser (always first)** — fetches page HTML, extracts: `og:title`, `og:description`, `og:image`, `og:price:amount`, plus marketplace-specific meta tags for category/brand.
+2. **HTML scraper (merge)** — if `title` is still empty or `price` is empty and source is a known marketplace, call the marketplace-specific scraper. **Merge rule: scraper fills only empty fields; it never overwrites fields already populated by OG.** If the scraper errors but `title` is already populated, log and discard the scraper error — return 200 with available data.
+3. **Timeout:** 8 seconds via `context.WithTimeout`, applied only to the outbound HTTP fetch portion. Rate-limit DB calls run before the timeout context is created.
+4. **Source detection:**
+   - `ozon.ru` → `"ozon"`, `wildberries.ru` → `"wildberries"`, `market.yandex.ru` → `"yamarket"`, else → `"other"`
 
 ---
 
-## Rate Limiting
+## Package layout and import rules
 
-Stored in PostgreSQL (no Redis dependency).
-
-| Scope | Limit |
-|-------|-------|
-| Per authenticated user | 20 requests / hour |
-| Global (all users combined) | 200 requests / hour |
-
-**Table `parse_rate_limits`:**
-```sql
-id           UUID PRIMARY KEY
-user_id      UUID REFERENCES users(id) NULLABLE  -- NULL = global counter
-window_start TIMESTAMP NOT NULL
-count        INT NOT NULL DEFAULT 0
-```
-
-Logic per request:
-1. Check/upsert row for `user_id` in current hour window → if `count >= 20`, return 429.
-2. Check/upsert row for `user_id = NULL` in current hour window → if `count >= 200`, return 429.
-3. Increment both counters.
-4. Stale windows are overwritten on next request from the same user (no background cleanup needed).
+`pkg/parser` must not import `internal/`. `ParseResult` is defined inside `pkg/parser`. The usecase maps `parser.ParseResult` → `entity.ParseResult` inline (trivial field-for-field copy, no converters file needed).
 
 ---
 
-## Data Models
+## `pkg/parser` exported definitions
 
-### `present_meta` table
-Stores parsed metadata linked to a present (1:1).
-
-```sql
-present_id   UUID PRIMARY KEY REFERENCES presents(id) ON DELETE CASCADE
-source       VARCHAR NOT NULL  -- "ozon" | "wildberries" | "yamarket" | "other"
-original_url TEXT NOT NULL
-category     VARCHAR
-brand        VARCHAR
-parsed_at    TIMESTAMP NOT NULL
-```
-
-### `ParseResult` entity (DTO, not persisted)
+**`types.go`:**
 ```go
+package parser
+
+import "context"
+
+const (
+    SourceOzon        = "ozon"
+    SourceWildberries = "wildberries"
+    SourceYaMarket    = "yamarket"
+    SourceOther       = "other"
+)
+
 type ParseResult struct {
     Title       string
     Description string
@@ -99,12 +123,114 @@ type ParseResult struct {
     ImageURL    string
     Category    string
     Brand       string
-    Source      string // "ozon" | "wildberries" | "yamarket" | "other"
+    Source      string
+}
+
+type MarketplaceParser interface {
+    Parse(ctx context.Context, rawURL string) (ParseResult, error)
 }
 ```
 
-### `PresentMeta` entity
+**`detector.go`:** `func Detect(rawURL string) string`
+
+**`og.go`:**
 ```go
+type OGParser struct{ Client *http.Client }
+func (p OGParser) Parse(ctx context.Context, rawURL string) (ParseResult, error)
+```
+
+**`ozon.go`, `wildberries.go`, `yamarket.go`:** same pattern (`OzonParser`, `WildberriesParser`, `YaMarketParser`), each with `Client *http.Client`.
+
+**HTTP client:** `app.go` constructs one shared `*http.Client` with a realistic `User-Agent` (`"Mozilla/5.0 ..."`) and passes it to `NewParseUseCase`. The usecase uses it to instantiate all parsers. `http.DefaultClient` is not used.
+
+---
+
+## Rate Limiting
+
+Stored in PostgreSQL. One row per user plus one global row keyed by `uuid.Nil`.
+
+**Rate limit constants (hard-coded in `internal/usecase/parse/parse.go`):**
+```go
+const (
+    perUserLimit  = 20
+    globalLimit   = 200
+)
+```
+
+**Table `parse_rate_limits`:**
+```sql
+user_id      UUID PRIMARY KEY
+window_start TIMESTAMP NOT NULL
+count        INT NOT NULL DEFAULT 0
+```
+
+The usecase calls `IncrementAndCheck` **twice** per request (real userID → compare against `perUserLimit`, then `uuid.Nil` → compare against `globalLimit`). Both counters increment unconditionally. Counter drift when global is saturated (~200 phantom increments/hour per user) is acceptable.
+
+**Atomic upsert (raw SQL via GORM `Exec`):**
+```sql
+INSERT INTO parse_rate_limits (user_id, window_start, count)
+VALUES ($1, $2, 1)
+ON CONFLICT (user_id) DO UPDATE SET
+  count        = CASE WHEN parse_rate_limits.window_start = $2
+                      THEN parse_rate_limits.count + 1
+                      ELSE 1 END,
+  window_start = $2
+RETURNING count
+```
+
+`$windowStart` = `time.Now().UTC().Truncate(time.Hour)`.
+
+---
+
+## Data Models
+
+### `present_meta` table
+
+```sql
+present_id   UUID PRIMARY KEY REFERENCES presents(id) ON DELETE CASCADE
+source       VARCHAR NOT NULL
+original_url TEXT NOT NULL
+category     VARCHAR
+brand        VARCHAR
+parsed_at    TIMESTAMP NOT NULL
+```
+
+### GORM models (added to `internal/repo/persistent/models.go`)
+
+```go
+type ParseRateLimitModel struct {
+    UserID      uuid.UUID `gorm:"primaryKey"`
+    WindowStart time.Time `gorm:"not null"`
+    Count       int       `gorm:"not null;default:0"`
+}
+func (ParseRateLimitModel) TableName() string { return "parse_rate_limits" }
+
+type PresentMetaModel struct {
+    PresentID   uuid.UUID `gorm:"primaryKey"`
+    Source      string    `gorm:"not null"`
+    OriginalURL string    `gorm:"not null"`
+    Category    string
+    Brand       string
+    ParsedAt    time.Time `gorm:"not null"`
+}
+func (PresentMetaModel) TableName() string { return "present_meta" }
+```
+
+### Entities (`internal/entity/`)
+
+```go
+// parse.go
+type ParseResult struct {
+    Title       string
+    Description string
+    Price       *float64
+    ImageURL    string
+    Category    string
+    Brand       string
+    Source      string
+}
+
+// present_meta.go
 type PresentMeta struct {
     PresentID   uuid.UUID
     Source      string
@@ -117,66 +243,134 @@ type PresentMeta struct {
 
 ---
 
-## Code Structure
+## Interfaces
 
-Follows existing layered architecture (entity → usecase → repo → controller):
+### `internal/usecase/contracts.go` additions
 
-```
-internal/
-  entity/
-    parse.go                          -- ParseResult, PresentMeta
-  usecase/
-    contracts.go                      -- add ParseUseCase, PresentMetaRepo interfaces
-    parse/
-      parse.go                        -- orchestrates: rate limit → detect → parse → return
-  repo/
-    contracts.go                      -- add ParseRateLimitRepo, PresentMetaRepo
-    persistent/
-      parse_rate_limit_postgres.go    -- GORM impl for rate limit table
-      present_meta_postgres.go        -- GORM impl for present_meta table
-  controller/restapi/v1/
-    parse.go                          -- HTTP handler
-    router.go                         -- add GET /api/v1/parse route
-
-pkg/parser/
-  detector.go       -- maps URL host → source string
-  og.go             -- universal OG tag parser
-  ozon.go           -- Ozon HTML scraper (fallback)
-  wildberries.go    -- Wildberries HTML scraper (fallback)
-  yamarket.go       -- Яндекс Маркет HTML scraper (fallback)
-```
-
-**Parser interface:**
 ```go
-// pkg/parser
-type MarketplaceParser interface {
-    Parse(ctx context.Context, rawURL string) (ParseResult, error)
+type ParseUseCase interface {
+    Parse(ctx context.Context, userID uuid.UUID, rawURL string) (entity.ParseResult, error)
 }
 ```
 
-`ParseUseCase` holds a map of `source → MarketplaceParser`. OG parser always runs first; if result is incomplete, the marketplace-specific scraper fills gaps.
+### `internal/repo/contracts.go` additions
+
+```go
+type ParseRateLimitRepo interface {
+    IncrementAndCheck(ctx context.Context, userID uuid.UUID, windowStart time.Time) (int, error)
+}
+
+type PresentMetaRepo interface {
+    Upsert(ctx context.Context, meta entity.PresentMeta) error
+}
+```
+
+---
+
+## Code Structure
+
+```
+internal/
+  entity/parse.go, present_meta.go
+  usecase/
+    contracts.go
+    parse/parse.go     -- ErrTimeout sentinel + orchestration
+  repo/
+    contracts.go
+    persistent/
+      models.go
+      parse_rate_limit_postgres.go
+      present_meta_postgres.go
+  controller/restapi/v1/
+    parse.go
+    router.go
+  controller/restapi/router.go
+
+pkg/parser/
+  types.go / detector.go / og.go / ozon.go / wildberries.go / yamarket.go
+```
+
+### Constructor signatures
+
+**`parse.NewParseUseCase`:**
+```go
+func NewParseUseCase(rateLimitRepo repo.ParseRateLimitRepo, httpClient *http.Client) usecase.ParseUseCase
+```
+Internally builds `OGParser{Client: httpClient}` and marketplace-specific parsers.
+
+**`present.New` (updated):**
+```go
+func New(presentRepo repo.PresentRepo, wishlistRepo repo.WishlistRepo, fileStorage minioPkg.FileStorage, metaRepo repo.PresentMetaRepo) usecase.PresentUseCase
+```
+
+### `PresentMetaRepo.Upsert` implementation pattern
+
+Uses GORM `clause.OnConflict` (same approach as other upserts in the project):
+```go
+db.Clauses(clause.OnConflict{
+    Columns:   []clause.Column{{Name: "present_id"}},
+    DoUpdates: clause.AssignmentColumns([]string{"source", "original_url", "category", "brand", "parsed_at"}),
+}).Create(&model)
+```
+
+### Updated `v1.NewRouter` signature
+
+```go
+func NewRouter(
+    router fiber.Router,
+    jwtSecret string,
+    cookieDomain string,
+    secureCookie bool,
+    userUC usecase.UserUseCase,
+    wishlistUC usecase.WishlistUseCase,
+    presentUC usecase.PresentUseCase,
+    uploadUC usecase.UploadUseCase,
+    parseUC usecase.ParseUseCase,   // added last
+) {
+```
+
+`restapi.NewRouter` signature gains the same `parseUC usecase.ParseUseCase` parameter (last) and forwards it to `v1.NewRouter`.
+
+### `app.go` wiring additions
+
+1. Add `&ParseRateLimitModel{}`, `&PresentMetaModel{}` to `AutoMigrate`.
+2. Build shared HTTP client with custom User-Agent.
+3. `rateLimitRepo := persistent.NewParseRateLimitRepo(db)`
+4. `metaRepo := persistent.NewPresentMetaRepo(db)`
+5. `parseUC := parse.NewParseUseCase(rateLimitRepo, httpClient)`
+6. Update `present.New(presentRepo, wishlistRepo, fileStorage, metaRepo)`.
+7. Pass `parseUC` to `restapi.NewRouter`.
+
+### Handler: userID extraction
+
+The parse handler extracts `userID` using the existing `getUserID(c)` helper in `internal/controller/restapi/v1/helpers.go`.
+
+### Test helper updates
+
+Add `MockParseUC` (implementing `usecase.ParseUseCase`) to `testhelpers_test.go`. Update all `v1.NewRouter` call sites in `internal/controller/restapi/v1/*_test.go` to pass `MockParseUC` as the new final argument.
 
 ---
 
 ## Error Handling
 
-- Parser errors (network, timeout, parse failure) are logged but do not surface as 500 — they return 422 with a user-friendly message.
-- Partial results (some fields found, others not) always return 200.
-- Rate limit errors return 429 with `Retry-After: 3600`.
-- Context cancellation / deadline exceeded returns 504.
+- OG succeeds (title populated), scraper errors: log, discard, return 200 with partial data.
+- Both OG and scraper fail to produce `title`: return 422.
+- `errors.Is(err, ErrTimeout)` → 504.
+- Rate limit exceeded → 429 with `Retry-After: 3600`.
+- `present_meta` write failure: logged, does not fail the request.
 
 ---
 
 ## Testing
 
-| File | Type | What it covers |
-|------|------|----------------|
-| `pkg/parser/og_test.go` | Unit | OG parsing from static HTML fixtures |
-| `pkg/parser/detector_test.go` | Unit | URL → source detection |
-| `internal/usecase/parse/parse_test.go` | Unit | Rate limit logic via mock repo |
-| `internal/controller/restapi/v1/parse_test.go` | HTTP | Handler response codes and shape |
+| File | Type | Cases |
+|------|------|-------|
+| `pkg/parser/og_test.go` | Unit | Parses OG fields from static HTML; empty result for page with no OG tags |
+| `pkg/parser/detector_test.go` | Unit | Correct source for ozon/wb/yamarket/other URLs |
+| `internal/usecase/parse/parse_test.go` | Unit | Per-user limit hit → ErrRateLimit; global limit hit → ErrRateLimit; both clear → result; DB error → error |
+| `internal/controller/restapi/v1/parse_test.go` | HTTP | Missing URL → 400; bad scheme → 400; success → 200; partial result → 200; title empty → 422; rate limit → 429 |
 
-HTML scrapers (`ozon.go`, `wildberries.go`, `yamarket.go`) are **not unit-tested** — they depend on live external sites and break on redesigns. Verified manually.
+HTML scrapers not unit-tested — verified manually.
 
 ---
 
@@ -184,6 +378,6 @@ HTML scrapers (`ozon.go`, `wildberries.go`, `yamarket.go`) are **not unit-tested
 
 - Async/polling parsing job queue
 - Redis-based rate limiting
-- Recommendation engine (this spec only covers data collection)
-- Admin UI for rate limit monitoring
+- Recommendation engine (data collection only)
 - Caching parsed results
+- Re-uploading marketplace images to MinIO (image_url stored as-is; anti-hotlinking CDNs may break images over time — known limitation)
