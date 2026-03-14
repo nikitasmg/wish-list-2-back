@@ -12,6 +12,7 @@ import (
 	"main/config"
 	"main/internal/controller/restapi"
 	"main/internal/repo/persistent"
+	parseUC "main/internal/usecase/parse"
 	presentUC "main/internal/usecase/present"
 	uploadUC "main/internal/usecase/upload"
 	userUC "main/internal/usecase/user"
@@ -19,6 +20,7 @@ import (
 	"main/pkg/hasher"
 	minioPkg "main/pkg/minio"
 	"main/pkg/postgres"
+	"net/http"
 )
 
 func Run(cfg *config.Config) {
@@ -48,6 +50,7 @@ func Run(cfg *config.Config) {
 	wishlistRepo := persistent.NewWishlistRepo(db)
 	presentRepo := persistent.NewPresentRepo(db)
 	presentMetaRepo := persistent.NewPresentMetaRepo(db)
+	rateLimitRepo := persistent.NewParseRateLimitRepo(db)
 
 	// Hasher
 	pwHasher := hasher.New()
@@ -57,10 +60,11 @@ func Run(cfg *config.Config) {
 	wishlistUseCase := wishlistUC.New(wishlistRepo, fileStorage)
 	presentUseCase := presentUC.New(presentRepo, wishlistRepo, fileStorage, presentMetaRepo)
 	uploadUseCase := uploadUC.New(fileStorage)
+	parseUseCase := parseUC.NewParseUseCase(rateLimitRepo, http.DefaultClient)
 
 	// HTTP server
 	app := fiber.New()
-	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase)
+	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase, parseUseCase)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)

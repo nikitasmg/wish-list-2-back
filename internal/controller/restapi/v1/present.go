@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"errors"
 	"io"
 
 	"github.com/gofiber/fiber/v2"
@@ -123,6 +124,23 @@ func (h *presentHandler) release(c *fiber.Ctx) error {
 	return c.JSON(response.Data(true))
 }
 
+var validSources = map[string]bool{
+	"ozon": true, "wildberries": true, "yamarket": true, "other": true,
+}
+
+func validatePresentMeta(source, originalURL string) error {
+	if source == "" {
+		return nil
+	}
+	if !validSources[source] {
+		return errors.New("invalid source: must be ozon, wildberries, yamarket, or other")
+	}
+	if originalURL == "" {
+		return errors.New("original_url is required when source is set")
+	}
+	return nil
+}
+
 func (h *presentHandler) parsePresentInput(c *fiber.Ctx) (usecase.CreatePresentInput, error) {
 	input := usecase.CreatePresentInput{
 		Title:       c.FormValue("title"),
@@ -131,6 +149,16 @@ func (h *presentHandler) parsePresentInput(c *fiber.Ctx) (usecase.CreatePresentI
 		PriceStr:    c.FormValue("price"),
 		CoverURL:    c.FormValue("cover_url"),
 	}
+
+	source := c.FormValue("source")
+	originalURL := c.FormValue("original_url")
+	if err := validatePresentMeta(source, originalURL); err != nil {
+		return input, err
+	}
+	input.Source = source
+	input.OriginalURL = originalURL
+	input.Category = c.FormValue("category")
+	input.Brand = c.FormValue("brand")
 
 	file, err := c.FormFile("file")
 	if err == nil && file != nil {

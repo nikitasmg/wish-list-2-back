@@ -16,6 +16,7 @@ func NewRouter(
 	wishlistUC usecase.WishlistUseCase,
 	presentUC usecase.PresentUseCase,
 	uploadUC usecase.UploadUseCase,
+	parseUC usecase.ParseUseCase,
 ) {
 	api := router.Group("/api/v1")
 
@@ -23,6 +24,7 @@ func NewRouter(
 	wishlistH := newWishlistHandler(wishlistUC)
 	presentH := newPresentHandler(presentUC)
 	uploadH := newUploadHandler(uploadUC)
+	parseH := newParseHandler(parseUC)
 
 	// Auth (public)
 	auth := api.Group("/auth")
@@ -46,6 +48,9 @@ func NewRouter(
 	// Protected routes
 	protected := api.Group("")
 	protected.Use(middleware.JWTProtected(jwtSecret))
+
+	// Parse
+	protected.Get("/parse", parseH.parse)
 
 	// Upload
 	protected.Post("/upload", uploadH.upload)

@@ -144,3 +144,12 @@ func (m *MockUploadUC) BulkUpload(ctx context.Context, files []usecase.FileInput
 	args := m.Called(ctx, files)
 	return args.Get(0).([]usecase.BulkUploadResult), args.Error(1)
 }
+
+// MockParseUC
+
+type MockParseUC struct{ mock.Mock }
+
+func (m *MockParseUC) Parse(ctx context.Context, userID uuid.UUID, rawURL string) (entity.ParseResult, error) {
+	args := m.Called(ctx, userID, rawURL)
+	return args.Get(0).(entity.ParseResult), args.Error(1)
+}
