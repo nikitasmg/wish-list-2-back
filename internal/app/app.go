@@ -47,6 +47,7 @@ func Run(cfg *config.Config) {
 	userRepo := persistent.NewUserRepo(db)
 	wishlistRepo := persistent.NewWishlistRepo(db)
 	presentRepo := persistent.NewPresentRepo(db)
+	presentMetaRepo := persistent.NewPresentMetaRepo(db)
 
 	// Hasher
 	pwHasher := hasher.New()
@@ -54,7 +55,7 @@ func Run(cfg *config.Config) {
 	// Use Cases
 	userUseCase := userUC.New(userRepo, pwHasher, cfg.Auth.JWTSecret, cfg.Auth.BotToken)
 	wishlistUseCase := wishlistUC.New(wishlistRepo, fileStorage)
-	presentUseCase := presentUC.New(presentRepo, wishlistRepo, fileStorage)
+	presentUseCase := presentUC.New(presentRepo, wishlistRepo, fileStorage, presentMetaRepo)
 	uploadUseCase := uploadUC.New(fileStorage)
 
 	// HTTP server

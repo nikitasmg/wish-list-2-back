@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -19,13 +21,15 @@ type presentUseCase struct {
 	presentRepo  repo.PresentRepo
 	wishlistRepo repo.WishlistRepo
 	fileStorage  minioPkg.FileStorage
+	metaRepo     repo.PresentMetaRepo
 }
 
-func New(presentRepo repo.PresentRepo, wishlistRepo repo.WishlistRepo, fileStorage minioPkg.FileStorage) usecase.PresentUseCase {
+func New(presentRepo repo.PresentRepo, wishlistRepo repo.WishlistRepo, fileStorage minioPkg.FileStorage, metaRepo repo.PresentMetaRepo) usecase.PresentUseCase {
 	return &presentUseCase{
 		presentRepo:  presentRepo,
 		wishlistRepo: wishlistRepo,
 		fileStorage:  fileStorage,
+		metaRepo:     metaRepo,
 	}
 }
 
@@ -63,6 +67,20 @@ func (uc *presentUseCase) Create(ctx context.Context, wishlistID uuid.UUID, inpu
 		return entity.Present{}, fmt.Errorf("increment presents count: %w", err)
 	}
 
+	if input.Source != "" {
+		meta := entity.PresentMeta{
+			PresentID:   p.ID,
+			Source:      input.Source,
+			OriginalURL: input.OriginalURL,
+			Category:    input.Category,
+			Brand:       input.Brand,
+			ParsedAt:    time.Now().UTC(),
+		}
+		if err := uc.metaRepo.Upsert(ctx, meta); err != nil {
+			log.Printf("present_meta upsert failed for present %s: %v", p.ID, err)
+		}
+	}
+
 	return p, nil
 }
 
@@ -98,6 +116,20 @@ func (uc *presentUseCase) Update(ctx context.Context, id uuid.UUID, input usecas
 
 	if err := uc.presentRepo.Update(ctx, p); err != nil {
 		return entity.Present{}, fmt.Errorf("update present: %w", err)
+	}
+
+	if input.Source != "" {
+		meta := entity.PresentMeta{
+			PresentID:   p.ID,
+			Source:      input.Source,
+			OriginalURL: input.OriginalURL,
+			Category:    input.Category,
+			Brand:       input.Brand,
+			ParsedAt:    time.Now().UTC(),
+		}
+		if err := uc.metaRepo.Upsert(ctx, meta); err != nil {
+			log.Printf("present_meta upsert failed for present %s: %v", p.ID, err)
+		}
 	}
 
 	return p, nil
