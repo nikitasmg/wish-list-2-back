@@ -18,7 +18,8 @@ import (
 )
 
 func newPresentUC(pr *mockrepo.MockPresentRepo, wr *mockrepo.MockWishlistRepo, fs *mockminio.MockFileStorage) usecase.PresentUseCase {
-	return presentUC.New(pr, wr, fs)
+	mr := &mockrepo.MockPresentMetaRepo{}
+	return presentUC.New(pr, wr, fs, mr)
 }
 
 func TestParsePrice_Empty(t *testing.T) {
@@ -171,4 +172,45 @@ func TestDelete_Success(t *testing.T) {
 	require.NoError(t, err)
 	pr.AssertCalled(t, "Delete", mock.Anything, id)
 	wr.AssertCalled(t, "DecrementPresentsCount", mock.Anything, wid)
+}
+
+func TestCreate_WithSource_SavesMeta(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	mr := &mockrepo.MockPresentMetaRepo{}
+	uc := presentUC.New(pr, wr, fs, mr)
+
+	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
+	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
+	mr.On("Upsert", mock.Anything, mock.MatchedBy(func(m entity.PresentMeta) bool {
+		return m.Source == "ozon" && m.OriginalURL == "https://ozon.ru/product/1"
+	})).Return(nil)
+
+	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{
+		Title:       "Gift",
+		Source:      "ozon",
+		OriginalURL: "https://ozon.ru/product/1",
+	})
+	require.NoError(t, err)
+	mr.AssertExpectations(t)
+}
+
+func TestCreate_WithoutSource_SkipsMeta(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	mr := &mockrepo.MockPresentMetaRepo{}
+	uc := presentUC.New(pr, wr, fs, mr)
+
+	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
+	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
+
+	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{Title: "Gift"})
+	require.NoError(t, err)
+	mr.AssertNotCalled(t, "Upsert", mock.Anything, mock.Anything)
 }

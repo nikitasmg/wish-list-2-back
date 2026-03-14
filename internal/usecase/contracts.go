@@ -53,6 +53,11 @@ type CreatePresentInput struct {
 	CoverData   []byte
 	CoverName   string
 	CoverURL    string // URL картинки as-is (альтернатива CoverData)
+	// Parser metadata (optional, populated after /parse call)
+	Category    string
+	Brand       string
+	Source      string // "ozon" | "wildberries" | "yamarket" | "other"
+	OriginalURL string
 }
 
 // TelegramAuthInput — входные данные для Telegram-авторизации
@@ -112,6 +117,11 @@ type PresentUseCase interface {
 type UploadUseCase interface {
 	Upload(ctx context.Context, name string, data []byte) (UploadResult, error)
 	BulkUpload(ctx context.Context, files []FileInput) ([]BulkUploadResult, error)
+}
+
+// ParseUseCase — парсинг ссылок с маркетплейсов
+type ParseUseCase interface {
+	Parse(ctx context.Context, userID uuid.UUID, rawURL string) (entity.ParseResult, error)
 }
 
 // FileInput — входной файл для загрузки

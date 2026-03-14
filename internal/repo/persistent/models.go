@@ -52,6 +52,27 @@ type PresentModel struct {
 
 func (PresentModel) TableName() string { return "presents" }
 
+// ParseRateLimitModel — GORM-модель для таблицы "parse_rate_limits"
+type ParseRateLimitModel struct {
+	UserID      uuid.UUID `gorm:"primaryKey"`
+	WindowStart time.Time `gorm:"not null"`
+	Count       int       `gorm:"not null;default:0"`
+}
+
+func (ParseRateLimitModel) TableName() string { return "parse_rate_limits" }
+
+// PresentMetaModel — GORM-модель для таблицы "present_meta"
+type PresentMetaModel struct {
+	PresentID   uuid.UUID `gorm:"primaryKey"`
+	Source      string    `gorm:"not null"`
+	OriginalURL string    `gorm:"not null"`
+	Category    string
+	Brand       string
+	ParsedAt    time.Time `gorm:"not null"`
+}
+
+func (PresentMetaModel) TableName() string { return "present_meta" }
+
 // SettingsJSON — JSON-тип для хранения настроек вишлиста
 type SettingsJSON struct {
 	ColorScheme          string `json:"colorScheme"`

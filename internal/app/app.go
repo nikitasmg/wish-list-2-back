@@ -3,15 +3,18 @@ package app
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
 	"main/config"
 	"main/internal/controller/restapi"
 	"main/internal/repo/persistent"
+	parseUC "main/internal/usecase/parse"
 	presentUC "main/internal/usecase/present"
 	uploadUC "main/internal/usecase/upload"
 	userUC "main/internal/usecase/user"
@@ -33,6 +36,8 @@ func Run(cfg *config.Config) {
 		&persistent.UserModel{},
 		&persistent.WishlistModel{},
 		&persistent.PresentModel{},
+		&persistent.ParseRateLimitModel{},
+		&persistent.PresentMetaModel{},
 	); err != nil {
 		log.Fatalf("automigrate: %v", err)
 	}
@@ -47,6 +52,8 @@ func Run(cfg *config.Config) {
 	userRepo := persistent.NewUserRepo(db)
 	wishlistRepo := persistent.NewWishlistRepo(db)
 	presentRepo := persistent.NewPresentRepo(db)
+	presentMetaRepo := persistent.NewPresentMetaRepo(db)
+	rateLimitRepo := persistent.NewParseRateLimitRepo(db)
 
 	// Hasher
 	pwHasher := hasher.New()
@@ -54,12 +61,14 @@ func Run(cfg *config.Config) {
 	// Use Cases
 	userUseCase := userUC.New(userRepo, pwHasher, cfg.Auth.JWTSecret, cfg.Auth.BotToken)
 	wishlistUseCase := wishlistUC.New(wishlistRepo, fileStorage)
-	presentUseCase := presentUC.New(presentRepo, wishlistRepo, fileStorage)
+	presentUseCase := presentUC.New(presentRepo, wishlistRepo, fileStorage, presentMetaRepo)
 	uploadUseCase := uploadUC.New(fileStorage)
+	httpClient := &http.Client{Timeout: 15 * time.Second}
+	parseUseCase := parseUC.NewParseUseCase(rateLimitRepo, httpClient)
 
 	// HTTP server
 	app := fiber.New()
-	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase)
+	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase, parseUseCase)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
