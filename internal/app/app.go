@@ -3,9 +3,11 @@ package app
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -20,7 +22,6 @@ import (
 	"main/pkg/hasher"
 	minioPkg "main/pkg/minio"
 	"main/pkg/postgres"
-	"net/http"
 )
 
 func Run(cfg *config.Config) {
@@ -35,6 +36,8 @@ func Run(cfg *config.Config) {
 		&persistent.UserModel{},
 		&persistent.WishlistModel{},
 		&persistent.PresentModel{},
+		&persistent.ParseRateLimitModel{},
+		&persistent.PresentMetaModel{},
 	); err != nil {
 		log.Fatalf("automigrate: %v", err)
 	}
@@ -60,7 +63,8 @@ func Run(cfg *config.Config) {
 	wishlistUseCase := wishlistUC.New(wishlistRepo, fileStorage)
 	presentUseCase := presentUC.New(presentRepo, wishlistRepo, fileStorage, presentMetaRepo)
 	uploadUseCase := uploadUC.New(fileStorage)
-	parseUseCase := parseUC.NewParseUseCase(rateLimitRepo, http.DefaultClient)
+	httpClient := &http.Client{Timeout: 15 * time.Second}
+	parseUseCase := parseUC.NewParseUseCase(rateLimitRepo, httpClient)
 
 	// HTTP server
 	app := fiber.New()
