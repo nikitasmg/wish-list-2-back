@@ -44,7 +44,8 @@ Go backend using **Fiber v2** web framework with **GORM + PostgreSQL** and **Min
 
 ## Related Projects
 
-- **Frontend:** `C:\Users\nvsma\OneDrive\Документы\projects\wish-list-2-front`
+- **Frontend (Windows):** `C:\Users\nvsma\OneDrive\Документы\projects\wish-list-2-front`
+- **Frontend (macOS):** `/Users/nvsmagin/WebstormProjects/wish-list-2-front`
 
 ## Infrastructure
 
