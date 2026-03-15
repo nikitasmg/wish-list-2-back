@@ -46,7 +46,7 @@ const (
     MaxTitleLen       = 200
     MaxDescriptionLen = 2000
     MaxURLLen         = 2048
-    MaxBlockDataSize  = 10 * 1024 // 10KB per block
+    MaxBlockDataSize  = 10 * 1024 // 10KB per block — measured as raw JSON bytes
     MaxBlockTextField = 5000      // characters for text/quote/checklist content
 )
 ```
@@ -63,6 +63,20 @@ app := fiber.New(fiber.Config{
 })
 ```
 
+### Block Data nil-substitution in `updateBlocks` handler (`wishlist.go`)
+
+The `parseConstructorInput()` function already performs nil-substitution for `Data` fields. However, the `updateBlocks` handler parses blocks directly via `c.BodyParser(&blocks)` with no nil-substitution. The `updateBlocks` handler must add the same loop before calling `h.uc.UpdateBlocks()`:
+
+```go
+for i := range blocks {
+    if blocks[i].Data == nil {
+        blocks[i].Data = json.RawMessage("{}")
+    }
+}
+```
+
+This ensures `validateBlocks()` always receives non-nil `Data` on both the `CreateConstructor` and `UpdateBlocks` paths, so type-specific `json.Unmarshal` calls inside validation are safe.
+
 ### File Size Validation (upload handlers + present/wishlist handlers)
 
 In `upload.go`, `present.go`, `wishlist.go` — after reading file bytes, before passing to usecase:
@@ -75,9 +89,20 @@ if len(data) > MaxFileSize {
 
 ### Bulk Upload File Count (`upload.go`)
 
+The file count check runs before the loop. The per-file size check must occur **inside the loop**, immediately after each `io.ReadAll`, before appending to `inputs`:
+
 ```go
 if len(fileHeaders) > MaxBulkUploadFiles {
     return c.Status(fiber.StatusBadRequest).JSON(response.Error("too many files: max 10"))
+}
+for i, fh := range fileHeaders {
+    // ... open fh ...
+    data, err := io.ReadAll(f)
+    // size check here — before appending to inputs
+    if len(data) > MaxFileSize {
+        return c.Status(fiber.StatusRequestEntityTooLarge).JSON(response.Error("file too large: max 10MB"))
+    }
+    inputs = append(inputs, usecase.FileInput{...})
 }
 ```
 
@@ -113,9 +138,11 @@ if count >= MaxPresentsPerWishlist {
 }
 ```
 
+> **Note:** There is a TOCTOU race between `CountByWishlistID` and `presentRepo.Create()` — two concurrent requests could both see count=99 and both succeed. This is accepted for now given light concurrency on a personal wishlist app. Atomic enforcement can be added later via a database constraint or advisory lock if needed.
+
 ### Blocks per Wishlist
 
-In `validateBlocks()`:
+The block count check lives in `validateBlocks()`, which is called by both `CreateConstructor()` and `UpdateBlocks()` — so the limit is enforced on both paths automatically:
 
 ```go
 if len(blocks) > MaxBlocksPerWishlist {
@@ -129,7 +156,10 @@ if len(blocks) > MaxBlocksPerWishlist {
 
 ### String Field Lengths
 
-New `validateWishlistInput()` and `validatePresentInput()` functions in respective usecases:
+Two validation functions: `validateWishlistInput()` and `validateConstructorInput()` share a common helper for the overlapping fields. Alternatively, validation can be done inline — the implementer may choose either approach. What matters is that validation is called from **all write paths**:
+
+- `wishlistUseCase.Create()`, `CreateConstructor()`, and `Update()`
+- `presentUseCase.Create()` and `Update()`
 
 | Field | Limit |
 |-------|-------|
@@ -141,6 +171,8 @@ New `validateWishlistInput()` and `validatePresentInput()` functions in respecti
 | Present.Link | 2048 chars |
 
 ### Block Data Validation (`validateBlocks()`)
+
+`block.Data` is `json.RawMessage` (a `[]byte` of raw JSON). The size check measures raw JSON bytes — this is intentional and correct. The nil-substitution (`Data = json.RawMessage("{}")`) happens in the HTTP layer before the usecase is called, so `validateBlocks()` always sees non-nil `Data`.
 
 Added to existing block validation loop:
 
@@ -197,13 +229,13 @@ func (r *presentRepo) CountByWishlistID(ctx context.Context, wishlistID uuid.UUI
 |------|--------|
 | `internal/app/app.go` | Add `BodyLimit: 15MB` to `fiber.New()` |
 | `internal/usecase/limits.go` | **New** — all constants |
-| `internal/usecase/wishlist/wishlist.go` | Count limit + string validation |
-| `internal/usecase/present/present.go` | Count limit + string validation |
+| `internal/usecase/wishlist/wishlist.go` | Count limit + string validation (Create, CreateConstructor, Update) |
+| `internal/usecase/present/present.go` | Count limit + string validation (Create, Update) |
 | `internal/repo/contracts.go` | 2 new interface methods |
 | `internal/repo/persistent/wishlist_postgres.go` | `CountByUserID` impl |
 | `internal/repo/persistent/present_postgres.go` | `CountByWishlistID` impl |
-| `internal/controller/restapi/v1/upload.go` | File count + size checks |
-| `internal/controller/restapi/v1/wishlist.go` | File size check |
+| `internal/controller/restapi/v1/upload.go` | File count check + per-file size check inside loop |
+| `internal/controller/restapi/v1/wishlist.go` | File size check + nil-substitution in `updateBlocks` handler |
 | `internal/controller/restapi/v1/present.go` | File size check |
 | `mock/repo/mock_wishlist_repo.go` | Add mock for `CountByUserID` |
 | `mock/repo/mock_present_repo.go` | Add mock for `CountByWishlistID` |
@@ -220,4 +252,5 @@ All limit violations return `400 Bad Request` (or `413 Request Entity Too Large`
 
 - Unit tests for `validateBlocks()` covering: block count limit, data size limit, per-type field validation
 - Unit tests for wishlist/present count limits (mock repo)
+- Unit tests for string length validation
 - No new integration tests required — existing pattern is sufficient
