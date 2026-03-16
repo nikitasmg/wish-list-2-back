@@ -24,6 +24,7 @@ type WishlistRepo interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	IncrementPresentsCount(ctx context.Context, id uuid.UUID) error
 	DecrementPresentsCount(ctx context.Context, id uuid.UUID) error
+	CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error)
 }
 
 type PresentRepo interface {
@@ -32,6 +33,7 @@ type PresentRepo interface {
 	GetAllByWishlistID(ctx context.Context, wishlistID uuid.UUID) ([]entity.Present, error)
 	Update(ctx context.Context, present entity.Present) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	CountByWishlistID(ctx context.Context, wishlistID uuid.UUID) (int64, error)
 }
 
 type ParseRateLimitRepo interface {

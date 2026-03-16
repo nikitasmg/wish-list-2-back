@@ -52,3 +52,8 @@ func (m *MockWishlistRepo) DecrementPresentsCount(ctx context.Context, id uuid.U
 	args := m.Called(ctx, id)
 	return args.Error(0)
 }
+
+func (m *MockWishlistRepo) CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
+	args := m.Called(ctx, userID)
+	return args.Get(0).(int64), args.Error(1)
+}

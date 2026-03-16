@@ -37,3 +37,8 @@ func (m *MockPresentRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	args := m.Called(ctx, id)
 	return args.Error(0)
 }
+
+func (m *MockPresentRepo) CountByWishlistID(ctx context.Context, wishlistID uuid.UUID) (int64, error) {
+	args := m.Called(ctx, wishlistID)
+	return args.Get(0).(int64), args.Error(1)
+}
