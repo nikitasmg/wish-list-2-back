@@ -2,6 +2,7 @@ package wishlist
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -26,6 +27,17 @@ func New(wishlistRepo repo.WishlistRepo, fileStorage minioPkg.FileStorage) useca
 }
 
 func (uc *wishlistUseCase) Create(ctx context.Context, userID uuid.UUID, input usecase.CreateWishlistInput) (entity.Wishlist, error) {
+	count, err := uc.wishlistRepo.CountByUserID(ctx, userID)
+	if err != nil {
+		return entity.Wishlist{}, fmt.Errorf("count wishlists: %w", err)
+	}
+	if count >= usecase.MaxWishlistsPerUser {
+		return entity.Wishlist{}, errors.New("достигнут лимит вишлистов (20)")
+	}
+	if err := validateWishlistFields(input.Title, input.Description, input.LocationName, input.LocationLink, input.CoverURL); err != nil {
+		return entity.Wishlist{}, err
+	}
+
 	coverURL, err := uc.resolveCover(input.CoverData, input.CoverName, input.CoverURL)
 	if err != nil {
 		return entity.Wishlist{}, err
@@ -64,6 +76,17 @@ func (uc *wishlistUseCase) Create(ctx context.Context, userID uuid.UUID, input u
 }
 
 func (uc *wishlistUseCase) CreateConstructor(ctx context.Context, userID uuid.UUID, input usecase.CreateConstructorInput) (entity.Wishlist, error) {
+	count, err := uc.wishlistRepo.CountByUserID(ctx, userID)
+	if err != nil {
+		return entity.Wishlist{}, fmt.Errorf("count wishlists: %w", err)
+	}
+	if count >= usecase.MaxWishlistsPerUser {
+		return entity.Wishlist{}, errors.New("достигнут лимит вишлистов (20)")
+	}
+	if err := validateWishlistFields(input.Title, input.Description, input.LocationName, input.LocationLink, input.CoverURL); err != nil {
+		return entity.Wishlist{}, err
+	}
+
 	if err := validateBlocks(input.Blocks); err != nil {
 		return entity.Wishlist{}, err
 	}
@@ -114,6 +137,10 @@ func (uc *wishlistUseCase) GetAllByUser(ctx context.Context, userID uuid.UUID) (
 }
 
 func (uc *wishlistUseCase) Update(ctx context.Context, id uuid.UUID, input usecase.CreateWishlistInput) (entity.Wishlist, error) {
+	if err := validateWishlistFields(input.Title, input.Description, input.LocationName, input.LocationLink, input.CoverURL); err != nil {
+		return entity.Wishlist{}, err
+	}
+
 	w, err := uc.wishlistRepo.GetByID(ctx, id)
 	if err != nil {
 		return entity.Wishlist{}, fmt.Errorf("wishlist not found: %w", err)
@@ -194,6 +221,25 @@ func (uc *wishlistUseCase) generateUniqueShortID(ctx context.Context) (string, e
 		}
 	}
 	return "", fmt.Errorf("failed to generate unique short id after 5 attempts")
+}
+
+func validateWishlistFields(title, description, locationName, locationLink, coverURL string) error {
+	if len([]rune(title)) > usecase.MaxTitleLen {
+		return fmt.Errorf("title exceeds maximum length of %d characters", usecase.MaxTitleLen)
+	}
+	if len([]rune(description)) > usecase.MaxDescriptionLen {
+		return fmt.Errorf("description exceeds maximum length of %d characters", usecase.MaxDescriptionLen)
+	}
+	if len([]rune(locationName)) > usecase.MaxTitleLen {
+		return fmt.Errorf("location name exceeds maximum length of %d characters", usecase.MaxTitleLen)
+	}
+	if len(locationLink) > usecase.MaxURLLen {
+		return fmt.Errorf("location link exceeds maximum URL length of %d", usecase.MaxURLLen)
+	}
+	if len(coverURL) > usecase.MaxURLLen {
+		return fmt.Errorf("cover URL exceeds maximum URL length of %d", usecase.MaxURLLen)
+	}
+	return nil
 }
 
 // validateBlocks — проверяет типы блоков

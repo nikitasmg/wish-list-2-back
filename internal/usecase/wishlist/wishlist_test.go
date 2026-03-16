@@ -27,6 +27,7 @@ func TestValidateBlocks_UnknownType(t *testing.T) {
 	uc := newWishlistUC(wr, fs)
 
 	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
 	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{
 		Title: "Test",
 		Blocks: []entity.Block{
@@ -44,6 +45,7 @@ func TestValidateBlocks_Valid(t *testing.T) {
 	uc := newWishlistUC(wr, fs)
 
 	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
 	wr.On("GetByShortID", mock.Anything, mock.Anything).Return(entity.Wishlist{}, errors.New("not found"))
 	wr.On("Create", mock.Anything, mock.Anything).Return(nil)
 
@@ -70,6 +72,7 @@ func TestCreate_FileUpload(t *testing.T) {
 	uc := newWishlistUC(wr, fs)
 
 	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
 	wr.On("GetByShortID", mock.Anything, mock.Anything).Return(entity.Wishlist{}, errors.New("not found"))
 	wr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	fs.On("Upload", "cover.jpg", []byte("imgdata")).Return("https://minio/cover.jpg", nil)
@@ -90,6 +93,7 @@ func TestCreate_URLCover(t *testing.T) {
 	uc := newWishlistUC(wr, fs)
 
 	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
 	wr.On("GetByShortID", mock.Anything, mock.Anything).Return(entity.Wishlist{}, errors.New("not found"))
 	wr.On("Create", mock.Anything, mock.Anything).Return(nil)
 
@@ -108,6 +112,7 @@ func TestGenerateUniqueShortID_Collision(t *testing.T) {
 	uc := newWishlistUC(wr, fs)
 
 	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
 	// First call: short ID is taken (collision)
 	wr.On("GetByShortID", mock.Anything, mock.Anything).
 		Return(entity.Wishlist{ID: uuid.New()}, nil).Once()
@@ -121,6 +126,63 @@ func TestGenerateUniqueShortID_Collision(t *testing.T) {
 	})
 	require.NoError(t, err)
 	wr.AssertNumberOfCalls(t, "GetByShortID", 2)
+}
+
+func TestCreate_WishlistLimitExceeded(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(20), nil)
+
+	_, err := uc.Create(context.Background(), userID, usecase.CreateWishlistInput{Title: "X"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "лимит вишлистов")
+}
+
+func TestCreateConstructor_WishlistLimitExceeded(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(20), nil)
+
+	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{Title: "X"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "лимит вишлистов")
+}
+
+func TestCreate_TitleTooLong(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
+
+	_, err := uc.Create(context.Background(), userID, usecase.CreateWishlistInput{
+		Title: string(make([]byte, 201)),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "title")
+}
+
+func TestCreate_DescriptionTooLong(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
+
+	_, err := uc.Create(context.Background(), userID, usecase.CreateWishlistInput{
+		Title:       "OK",
+		Description: string(make([]byte, 2001)),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "description")
 }
 
 func TestUpdateBlocks_Success(t *testing.T) {
