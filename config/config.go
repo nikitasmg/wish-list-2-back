@@ -16,9 +16,10 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Port       string
-	CORSOrigin string
-	Env        string
+	Port           string
+	CORSOrigin     string
+	MinioPublicURL string
+	Env            string
 }
 
 type DBConfig struct {
@@ -49,9 +50,10 @@ func LoadConfig() (*Config, error) {
 
 	cfg := &Config{
 		App: AppConfig{
-			Port:       getEnv("PORT", "8080"),
-			CORSOrigin: getEnv("CORS_ORIGIN", "https://get-my-wishlist.ru"),
-			Env:        getEnv("APP_ENV", "production"),
+			Port:           getEnv("PORT", "8080"),
+			CORSOrigin:     getEnv("CORS_ORIGIN", "https://prosto-namekni.ru"),
+			MinioPublicURL: getEnv("MINIO_PUBLIC_URL", "https://files.prosto-namekni.ru"),
+			Env:            getEnv("APP_ENV", "production"),
 		},
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "postgres"),
@@ -64,7 +66,7 @@ func LoadConfig() (*Config, error) {
 		Auth: AuthConfig{
 			JWTSecret:    getEnv("JWT_SECRET", ""),
 			BotToken:     getEnv("BOT_TOKEN", ""),
-			CookieDomain: getEnv("COOKIE_DOMAIN", "get-my-wishlist.ru"),
+			CookieDomain: getEnv("COOKIE_DOMAIN", "prosto-namekni.ru"),
 		},
 		Minio: MinioConfig{
 			Endpoint:     getEnv("MINIO_ENDPOINT", "minio:9000"),
