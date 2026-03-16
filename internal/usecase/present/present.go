@@ -38,6 +38,17 @@ func (uc *presentUseCase) Create(ctx context.Context, wishlistID uuid.UUID, inpu
 		return entity.Present{}, errors.New("вишлист с таким ID не существует")
 	}
 
+	count, err := uc.presentRepo.CountByWishlistID(ctx, wishlistID)
+	if err != nil {
+		return entity.Present{}, fmt.Errorf("count presents: %w", err)
+	}
+	if count >= usecase.MaxPresentsPerWishlist {
+		return entity.Present{}, errors.New("достигнут лимит подарков (100)")
+	}
+	if err := validatePresentFields(input.Title, input.Description, input.Link, input.CoverURL); err != nil {
+		return entity.Present{}, err
+	}
+
 	coverURL, err := uc.resolveCover(input.CoverData, input.CoverName, input.CoverURL)
 	if err != nil {
 		return entity.Present{}, err
@@ -93,6 +104,10 @@ func (uc *presentUseCase) GetAllByWishlist(ctx context.Context, wishlistID uuid.
 }
 
 func (uc *presentUseCase) Update(ctx context.Context, id uuid.UUID, input usecase.CreatePresentInput) (entity.Present, error) {
+	if err := validatePresentFields(input.Title, input.Description, input.Link, input.CoverURL); err != nil {
+		return entity.Present{}, err
+	}
+
 	p, err := uc.presentRepo.GetByID(ctx, id)
 	if err != nil {
 		return entity.Present{}, fmt.Errorf("present not found: %w", err)
@@ -175,6 +190,22 @@ func (uc *presentUseCase) resolveCover(data []byte, name, url string) (string, e
 		return uploaded, nil
 	}
 	return url, nil
+}
+
+func validatePresentFields(title, description, link, coverURL string) error {
+	if len([]rune(title)) > usecase.MaxTitleLen {
+		return fmt.Errorf("title exceeds maximum length of %d characters", usecase.MaxTitleLen)
+	}
+	if len([]rune(description)) > usecase.MaxDescriptionLen {
+		return fmt.Errorf("description exceeds maximum length of %d characters", usecase.MaxDescriptionLen)
+	}
+	if len(link) > usecase.MaxURLLen {
+		return fmt.Errorf("link exceeds maximum URL length of %d", usecase.MaxURLLen)
+	}
+	if len(coverURL) > usecase.MaxURLLen {
+		return fmt.Errorf("cover URL exceeds maximum URL length of %d", usecase.MaxURLLen)
+	}
+	return nil
 }
 
 func parsePrice(s string) (*float64, error) {

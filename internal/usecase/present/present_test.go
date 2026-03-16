@@ -30,6 +30,7 @@ func TestParsePrice_Empty(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
@@ -49,6 +50,7 @@ func TestParsePrice_CommaSpaces(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
@@ -69,6 +71,7 @@ func TestParsePrice_Invalid(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
 
 	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{
 		Title:    "Gift",
@@ -148,6 +151,7 @@ func TestCreate_Success(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
@@ -183,6 +187,7 @@ func TestCreate_WithSource_SavesMeta(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 	mr.On("Upsert", mock.Anything, mock.MatchedBy(func(m entity.PresentMeta) bool {
@@ -207,10 +212,58 @@ func TestCreate_WithoutSource_SkipsMeta(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
 	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{Title: "Gift"})
 	require.NoError(t, err)
 	mr.AssertNotCalled(t, "Upsert", mock.Anything, mock.Anything)
+}
+
+func TestCreate_PresentLimitExceeded(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(100), nil)
+
+	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{Title: "Gift"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "лимит подарков")
+}
+
+func TestCreate_PresentTitleTooLong(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
+
+	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{
+		Title: string(make([]byte, 201)),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "title")
+}
+
+func TestUpdate_PresentTitleTooLong(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	// Validation runs before GetByID, so no mock setup needed.
+	id := uuid.New()
+	_, err := uc.Update(context.Background(), id, usecase.CreatePresentInput{
+		Title: string(make([]byte, 201)),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "title")
 }
