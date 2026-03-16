@@ -72,8 +72,10 @@ services:
       - internal
       - dokploy-network
     depends_on:
-      - postgres
-      - minio
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.wishlist-api.rule=Host(`api.prosto-namekni.ru`)"
