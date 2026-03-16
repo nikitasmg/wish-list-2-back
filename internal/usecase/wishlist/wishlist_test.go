@@ -2,6 +2,7 @@ package wishlist_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -201,4 +202,94 @@ func TestUpdateBlocks_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, w.Blocks, 1)
 	wr.AssertExpectations(t)
+}
+
+func TestValidateBlocks_TooManyBlocks(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
+
+	blocks := make([]entity.Block, 101)
+	for i := range blocks {
+		blocks[i] = entity.Block{Type: "text"}
+	}
+	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{
+		Title:  "X",
+		Blocks: blocks,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "too many blocks")
+}
+
+func TestValidateBlocks_DataTooLarge(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
+
+	bigData := `{"content":"` + string(make([]byte, 11*1024)) + `"}`
+	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{
+		Title: "X",
+		Blocks: []entity.Block{
+			{Type: "text", Data: json.RawMessage(bigData)},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "data too large")
+}
+
+func TestValidateBlocks_TextContentTooLong(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
+
+	// Use ASCII chars so JSON stays under MaxBlockDataSize (10KB) but content > 5000 runes
+	buf := make([]byte, 5001)
+	for i := range buf {
+		buf[i] = 'a'
+	}
+	longContent := string(buf)
+	contentJSON, _ := json.Marshal(map[string]string{"content": longContent})
+	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{
+		Title: "X",
+		Blocks: []entity.Block{
+			{Type: "text", Data: json.RawMessage(contentJSON)},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "content")
+}
+
+func TestValidateBlocks_VideoURLTooLong(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
+
+	// Build a URL that exceeds MaxURLLen (2048) but keeps JSON under MaxBlockDataSize (10KB)
+	urlBuf := make([]byte, 2049)
+	urlBuf[0] = 'h'
+	for i := 1; i < len(urlBuf); i++ {
+		urlBuf[i] = 'a'
+	}
+	longURL := string(urlBuf)
+	urlJSON, _ := json.Marshal(map[string]string{"url": longURL})
+	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{
+		Title: "X",
+		Blocks: []entity.Block{
+			{Type: "video", Data: json.RawMessage(urlJSON)},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "url")
 }

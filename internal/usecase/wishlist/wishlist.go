@@ -2,6 +2,7 @@ package wishlist
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -244,6 +245,9 @@ func validateWishlistFields(title, description, locationName, locationLink, cove
 
 // validateBlocks — проверяет типы блоков
 func validateBlocks(blocks []entity.Block) error {
+	if len(blocks) > usecase.MaxBlocksPerWishlist {
+		return fmt.Errorf("too many blocks: max %d", usecase.MaxBlocksPerWishlist)
+	}
 	for i, b := range blocks {
 		if !entity.ValidBlockTypes[b.Type] {
 			return fmt.Errorf("block[%d]: unknown type %q", i, b.Type)
@@ -253,6 +257,75 @@ func validateBlocks(blocks []entity.Block) error {
 		}
 		if b.RowSpan > 3 {
 			return fmt.Errorf("block[%d]: rowSpan %d exceeds maximum of 3", i, b.RowSpan)
+		}
+		if len(b.Data) > usecase.MaxBlockDataSize {
+			return fmt.Errorf("block[%d]: data too large (max %d bytes)", i, usecase.MaxBlockDataSize)
+		}
+		if err := validateBlockData(i, b.Type, b.Data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateBlockData checks type-specific content constraints.
+// b.Data is guaranteed non-nil at this point (nil-substituted to "{}" in HTTP layer).
+func validateBlockData(idx int, blockType string, data json.RawMessage) error {
+	switch blockType {
+	case "text", "quote":
+		var d struct {
+			Content string `json:"content"`
+		}
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil // malformed but not oversized — let DB store it, frontend owns schema
+		}
+		if len([]rune(d.Content)) > usecase.MaxBlockTextField {
+			return fmt.Errorf("block[%d]: content exceeds maximum length of %d characters", idx, usecase.MaxBlockTextField)
+		}
+
+	case "checklist":
+		var d struct {
+			Items []struct {
+				Text string `json:"text"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil
+		}
+		if len(d.Items) > 100 {
+			return fmt.Errorf("block[%d]: checklist exceeds maximum of 100 items", idx)
+		}
+		for j, item := range d.Items {
+			if len([]rune(item.Text)) > 500 {
+				return fmt.Errorf("block[%d]: checklist item[%d] text exceeds 500 characters", idx, j)
+			}
+		}
+
+	case "image", "text_image", "video":
+		var d struct {
+			URL string `json:"url"`
+		}
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil
+		}
+		if len(d.URL) > usecase.MaxURLLen {
+			return fmt.Errorf("block[%d]: url exceeds maximum length of %d", idx, usecase.MaxURLLen)
+		}
+
+	case "gallery":
+		var d struct {
+			Images []string `json:"images"`
+		}
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil
+		}
+		if len(d.Images) > 50 {
+			return fmt.Errorf("block[%d]: gallery exceeds maximum of 50 images", idx)
+		}
+		for j, u := range d.Images {
+			if len(u) > usecase.MaxURLLen {
+				return fmt.Errorf("block[%d]: gallery image[%d] URL exceeds maximum length", idx, j)
+			}
 		}
 	}
 	return nil
