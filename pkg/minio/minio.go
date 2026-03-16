@@ -86,7 +86,7 @@ func (s *minioStorage) Upload(name string, data []byte) (string, error) {
 		return "", fmt.Errorf("minio upload %s: %w", name, err)
 	}
 
-	url := fmt.Sprintf("%s/minio/%s/%s", s.publicURL, s.bucketName, objectID)
+	url := fmt.Sprintf("%s/%s/%s", s.publicURL, s.bucketName, objectID)
 	return url, nil
 }
 
