@@ -67,7 +67,9 @@ func Run(cfg *config.Config) {
 	parseUseCase := parseUC.NewParseUseCase(rateLimitRepo, httpClient)
 
 	// HTTP server
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		BodyLimit: 15 * 1024 * 1024, // 15MB — headroom for multipart overhead
+	})
 	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase, parseUseCase)
 
 	// Graceful shutdown

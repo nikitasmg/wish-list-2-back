@@ -2,6 +2,7 @@ package v1
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"time"
 
@@ -113,6 +114,12 @@ func (h *wishlistHandler) updateBlocks(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid blocks JSON"))
 	}
 
+	for i := range blocks {
+		if blocks[i].Data == nil {
+			blocks[i].Data = json.RawMessage("{}")
+		}
+	}
+
 	wishlist, err := h.uc.UpdateBlocks(c.Context(), id, blocks)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
@@ -182,6 +189,11 @@ func (h *wishlistHandler) parseWishlistInput(c *fiber.Ctx) (usecase.CreateWishli
 		if err != nil {
 			return input, err
 		}
+
+		if len(data) > usecase.MaxFileSize {
+			return input, errors.New("файл слишком большой: максимум 10MB")
+		}
+
 		input.CoverData = data
 		input.CoverName = file.Filename
 	}

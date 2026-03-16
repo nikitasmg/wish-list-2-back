@@ -171,6 +171,11 @@ func (h *presentHandler) parsePresentInput(c *fiber.Ctx) (usecase.CreatePresentI
 		if err != nil {
 			return input, err
 		}
+
+		if len(data) > usecase.MaxFileSize {
+			return input, errors.New("файл слишком большой: максимум 10MB")
+		}
+
 		input.CoverData = data
 		input.CoverName = file.Filename
 	}
