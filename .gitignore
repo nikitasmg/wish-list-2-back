@@ -19,6 +19,9 @@ go.sum
 # PostgreSQL data folder
 pgdata/
 
+# Certbot (replaced by Traefik in Dokploy)
+certbot/
+
 # MinIO configuration and data
 .minio/
 .minerestore/
