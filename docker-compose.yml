@@ -5,36 +5,37 @@ services:
     container_name: minio
     image: minio/minio:latest
     command: server --console-address ":9001" /data/
-    ports:
-      - "9000:9000"
-      - "9001:9001"
     environment:
       MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
-      MINIO_USE_SSL: "${MINIO_USE_SSL}"
     volumes:
-      - minio-storage:/data
+      - ../files/minio-storage:/data
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
       timeout: 20s
       retries: 3
     networks:
-      - backend
+      - internal
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wishlist-files.rule=Host(`files.prosto-namekni.ru`)"
+      - "traefik.http.routers.wishlist-files.entrypoints=websecure"
+      - "traefik.http.routers.wishlist-files.tls.certResolver=letsencrypt"
+      - "traefik.http.services.wishlist-files.loadbalancer.server.port=9000"
     restart: unless-stopped
-  
+
   postgres:
     image: postgres:17-alpine
     container_name: postgres_container
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: wishlist_db
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+      POSTGRES_DB: "${DB_NAME}"
       PGDATA: /var/lib/postgresql/data/pgdata
-    ports:
-      - "5430:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data/pgdata
+      - ../files/pgdata:/var/lib/postgresql/data/pgdata
     deploy:
       resources:
         limits:
@@ -52,73 +53,36 @@ services:
                -c wal_buffers=16MB
                -c default_statistics_target=100
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d wishlist_db" ]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 30s
       timeout: 10s
       retries: 5
     networks:
-      - backend
+      - internal
     restart: unless-stopped
-  
+
   server:
     container_name: server
     restart: unless-stopped
-    environment:
-      JWT_SECRET: "${JWT_SECRET}"
-      PROD_URL: "${PROD_URL}"
-      BOT_TOKEN: "${BOT_TOKEN}"
     build:
       context: .
-    ports:
-      - "8080:8080"
+    env_file:
+      - .env
     networks:
-      - backend
+      - internal
+      - dokploy-network
     depends_on:
       - postgres
-  
-  frontend:
-    container_name: frontend
-    build:
-      context: ../wish-list-2-front/
-      dockerfile: Dockerfile
-    environment:
-      - NEXT_PUBLIC_API_URL=https://api.get-my-wishlist.ru
-    networks:
-      - backend
-    restart: unless-stopped
-  
-  nginx:
-    image: nginx:alpine
-    container_name: nginx_proxy
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./certbot/www:/var/www/certbot
-      - ./certbot/conf:/etc/letsencrypt
-    networks:
-      - backend
-    restart: unless-stopped
-  
-  certbot:
-    image: certbot/certbot
-    container_name: certbot
-    volumes:
-      - ./certbot/www:/var/www/certbot
-      - ./certbot/conf:/etc/letsencrypt
-    command: certonly --webroot -w /var/www/certbot --email nvsmagin@mail.ru --agree-tos --no-eff-email -d get-my-wishlist.ru -d api.get-my-wishlist.ru
-    depends_on:
-      - nginx
-    networks:
-      - backend
-      
-networks:
-  backend:
-    driver: bridge
+      - minio
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wishlist-api.rule=Host(`api.prosto-namekni.ru`)"
+      - "traefik.http.routers.wishlist-api.entrypoints=websecure"
+      - "traefik.http.routers.wishlist-api.tls.certResolver=letsencrypt"
+      - "traefik.http.services.wishlist-api.loadbalancer.server.port=8080"
 
-volumes:
-  minio-storage:
-  pgdata:
-    driver: local
+networks:
+  internal:
+    driver: bridge
+  dokploy-network:
+    external: true
