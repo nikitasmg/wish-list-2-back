@@ -43,7 +43,7 @@ func Run(cfg *config.Config) {
 	}
 
 	// MinIO
-	fileStorage, err := minioPkg.New(cfg.Minio, cfg.App.CORSOrigin)
+	fileStorage, err := minioPkg.New(cfg.Minio, cfg.App.MinioPublicURL)
 	if err != nil {
 		log.Fatalf("minio: %v", err)
 	}
