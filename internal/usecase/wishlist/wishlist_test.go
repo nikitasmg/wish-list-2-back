@@ -32,7 +32,7 @@ func TestValidateBlocks_UnknownType(t *testing.T) {
 	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{
 		Title: "Test",
 		Blocks: []entity.Block{
-			{Type: "unknown_type", Position: 0},
+			{Type: "unknown_type", Row: 0, Col: 0, ColSpan: 1},
 		},
 	})
 	require.Error(t, err)
@@ -51,13 +51,13 @@ func TestValidateBlocks_Valid(t *testing.T) {
 	wr.On("Create", mock.Anything, mock.Anything).Return(nil)
 
 	blocks := []entity.Block{
-		{Type: "text", Position: 0},
-		{Type: "image", Position: 1},
-		{Type: "date", Position: 2},
-		{Type: "location", Position: 3},
-		{Type: "color_scheme", Position: 4},
-		{Type: "timing", Position: 5},
-		{Type: "text_image", Position: 6},
+		{Type: "text", Row: 0, Col: 0, ColSpan: 1},
+		{Type: "image", Row: 0, Col: 1, ColSpan: 1},
+		{Type: "date", Row: 1, Col: 0, ColSpan: 1},
+		{Type: "location", Row: 1, Col: 1, ColSpan: 1},
+		{Type: "color_scheme", Row: 2, Col: 0, ColSpan: 1},
+		{Type: "timing", Row: 2, Col: 1, ColSpan: 1},
+		{Type: "text_image", Row: 3, Col: 0, ColSpan: 1},
 	}
 
 	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{
@@ -197,7 +197,7 @@ func TestUpdateBlocks_Success(t *testing.T) {
 		return len(w.Blocks) == 1 && w.Blocks[0].Type == "text"
 	})).Return(nil)
 
-	blocks := []entity.Block{{Type: "text", Position: 0}}
+	blocks := []entity.Block{{Type: "text", Row: 0, Col: 0, ColSpan: 1}}
 	w, err := uc.UpdateBlocks(context.Background(), wid, blocks)
 	require.NoError(t, err)
 	assert.Len(t, w.Blocks, 1)

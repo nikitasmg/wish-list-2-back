@@ -115,12 +115,11 @@ func (l LocationJSON) Value() (driver.Value, error) {
 type BlocksJSON []blockJSON
 
 type blockJSON struct {
-	Type           string          `json:"type"`
-	Position       int             `json:"position"`
-	MobilePosition *int            `json:"mobile_position"`
-	ColSpan        int             `json:"col_span"`
-	RowSpan        int             `json:"row_span"`
-	Data           json.RawMessage `json:"data"`
+	Type    string          `json:"type"`
+	Row     int             `json:"row"`
+	Col     int             `json:"col"`
+	ColSpan int             `json:"col_span"`
+	Data    json.RawMessage `json:"data"`
 }
 
 func (b *BlocksJSON) Scan(value interface{}) error {

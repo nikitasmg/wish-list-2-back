@@ -40,17 +40,12 @@ func toWishlistEntity(m WishlistModel) entity.Wishlist {
 			if colSpan < 1 {
 				colSpan = 1
 			}
-			rowSpan := b.RowSpan
-			if rowSpan < 1 {
-				rowSpan = 1
-			}
 			blocks = append(blocks, entity.Block{
-				Type:           b.Type,
-				Position:       b.Position,
-				MobilePosition: b.MobilePosition,
-				ColSpan:        colSpan,
-				RowSpan:        rowSpan,
-				Data:           b.Data,
+				Type:    b.Type,
+				Row:     b.Row,
+				Col:     b.Col,
+				ColSpan: colSpan,
+				Data:    b.Data,
 			})
 		}
 	}
@@ -98,17 +93,12 @@ func toWishlistModel(w entity.Wishlist) WishlistModel {
 			if colSpanW < 1 {
 				colSpanW = 1
 			}
-			rowSpanW := b.RowSpan
-			if rowSpanW < 1 {
-				rowSpanW = 1
-			}
 			blocks = append(blocks, blockJSON{
-				Type:           b.Type,
-				Position:       b.Position,
-				MobilePosition: b.MobilePosition,
-				ColSpan:        colSpanW,
-				RowSpan:        rowSpanW,
-				Data:           data,
+				Type:    b.Type,
+				Row:     b.Row,
+				Col:     b.Col,
+				ColSpan: colSpanW,
+				Data:    data,
 			})
 		}
 	}

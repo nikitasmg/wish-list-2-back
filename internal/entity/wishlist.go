@@ -19,14 +19,13 @@ type Location struct {
 	Time time.Time `json:"time"`
 }
 
-// Block — один блок конструктора вишлиста
+// Block — один блок конструктора вишлиста (координатная модель)
 type Block struct {
-	Type           string          `json:"type"`
-	Position       int             `json:"position"`
-	MobilePosition *int            `json:"mobilePosition"`
-	ColSpan        int             `json:"colSpan"`   // 1 or 2, default 1
-	RowSpan        int             `json:"rowSpan"`   // 1–3, default 1
-	Data           json.RawMessage `json:"data"`
+	Type    string          `json:"type"`
+	Row     int             `json:"row"`     // 0-based row in grid
+	Col     int             `json:"col"`     // 0 = left, 1 = right
+	ColSpan int             `json:"colSpan"` // 1 or 2
+	Data    json.RawMessage `json:"data"`
 }
 
 // ValidBlockTypes — допустимые типы блоков (валидируются на бэке)

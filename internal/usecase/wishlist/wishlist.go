@@ -255,8 +255,11 @@ func validateBlocks(blocks []entity.Block) error {
 		if b.ColSpan > 2 {
 			return fmt.Errorf("block[%d]: colSpan %d exceeds maximum of 2", i, b.ColSpan)
 		}
-		if b.RowSpan > 3 {
-			return fmt.Errorf("block[%d]: rowSpan %d exceeds maximum of 3", i, b.RowSpan)
+		if b.Row < 0 {
+			return fmt.Errorf("block[%d]: row must be >= 0", i)
+		}
+		if b.Col < 0 || b.Col > 1 {
+			return fmt.Errorf("block[%d]: col must be 0 or 1", i)
 		}
 		if len(b.Data) > usecase.MaxBlockDataSize {
 			return fmt.Errorf("block[%d]: data too large (max %d bytes)", i, usecase.MaxBlockDataSize)
