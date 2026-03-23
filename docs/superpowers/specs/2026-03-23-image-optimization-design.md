@@ -39,8 +39,11 @@ func Convert(data []byte) []byte
 
 Logic:
 1. `http.DetectContentType(data)` → MIME type
-2. Switch on `image/jpeg`, `image/png`, `image/gif` → `image.Decode` → `webp.Encode` at Q80
-3. Any other MIME type, or decode/encode error → return original `data` unchanged
+2. Switch on `image/jpeg`, `image/png` → `image.Decode` → `webp.Encode` at Q80
+3. `image/gif` → check frame count: if animated (multiple frames) → pass through unchanged; if static → decode → encode WebP at Q80
+4. Any other MIME type, or decode/encode error → return original `data` unchanged
+
+Animated GIF detection: parse GIF blocks to count frames before decoding. Use `golang.org/x/image/gif` (`gif.DecodeAll`) — if `len(frames) > 1`, skip conversion.
 
 Library: `github.com/chai2010/webp` (pure Go, no CGO, Alpine-compatible).
 
@@ -63,15 +66,24 @@ func (s *optimizingStorage) Delete(id string) error {
 
 ### `pkg/minio/minio.go` (minor fix)
 
-Add content-type detection in `PutObjectOptions`:
+Add content-type detection in `PutObjectOptions`. Go's `http.DetectContentType` does not recognize WebP, so a small helper checks magic bytes first:
 
 ```go
-minio.PutObjectOptions{
-    ContentType: http.DetectContentType(data),
+func detectContentType(data []byte) string {
+    // WebP: RIFF....WEBP
+    if len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP" {
+        return "image/webp"
+    }
+    return http.DetectContentType(data)
 }
 ```
 
-This ensures WebP bytes are stored with `image/webp` content-type.
+Used in `PutObjectOptions`:
+```go
+minio.PutObjectOptions{
+    ContentType: detectContentType(data),
+}
+```
 
 ### `internal/app/app.go` (wiring)
 
@@ -90,7 +102,8 @@ storage = minioPkg.NewOptimizing(storage)
 ## Testing
 
 **`pkg/imageconv`** (unit tests):
-- Feed valid JPEG/PNG/GIF bytes → verify output decodes as WebP and is smaller
+- Feed valid JPEG/PNG/static GIF bytes → verify output decodes as valid WebP
+- Feed animated GIF bytes → verify original returned unchanged
 - Feed random bytes → verify original returned, no panic
 
 **`pkg/minio/optimizing.go`** (unit tests):
@@ -108,4 +121,4 @@ storage = minioPkg.NewOptimizing(storage)
 | `pkg/minio/optimizing.go` | New — decorator |
 | `pkg/minio/minio.go` | Add `ContentType` to `PutObjectOptions` |
 | `internal/app/app.go` | Wrap storage with `NewOptimizing` |
-| `go.mod` / `go.sum` | Add `github.com/chai2010/webp` |
+| `go.mod` / `go.sum` | Add `github.com/chai2010/webp`, `golang.org/x/image/gif` |
