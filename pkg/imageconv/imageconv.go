@@ -44,8 +44,8 @@ func convertGIF(data []byte) []byte {
 	if err != nil {
 		return data
 	}
-	// animated GIF — pass through to preserve all frames
-	if len(anim.Image) > 1 {
+	// animated GIF or zero-frame GIF — pass through unchanged
+	if len(anim.Image) != 1 {
 		return data
 	}
 	// static GIF — convert single frame to WebP
