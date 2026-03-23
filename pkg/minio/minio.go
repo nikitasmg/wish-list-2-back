@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"main/config"
@@ -70,6 +71,15 @@ func New(cfg config.MinioConfig, publicURL string) (FileStorage, error) {
 	}, nil
 }
 
+// detectContentType identifies the MIME type of data.
+// Falls back to http.DetectContentType for non-WebP content.
+func detectContentType(data []byte) string {
+	if len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP" {
+		return "image/webp"
+	}
+	return http.DetectContentType(data)
+}
+
 func (s *minioStorage) Upload(name string, data []byte) (string, error) {
 	if s.mc == nil {
 		return "", errors.New("minio client not initialized")
@@ -81,7 +91,9 @@ func (s *minioStorage) Upload(name string, data []byte) (string, error) {
 	objectID := uuid.New().String()
 
 	reader := bytes.NewReader(data)
-	_, err := s.mc.PutObject(ctx, s.bucketName, objectID, reader, int64(len(data)), minio.PutObjectOptions{})
+	_, err := s.mc.PutObject(ctx, s.bucketName, objectID, reader, int64(len(data)), minio.PutObjectOptions{
+		ContentType: detectContentType(data),
+	})
 	if err != nil {
 		return "", fmt.Errorf("minio upload %s: %w", name, err)
 	}
