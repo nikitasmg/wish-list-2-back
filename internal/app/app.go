@@ -47,6 +47,7 @@ func Run(cfg *config.Config) {
 	if err != nil {
 		log.Fatalf("minio: %v", err)
 	}
+	fileStorage = minioPkg.NewOptimizing(fileStorage)
 
 	// Repositories
 	userRepo := persistent.NewUserRepo(db)
