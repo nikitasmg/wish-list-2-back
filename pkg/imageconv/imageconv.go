@@ -3,7 +3,7 @@ package imageconv
 import (
 	"bytes"
 	"image"
-	"image/gif"
+	"image/gif" // stdlib; golang.org/x/image has no gif sub-package
 	_ "image/jpeg"
 	_ "image/png"
 	"net/http"
