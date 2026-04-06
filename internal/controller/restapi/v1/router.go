@@ -41,7 +41,7 @@ func NewRouter(
 	authProtected.Post("/logout", userH.logout)
 
 	// Templates (public) — BEFORE protected group
-	api.Get("/templates", templateH.getPublic)
+	api.Get("/templates", middleware.JWTOptional(jwtSecret), templateH.getPublic)
 
 	// Wishlists (public) — static routes BEFORE parametric
 	api.Get("/wishlists/s/:shortId", wishlistH.getByShortID)
@@ -85,4 +85,6 @@ func NewRouter(
 	protected.Patch("/templates/:id", templateH.update)
 	protected.Delete("/templates/:id", templateH.delete)
 	protected.Post("/wishlists/from-template/:id", templateH.createWishlistFromTemplate)
+	protected.Post("/templates/:id/like", templateH.like)
+	protected.Delete("/templates/:id/like", templateH.unlike)
 }

@@ -23,3 +23,15 @@ func JWTProtected(secret string) fiber.Handler {
 		ContextKey: "user",
 	})
 }
+
+// JWTOptional parses JWT if present but does not fail on missing/invalid tokens.
+// Use for routes that have optional authentication (public + enriched for logged-in users).
+func JWTOptional(secret string) fiber.Handler {
+	return jwtware.New(jwtware.Config{
+		SigningKey:  []byte(secret),
+		ContextKey:  "user",
+		ErrorHandler: func(c *fiber.Ctx, _ error) error {
+			return c.Next()
+		},
+	})
+}

@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"strconv"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
@@ -17,14 +19,16 @@ func newTemplateHandler(uc usecase.TemplateUseCase) *templateHandler {
 }
 
 func (h *templateHandler) getPublic(c *fiber.Ctx) error {
-	cursor := c.Query("cursor", "")
-	templates, nextCursor, err := h.uc.GetPublic(c.Context(), 0, cursor)
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	userID := getOptionalUserID(c)
+
+	templates, hasMore, err := h.uc.GetPublic(c.Context(), 0, page, userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
 	}
 	return c.JSON(fiber.Map{
-		"data":       templates,
-		"nextCursor": nextCursor,
+		"data":    templates,
+		"hasMore": hasMore,
 	})
 }
 
@@ -154,4 +158,50 @@ func (h *templateHandler) createWishlistFromTemplate(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
 	}
 	return c.Status(fiber.StatusCreated).JSON(response.Data(wishlist))
+}
+
+func (h *templateHandler) like(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
+	templateID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid template ID"))
+	}
+
+	result, err := h.uc.Like(c.Context(), userID, templateID)
+	if err != nil {
+		switch err.Error() {
+		case "already liked":
+			return c.Status(fiber.StatusConflict).JSON(response.Error(err.Error()))
+		case "forbidden":
+			return c.Status(fiber.StatusForbidden).JSON(response.Error(err.Error()))
+		case "template not found":
+			return c.Status(fiber.StatusNotFound).JSON(response.Error(err.Error()))
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
+	}
+	return c.JSON(response.Data(result))
+}
+
+func (h *templateHandler) unlike(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
+	templateID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid template ID"))
+	}
+
+	result, err := h.uc.Unlike(c.Context(), userID, templateID)
+	if err != nil {
+		switch err.Error() {
+		case "not liked", "template not found":
+			return c.Status(fiber.StatusNotFound).JSON(response.Error(err.Error()))
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
+	}
+	return c.JSON(response.Data(result))
 }
