@@ -86,7 +86,6 @@ func (r *templateRepo) GetPublic(ctx context.Context, limit int, cursor time.Tim
 
 func (r *templateRepo) Update(ctx context.Context, template entity.Template) error {
 	m := toTemplateModel(template)
-	m.ID = template.ID
 	if err := r.db.WithContext(ctx).Save(&m).Error; err != nil {
 		return fmt.Errorf("templateRepo.Update: %w", err)
 	}
