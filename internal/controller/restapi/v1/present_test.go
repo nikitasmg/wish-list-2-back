@@ -23,7 +23,7 @@ func setupPresentApp(presentMock usecase.PresentUseCase) *fiber.App {
 	userMock := &MockUserUC{}
 	wishlistMock := &MockWishlistUC{}
 	uploadMock := &MockUploadUC{}
-	v1.NewRouter(app, testSecret, "", false, userMock, wishlistMock, presentMock, uploadMock, &MockParseUC{})
+	v1.NewRouter(app, testSecret, "", false, userMock, wishlistMock, presentMock, uploadMock, &MockParseUC{}, &MockTemplateUC{})
 	return app
 }
 

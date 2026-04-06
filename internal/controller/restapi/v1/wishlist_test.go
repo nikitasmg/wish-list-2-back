@@ -24,7 +24,7 @@ func setupWishlistApp(wishlistMock usecase.WishlistUseCase) *fiber.App {
 	userMock := &MockUserUC{}
 	presentMock := &MockPresentUC{}
 	uploadMock := &MockUploadUC{}
-	v1.NewRouter(app, testSecret, "", false, userMock, wishlistMock, presentMock, uploadMock, &MockParseUC{})
+	v1.NewRouter(app, testSecret, "", false, userMock, wishlistMock, presentMock, uploadMock, &MockParseUC{}, &MockTemplateUC{})
 	return app
 }
 

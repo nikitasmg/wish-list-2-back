@@ -20,7 +20,7 @@ import (
 func setupParseAppWithUC(pu *MockParseUC) *fiber.App {
 	app := fiber.New()
 	v1.NewRouter(app, testSecret, "localhost", false,
-		&MockUserUC{}, &MockWishlistUC{}, &MockPresentUC{}, &MockUploadUC{}, pu)
+		&MockUserUC{}, &MockWishlistUC{}, &MockPresentUC{}, &MockUploadUC{}, pu, &MockTemplateUC{})
 	return app
 }
 

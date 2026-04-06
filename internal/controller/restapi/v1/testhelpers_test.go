@@ -163,3 +163,37 @@ func (m *MockParseUC) Parse(ctx context.Context, userID uuid.UUID, rawURL string
 	args := m.Called(ctx, userID, rawURL)
 	return args.Get(0).(entity.ParseResult), args.Error(1)
 }
+
+// MockTemplateUC
+
+type MockTemplateUC struct{ mock.Mock }
+
+func (m *MockTemplateUC) Create(ctx context.Context, userID uuid.UUID, input usecase.CreateTemplateInput) (entity.Template, error) {
+	args := m.Called(ctx, userID, input)
+	return args.Get(0).(entity.Template), args.Error(1)
+}
+
+func (m *MockTemplateUC) GetAllByUser(ctx context.Context, userID uuid.UUID) ([]entity.Template, error) {
+	args := m.Called(ctx, userID)
+	return args.Get(0).([]entity.Template), args.Error(1)
+}
+
+func (m *MockTemplateUC) GetPublic(ctx context.Context, limit int, cursor string) ([]entity.TemplateWithAuthor, string, error) {
+	args := m.Called(ctx, limit, cursor)
+	return args.Get(0).([]entity.TemplateWithAuthor), args.Get(1).(string), args.Error(2)
+}
+
+func (m *MockTemplateUC) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, input usecase.UpdateTemplateInput) (entity.Template, error) {
+	args := m.Called(ctx, id, userID, input)
+	return args.Get(0).(entity.Template), args.Error(1)
+}
+
+func (m *MockTemplateUC) Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	args := m.Called(ctx, id, userID)
+	return args.Error(0)
+}
+
+func (m *MockTemplateUC) CreateWishlistFromTemplate(ctx context.Context, templateID uuid.UUID, userID uuid.UUID, title string) (entity.Wishlist, error) {
+	args := m.Called(ctx, templateID, userID, title)
+	return args.Get(0).(entity.Wishlist), args.Error(1)
+}
