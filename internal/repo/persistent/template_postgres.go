@@ -98,3 +98,13 @@ func (r *templateRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 	return nil
 }
+
+func (r *templateRepo) CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&TemplateModel{}).
+		Where("user_id = ?", userID).
+		Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("templateRepo.CountByUserID: %w", err)
+	}
+	return count, nil
+}

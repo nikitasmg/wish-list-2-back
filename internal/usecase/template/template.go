@@ -46,6 +46,14 @@ func (uc *templateUseCase) Create(ctx context.Context, userID uuid.UUID, input u
 		return entity.Template{}, errors.New("forbidden")
 	}
 
+	count, err := uc.templateRepo.CountByUserID(ctx, userID)
+	if err != nil {
+		return entity.Template{}, fmt.Errorf("count templates: %w", err)
+	}
+	if count >= maxTemplatesPerUser {
+		return entity.Template{}, errors.New("достигнут лимит шаблонов (50)")
+	}
+
 	// Strip block content — keep structure only
 	strippedBlocks := make([]entity.Block, len(wishlist.Blocks))
 	for i, b := range wishlist.Blocks {
@@ -84,7 +92,7 @@ func (uc *templateUseCase) GetPublic(ctx context.Context, limit int, cursorStr s
 
 	var cursor time.Time
 	if cursorStr != "" {
-		parsed, err := time.Parse(time.RFC3339, cursorStr)
+		parsed, err := time.Parse(time.RFC3339Nano, cursorStr)
 		if err == nil {
 			cursor = parsed
 		}
@@ -97,7 +105,7 @@ func (uc *templateUseCase) GetPublic(ctx context.Context, limit int, cursorStr s
 
 	var nextCursor string
 	if len(items) == limit {
-		nextCursor = items[len(items)-1].CreatedAt.UTC().Format(time.RFC3339)
+		nextCursor = items[len(items)-1].CreatedAt.UTC().Format(time.RFC3339Nano)
 	}
 
 	return items, nextCursor, nil
