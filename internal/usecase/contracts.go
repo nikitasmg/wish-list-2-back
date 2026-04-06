@@ -138,3 +138,26 @@ type FileInput struct {
 	Name  string
 	Data  []byte
 }
+
+// CreateTemplateInput — data for creating a template from a wishlist
+type CreateTemplateInput struct {
+	WishlistID uuid.UUID
+	Name       string
+	IsPublic   bool
+}
+
+// UpdateTemplateInput — data for updating a template
+type UpdateTemplateInput struct {
+	Name     string
+	IsPublic bool
+}
+
+// TemplateUseCase — business logic for templates
+type TemplateUseCase interface {
+	Create(ctx context.Context, userID uuid.UUID, input CreateTemplateInput) (entity.Template, error)
+	GetAllByUser(ctx context.Context, userID uuid.UUID) ([]entity.Template, error)
+	GetPublic(ctx context.Context, limit int, cursorStr string) ([]entity.TemplateWithAuthor, string, error)
+	Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, input UpdateTemplateInput) (entity.Template, error)
+	Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
+	CreateWishlistFromTemplate(ctx context.Context, templateID uuid.UUID, userID uuid.UUID, title string) (entity.Wishlist, error)
+}
