@@ -40,6 +40,7 @@ func Run(cfg *config.Config) {
 		&persistent.ParseRateLimitModel{},
 		&persistent.PresentMetaModel{},
 		&persistent.TemplateModel{},
+		&persistent.TemplateLikeModel{},
 	); err != nil {
 		log.Fatalf("automigrate: %v", err)
 	}
