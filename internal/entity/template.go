@@ -7,18 +7,18 @@ import (
 )
 
 type Template struct {
-	ID        uuid.UUID
-	UserID    uuid.UUID
-	Name      string
-	Settings  Settings // reuse existing type
-	Blocks    []Block  // data of each block = "{}" (stripped)
-	IsPublic  bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID        uuid.UUID `json:"id"`
+	UserID    uuid.UUID `json:"userId"`
+	Name      string    `json:"name"`
+	Settings  Settings  `json:"settings"`
+	Blocks    []Block   `json:"blocks"`
+	IsPublic  bool      `json:"isPublic"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // TemplateWithAuthor — template with author name (for public gallery)
 type TemplateWithAuthor struct {
 	Template
-	UserDisplayName string
+	UserDisplayName string `json:"userDisplayName"`
 }
