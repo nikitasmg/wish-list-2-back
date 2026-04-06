@@ -17,8 +17,10 @@ type Template struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-// TemplateWithAuthor — template with author name (for public gallery)
+// TemplateWithAuthor — template with author name and like data (for public gallery)
 type TemplateWithAuthor struct {
 	Template
 	UserDisplayName string `json:"userDisplayName"`
+	LikesCount      int    `json:"likesCount"`
+	LikedByMe       bool   `json:"likedByMe"`
 }

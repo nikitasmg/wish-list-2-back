@@ -77,17 +77,27 @@ func (PresentMetaModel) TableName() string { return "present_meta" }
 
 // TemplateModel — GORM model for "templates" table
 type TemplateModel struct {
-	ID        uuid.UUID    `gorm:"primaryKey"`
-	UserID    uuid.UUID    `gorm:"not null;index"`
-	Name      string       `gorm:"not null"`
-	Settings  SettingsJSON `gorm:"type:json"`
-	Blocks    BlocksJSON   `gorm:"type:jsonb"`
-	IsPublic  bool         `gorm:"not null;default:false;index"`
-	CreatedAt time.Time    `gorm:"autoCreateTime;index"`
-	UpdatedAt time.Time    `gorm:"autoUpdateTime"`
+	ID         uuid.UUID    `gorm:"primaryKey"`
+	UserID     uuid.UUID    `gorm:"not null;index"`
+	Name       string       `gorm:"not null"`
+	Settings   SettingsJSON `gorm:"type:json"`
+	Blocks     BlocksJSON   `gorm:"type:jsonb"`
+	IsPublic   bool         `gorm:"not null;default:false;index"`
+	LikesCount int          `gorm:"not null;default:0"`
+	CreatedAt  time.Time    `gorm:"autoCreateTime;index"`
+	UpdatedAt  time.Time    `gorm:"autoUpdateTime"`
 }
 
 func (TemplateModel) TableName() string { return "templates" }
+
+// TemplateLikeModel — GORM model for "template_likes" table
+type TemplateLikeModel struct {
+	UserID     uuid.UUID `gorm:"primaryKey;column:user_id"`
+	TemplateID uuid.UUID `gorm:"primaryKey;column:template_id"`
+	CreatedAt  time.Time `gorm:"not null;autoCreateTime"`
+}
+
+func (TemplateLikeModel) TableName() string { return "template_likes" }
 
 // SettingsJSON — JSON-тип для хранения настроек вишлиста
 type SettingsJSON struct {
