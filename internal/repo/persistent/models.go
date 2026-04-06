@@ -75,6 +75,20 @@ type PresentMetaModel struct {
 
 func (PresentMetaModel) TableName() string { return "present_meta" }
 
+// TemplateModel — GORM model for "templates" table
+type TemplateModel struct {
+	ID        uuid.UUID    `gorm:"primaryKey"`
+	UserID    uuid.UUID    `gorm:"not null;index"`
+	Name      string       `gorm:"not null"`
+	Settings  SettingsJSON `gorm:"type:json"`
+	Blocks    BlocksJSON   `gorm:"type:jsonb"`
+	IsPublic  bool         `gorm:"not null;default:false;index"`
+	CreatedAt time.Time    `gorm:"autoCreateTime;index"`
+	UpdatedAt time.Time    `gorm:"autoUpdateTime"`
+}
+
+func (TemplateModel) TableName() string { return "templates" }
+
 // SettingsJSON — JSON-тип для хранения настроек вишлиста
 type SettingsJSON struct {
 	ColorScheme          string `json:"colorScheme"`

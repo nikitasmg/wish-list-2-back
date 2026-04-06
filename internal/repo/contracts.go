@@ -47,3 +47,12 @@ type ParseRateLimitRepo interface {
 type PresentMetaRepo interface {
 	Upsert(ctx context.Context, meta entity.PresentMeta) error
 }
+
+type TemplateRepo interface {
+	Create(ctx context.Context, template entity.Template) error
+	GetByID(ctx context.Context, id uuid.UUID) (entity.Template, error)
+	GetAllByUserID(ctx context.Context, userID uuid.UUID) ([]entity.Template, error)
+	GetPublic(ctx context.Context, limit int, cursor time.Time) ([]entity.TemplateWithAuthor, error)
+	Update(ctx context.Context, template entity.Template) error
+	Delete(ctx context.Context, id uuid.UUID) error
+}

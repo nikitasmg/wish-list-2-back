@@ -162,3 +162,61 @@ func toPresentModel(p entity.Present) PresentModel {
 		WishlistID:  p.WishlistID,
 	}
 }
+
+// Template
+
+func toTemplateEntity(m TemplateModel) entity.Template {
+	blocks := make([]entity.Block, 0, len(m.Blocks))
+	for _, b := range m.Blocks {
+		colSpan := b.ColSpan
+		if colSpan < 1 {
+			colSpan = 1
+		}
+		blocks = append(blocks, entity.Block{
+			Type:    b.Type,
+			Row:     b.Row,
+			Col:     b.Col,
+			ColSpan: colSpan,
+			Data:    b.Data,
+		})
+	}
+	return entity.Template{
+		ID:     m.ID,
+		UserID: m.UserID,
+		Name:   m.Name,
+		Settings: entity.Settings{
+			ColorScheme:          m.Settings.ColorScheme,
+			ShowGiftAvailability: m.Settings.ShowGiftAvailability,
+			PresentsLayout:       m.Settings.PresentsLayout,
+		},
+		Blocks:    blocks,
+		IsPublic:  m.IsPublic,
+		CreatedAt: m.CreatedAt,
+		UpdatedAt: m.UpdatedAt,
+	}
+}
+
+func toTemplateModel(t entity.Template) TemplateModel {
+	blocks := make(BlocksJSON, 0, len(t.Blocks))
+	for _, b := range t.Blocks {
+		blocks = append(blocks, blockJSON{
+			Type:    b.Type,
+			Row:     b.Row,
+			Col:     b.Col,
+			ColSpan: b.ColSpan,
+			Data:    json.RawMessage("{}"),
+		})
+	}
+	return TemplateModel{
+		ID:     t.ID,
+		UserID: t.UserID,
+		Name:   t.Name,
+		Settings: SettingsJSON{
+			ColorScheme:          t.Settings.ColorScheme,
+			ShowGiftAvailability: t.Settings.ShowGiftAvailability,
+			PresentsLayout:       t.Settings.PresentsLayout,
+		},
+		Blocks:   blocks,
+		IsPublic: t.IsPublic,
+	}
+}
