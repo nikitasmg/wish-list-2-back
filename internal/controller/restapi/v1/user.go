@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"io"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,12 +14,13 @@ import (
 
 type userHandler struct {
 	uc           usecase.UserUseCase
+	uploadUC     usecase.UploadUseCase
 	cookieDomain string
 	secureCookie bool
 }
 
-func newUserHandler(uc usecase.UserUseCase, cookieDomain string, secureCookie bool) *userHandler {
-	return &userHandler{uc: uc, cookieDomain: cookieDomain, secureCookie: secureCookie}
+func newUserHandler(uc usecase.UserUseCase, uploadUC usecase.UploadUseCase, cookieDomain string, secureCookie bool) *userHandler {
+	return &userHandler{uc: uc, uploadUC: uploadUC, cookieDomain: cookieDomain, secureCookie: secureCookie}
 }
 
 func (h *userHandler) register(c *fiber.Ctx) error {
@@ -110,5 +112,71 @@ func (h *userHandler) setTokenCookie(c *fiber.Ctx, token string) {
 		SameSite: fiber.CookieSameSiteLaxMode,
 		Path:     "/",
 		Domain:   h.cookieDomain,
+	})
+}
+
+func (h *userHandler) getProfile(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
+	user, err := h.uc.GetProfile(c.Context(), userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
+	}
+	return c.JSON(fiber.Map{
+		"user": fiber.Map{
+			"id":          user.ID,
+			"username":    user.Username,
+			"displayName": user.DisplayName,
+			"avatar":      user.Avatar,
+		},
+	})
+}
+
+func (h *userHandler) updateProfile(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
+
+	input := usecase.UpdateProfileInput{}
+
+	if dn := c.FormValue("display_name"); dn != "" {
+		input.DisplayName = &dn
+	}
+
+	file, err := c.FormFile("avatar")
+	if err == nil && file != nil {
+		f, err := file.Open()
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(response.Error("failed to open avatar file"))
+		}
+		defer f.Close()
+		data, err := io.ReadAll(f)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(response.Error("failed to read avatar file"))
+		}
+		if len(data) > usecase.MaxFileSize {
+			return c.Status(fiber.StatusBadRequest).JSON(response.Error("avatar too large: max 10MB"))
+		}
+		uploaded, err := h.uploadUC.Upload(c.Context(), file.Filename, data)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(response.Error("failed to upload avatar"))
+		}
+		input.Avatar = &uploaded.URL
+	}
+
+	user, err := h.uc.UpdateProfile(c.Context(), userID, input)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+	}
+	return c.JSON(fiber.Map{
+		"user": fiber.Map{
+			"id":          user.ID,
+			"username":    user.Username,
+			"displayName": user.DisplayName,
+			"avatar":      user.Avatar,
+		},
 	})
 }

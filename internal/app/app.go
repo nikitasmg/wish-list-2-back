@@ -16,6 +16,7 @@ import (
 	"main/internal/repo/persistent"
 	parseUC "main/internal/usecase/parse"
 	presentUC "main/internal/usecase/present"
+	templateUC "main/internal/usecase/template"
 	uploadUC "main/internal/usecase/upload"
 	userUC "main/internal/usecase/user"
 	wishlistUC "main/internal/usecase/wishlist"
@@ -38,6 +39,7 @@ func Run(cfg *config.Config) {
 		&persistent.PresentModel{},
 		&persistent.ParseRateLimitModel{},
 		&persistent.PresentMetaModel{},
+		&persistent.TemplateModel{},
 	); err != nil {
 		log.Fatalf("automigrate: %v", err)
 	}
@@ -55,6 +57,7 @@ func Run(cfg *config.Config) {
 	presentRepo := persistent.NewPresentRepo(db)
 	presentMetaRepo := persistent.NewPresentMetaRepo(db)
 	rateLimitRepo := persistent.NewParseRateLimitRepo(db)
+	templateRepo := persistent.NewTemplateRepo(db)
 
 	// Hasher
 	pwHasher := hasher.New()
@@ -66,12 +69,13 @@ func Run(cfg *config.Config) {
 	uploadUseCase := uploadUC.New(fileStorage)
 	httpClient := &http.Client{Timeout: 15 * time.Second}
 	parseUseCase := parseUC.NewParseUseCase(rateLimitRepo, httpClient)
+	templateUseCase := templateUC.New(templateRepo, wishlistRepo)
 
 	// HTTP server
 	app := fiber.New(fiber.Config{
 		BodyLimit: 15 * 1024 * 1024, // 15MB — headroom for multipart overhead
 	})
-	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase, parseUseCase)
+	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase, parseUseCase, templateUseCase)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
