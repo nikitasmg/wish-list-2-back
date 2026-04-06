@@ -2,8 +2,8 @@ package persistent
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -53,24 +53,28 @@ func (r *templateRepo) GetAllByUserID(ctx context.Context, userID uuid.UUID) ([]
 type templateWithAuthorRow struct {
 	TemplateModel
 	UserDisplayName string `gorm:"column:user_display_name"`
+	LikedByMe       bool   `gorm:"column:liked_by_me"`
 }
 
-func (r *templateRepo) GetPublic(ctx context.Context, limit int, cursor time.Time) ([]entity.TemplateWithAuthor, error) {
+func (r *templateRepo) GetPublic(ctx context.Context, limit, offset int, userID uuid.UUID) ([]entity.TemplateWithAuthor, error) {
 	var rows []templateWithAuthorRow
 
-	q := r.db.WithContext(ctx).
-		Table("templates").
-		Select("templates.*, users.display_name AS user_display_name").
-		Joins("LEFT JOIN users ON users.id = templates.user_id").
-		Where("templates.is_public = ?", true).
-		Order("templates.created_at DESC").
-		Limit(limit)
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT
+			t.*,
+			COALESCE(u.display_name, '') AS user_display_name,
+			CASE WHEN tl.user_id IS NOT NULL THEN true ELSE false END AS liked_by_me
+		FROM templates t
+		LEFT JOIN users u ON u.id = t.user_id
+		LEFT JOIN template_likes tl ON tl.template_id = t.id AND tl.user_id = ?
+		WHERE t.is_public = true
+		ORDER BY
+			t.likes_count::float8 / POWER(EXTRACT(EPOCH FROM (NOW() - t.created_at)) / 3600.0 + 2, 1.5) DESC,
+			t.created_at DESC
+		LIMIT ? OFFSET ?
+	`, userID, limit, offset).Scan(&rows).Error
 
-	if !cursor.IsZero() {
-		q = q.Where("templates.created_at < ?", cursor)
-	}
-
-	if err := q.Find(&rows).Error; err != nil {
+	if err != nil {
 		return nil, fmt.Errorf("templateRepo.GetPublic: %w", err)
 	}
 
@@ -79,9 +83,53 @@ func (r *templateRepo) GetPublic(ctx context.Context, limit int, cursor time.Tim
 		result[i] = entity.TemplateWithAuthor{
 			Template:        toTemplateEntity(row.TemplateModel),
 			UserDisplayName: row.UserDisplayName,
+			LikesCount:      row.LikesCount,
+			LikedByMe:       row.LikedByMe,
 		}
 	}
 	return result, nil
+}
+
+func (r *templateRepo) Like(ctx context.Context, userID, templateID uuid.UUID) (int, error) {
+	var newCount int
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Exec(
+			"INSERT INTO template_likes (user_id, template_id, created_at) VALUES (?, ?, NOW()) ON CONFLICT DO NOTHING",
+			userID, templateID,
+		)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return errors.New("already liked")
+		}
+		return tx.Raw(
+			"UPDATE templates SET likes_count = likes_count + 1 WHERE id = ? RETURNING likes_count",
+			templateID,
+		).Scan(&newCount).Error
+	})
+	return newCount, err
+}
+
+func (r *templateRepo) Unlike(ctx context.Context, userID, templateID uuid.UUID) (int, error) {
+	var newCount int
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Exec(
+			"DELETE FROM template_likes WHERE user_id = ? AND template_id = ?",
+			userID, templateID,
+		)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return errors.New("not liked")
+		}
+		return tx.Raw(
+			"UPDATE templates SET likes_count = GREATEST(likes_count - 1, 0) WHERE id = ? RETURNING likes_count",
+			templateID,
+		).Scan(&newCount).Error
+	})
+	return newCount, err
 }
 
 func (r *templateRepo) Update(ctx context.Context, template entity.Template) error {

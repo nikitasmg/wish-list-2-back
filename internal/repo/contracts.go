@@ -52,8 +52,10 @@ type TemplateRepo interface {
 	Create(ctx context.Context, template entity.Template) error
 	GetByID(ctx context.Context, id uuid.UUID) (entity.Template, error)
 	GetAllByUserID(ctx context.Context, userID uuid.UUID) ([]entity.Template, error)
-	GetPublic(ctx context.Context, limit int, cursor time.Time) ([]entity.TemplateWithAuthor, error)
+	GetPublic(ctx context.Context, limit, offset int, userID uuid.UUID) ([]entity.TemplateWithAuthor, error)
 	Update(ctx context.Context, template entity.Template) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error)
+	Like(ctx context.Context, userID, templateID uuid.UUID) (int, error)
+	Unlike(ctx context.Context, userID, templateID uuid.UUID) (int, error)
 }
