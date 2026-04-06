@@ -152,12 +152,20 @@ type UpdateTemplateInput struct {
 	IsPublic bool
 }
 
+// LikeResult — returned by Like/Unlike operations
+type LikeResult struct {
+	LikesCount int  `json:"likesCount"`
+	LikedByMe  bool `json:"likedByMe"`
+}
+
 // TemplateUseCase — business logic for templates
 type TemplateUseCase interface {
 	Create(ctx context.Context, userID uuid.UUID, input CreateTemplateInput) (entity.Template, error)
 	GetAllByUser(ctx context.Context, userID uuid.UUID) ([]entity.Template, error)
-	GetPublic(ctx context.Context, limit int, cursorStr string) ([]entity.TemplateWithAuthor, string, error)
+	GetPublic(ctx context.Context, limit, page int, userID *uuid.UUID) ([]entity.TemplateWithAuthor, bool, error)
 	Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, input UpdateTemplateInput) (entity.Template, error)
 	Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
 	CreateWishlistFromTemplate(ctx context.Context, templateID uuid.UUID, userID uuid.UUID, title string) (entity.Wishlist, error)
+	Like(ctx context.Context, userID, templateID uuid.UUID) (LikeResult, error)
+	Unlike(ctx context.Context, userID, templateID uuid.UUID) (LikeResult, error)
 }
