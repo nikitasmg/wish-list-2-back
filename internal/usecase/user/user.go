@@ -135,6 +135,30 @@ func (uc *userUseCase) GetMe(ctx context.Context, userID uuid.UUID) (entity.User
 	return uc.userRepo.GetByID(ctx, userID)
 }
 
+func (uc *userUseCase) GetProfile(ctx context.Context, userID uuid.UUID) (entity.User, error) {
+	return uc.userRepo.GetByID(ctx, userID)
+}
+
+func (uc *userUseCase) UpdateProfile(ctx context.Context, userID uuid.UUID, input usecase.UpdateProfileInput) (entity.User, error) {
+	user, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return entity.User{}, fmt.Errorf("user not found: %w", err)
+	}
+	if input.DisplayName != nil {
+		if len([]rune(*input.DisplayName)) > 100 {
+			return entity.User{}, fmt.Errorf("display name exceeds 100 characters")
+		}
+		user.DisplayName = *input.DisplayName
+	}
+	if input.Avatar != nil {
+		user.Avatar = *input.Avatar
+	}
+	if err := uc.userRepo.Update(ctx, user); err != nil {
+		return entity.User{}, fmt.Errorf("update user: %w", err)
+	}
+	return user, nil
+}
+
 func (uc *userUseCase) generateToken(user entity.User) (string, error) {
 	claims := &Claims{
 		Username: user.Username,

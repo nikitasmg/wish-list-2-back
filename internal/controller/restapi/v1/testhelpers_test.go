@@ -48,6 +48,16 @@ func (m *MockUserUC) GetMe(ctx context.Context, userID uuid.UUID) (entity.User, 
 	return args.Get(0).(entity.User), args.Error(1)
 }
 
+func (m *MockUserUC) GetProfile(ctx context.Context, userID uuid.UUID) (entity.User, error) {
+	args := m.Called(ctx, userID)
+	return args.Get(0).(entity.User), args.Error(1)
+}
+
+func (m *MockUserUC) UpdateProfile(ctx context.Context, userID uuid.UUID, input usecase.UpdateProfileInput) (entity.User, error) {
+	args := m.Called(ctx, userID, input)
+	return args.Get(0).(entity.User), args.Error(1)
+}
+
 // MockWishlistUC
 
 type MockWishlistUC struct{ mock.Mock }

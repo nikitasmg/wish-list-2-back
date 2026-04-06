@@ -13,6 +13,7 @@ type UserRepo interface {
 	Create(ctx context.Context, user entity.User) error
 	GetByUsername(ctx context.Context, username string) (entity.User, error)
 	GetByID(ctx context.Context, id uuid.UUID) (entity.User, error)
+	Update(ctx context.Context, user entity.User) error
 }
 
 type WishlistRepo interface {

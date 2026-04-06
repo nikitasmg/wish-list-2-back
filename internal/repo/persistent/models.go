@@ -11,9 +11,11 @@ import (
 
 // UserModel — GORM-модель для таблицы "users"
 type UserModel struct {
-	ID       uuid.UUID `gorm:"primaryKey"`
-	Username string    `gorm:"unique;not null"`
-	Password string    `gorm:"not null"`
+	ID          uuid.UUID `gorm:"primaryKey"`
+	Username    string    `gorm:"unique;not null"`
+	Password    string    `gorm:"not null"`
+	DisplayName string
+	Avatar      string
 }
 
 func (UserModel) TableName() string { return "users" }

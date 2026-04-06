@@ -82,12 +82,20 @@ type BulkUploadResult struct {
 	URL   string
 }
 
+// UpdateProfileInput — данные для обновления профиля
+type UpdateProfileInput struct {
+	DisplayName *string // nil = не менять
+	Avatar      *string // nil = не менять
+}
+
 // UserUseCase — бизнес-логика пользователей
 type UserUseCase interface {
 	Register(ctx context.Context, username, password string) (AuthResult, error)
 	Login(ctx context.Context, username, password string) (AuthResult, error)
 	AuthenticateTelegram(ctx context.Context, input TelegramAuthInput) (AuthResult, error)
 	GetMe(ctx context.Context, userID uuid.UUID) (entity.User, error)
+	UpdateProfile(ctx context.Context, userID uuid.UUID, input UpdateProfileInput) (entity.User, error)
+	GetProfile(ctx context.Context, userID uuid.UUID) (entity.User, error)
 }
 
 // WishlistUseCase — бизнес-логика вишлистов

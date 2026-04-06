@@ -10,17 +10,21 @@ import (
 
 func toUserEntity(m UserModel) entity.User {
 	return entity.User{
-		ID:       m.ID,
-		Username: m.Username,
-		Password: m.Password,
+		ID:          m.ID,
+		Username:    m.Username,
+		Password:    m.Password,
+		DisplayName: m.DisplayName,
+		Avatar:      m.Avatar,
 	}
 }
 
 func toUserModel(u entity.User) UserModel {
 	return UserModel{
-		ID:       u.ID,
-		Username: u.Username,
-		Password: u.Password,
+		ID:          u.ID,
+		Username:    u.Username,
+		Password:    u.Password,
+		DisplayName: u.DisplayName,
+		Avatar:      u.Avatar,
 	}
 }
 
