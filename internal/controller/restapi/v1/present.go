@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 
@@ -124,6 +125,28 @@ func (h *presentHandler) release(c *fiber.Ctx) error {
 	return c.JSON(response.Data(true))
 }
 
+func (h *presentHandler) join(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid present ID"))
+	}
+	if err := h.uc.Join(c.Context(), id); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+	}
+	return c.JSON(response.Data(true))
+}
+
+func (h *presentHandler) leave(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid present ID"))
+	}
+	if err := h.uc.Leave(c.Context(), id); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+	}
+	return c.JSON(response.Data(true))
+}
+
 var validSources = map[string]bool{
 	"ozon": true, "wildberries": true, "yamarket": true, "other": true,
 }
@@ -148,6 +171,7 @@ func (h *presentHandler) parsePresentInput(c *fiber.Ctx) (usecase.CreatePresentI
 		Link:        c.FormValue("link"),
 		PriceStr:    c.FormValue("price"),
 		CoverURL:    c.FormValue("cover_url"),
+		Type:        c.FormValue("type"),
 	}
 
 	source := c.FormValue("source")
@@ -159,6 +183,21 @@ func (h *presentHandler) parsePresentInput(c *fiber.Ctx) (usecase.CreatePresentI
 	input.OriginalURL = originalURL
 	input.Category = c.FormValue("category")
 	input.Brand = c.FormValue("brand")
+
+	if raw := c.FormValue("images"); raw != "" {
+		var imgs []string
+		if err := json.Unmarshal([]byte(raw), &imgs); err != nil {
+			return input, errors.New("invalid images: must be JSON array")
+		}
+		input.Images = imgs
+	}
+	if raw := c.FormValue("links"); raw != "" {
+		var links []string
+		if err := json.Unmarshal([]byte(raw), &links); err != nil {
+			return input, errors.New("invalid links: must be JSON array")
+		}
+		input.Links = links
+	}
 
 	file, err := c.FormFile("file")
 	if err == nil && file != nil {

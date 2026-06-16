@@ -58,6 +58,9 @@ type CreatePresentInput struct {
 	Brand       string
 	Source      string // "ozon" | "wildberries" | "yamarket" | "other"
 	OriginalURL string
+	Type        string   // "single" | "group" | "multi"; пусто => "single"
+	Images      []string // галерея для multi
+	Links       []string // несколько ссылок для multi
 }
 
 // TelegramAuthInput — входные данные для Telegram-авторизации
@@ -119,6 +122,8 @@ type PresentUseCase interface {
 	Delete(ctx context.Context, wishlistID, id uuid.UUID) error
 	Reserve(ctx context.Context, id uuid.UUID) error
 	Release(ctx context.Context, id uuid.UUID) error
+	Join(ctx context.Context, id uuid.UUID) error
+	Leave(ctx context.Context, id uuid.UUID) error
 }
 
 // UploadUseCase — загрузка файлов

@@ -24,7 +24,6 @@ func TestUserConverter_RoundTrip(t *testing.T) {
 }
 
 func TestWishlistConverter_RoundTrip_WithBlocks(t *testing.T) {
-	mobilePos := 1
 	w := entity.Wishlist{
 		ID:          uuid.New(),
 		Title:       "My Wishlist",
@@ -44,12 +43,11 @@ func TestWishlistConverter_RoundTrip_WithBlocks(t *testing.T) {
 		PresentsCount: 3,
 		Blocks: []entity.Block{
 			{
-				Type:           "text",
-				Position:       0,
-				MobilePosition: &mobilePos,
-				ColSpan:        2,
-				RowSpan:        3,
-				Data:           json.RawMessage(`{"text":"hello"}`),
+				Type:    "text",
+				Row:     0,
+				Col:     1,
+				ColSpan: 2,
+				Data:    json.RawMessage(`{"text":"hello"}`),
 			},
 		},
 	}
@@ -61,10 +59,9 @@ func TestWishlistConverter_RoundTrip_WithBlocks(t *testing.T) {
 	assert.Equal(t, w.Settings, got.Settings)
 	assert.Len(t, got.Blocks, 1)
 	assert.Equal(t, w.Blocks[0].Type, got.Blocks[0].Type)
-	assert.Equal(t, w.Blocks[0].Position, got.Blocks[0].Position)
-	assert.Equal(t, w.Blocks[0].MobilePosition, got.Blocks[0].MobilePosition)
+	assert.Equal(t, w.Blocks[0].Row, got.Blocks[0].Row)
+	assert.Equal(t, w.Blocks[0].Col, got.Blocks[0].Col)
 	assert.Equal(t, w.Blocks[0].ColSpan, got.Blocks[0].ColSpan)
-	assert.Equal(t, w.Blocks[0].RowSpan, got.Blocks[0].RowSpan)
 }
 
 func TestWishlistConverter_RoundTrip_NilBlocks(t *testing.T) {
@@ -85,11 +82,11 @@ func TestWishlistConverter_Block_SpanDefaults(t *testing.T) {
 		UserID: uuid.New(),
 		Blocks: []entity.Block{
 			{
-				Type:     "text",
-				Position: 0,
-				ColSpan:  0,
-				RowSpan:  0,
-				Data:     json.RawMessage(`{"text":"test"}`),
+				Type:    "text",
+				Row:     0,
+				Col:     0,
+				ColSpan: 0,
+				Data:    json.RawMessage(`{"text":"test"}`),
 			},
 		},
 	}
@@ -97,7 +94,6 @@ func TestWishlistConverter_Block_SpanDefaults(t *testing.T) {
 	got := toWishlistEntity(toWishlistModel(w))
 	assert.Len(t, got.Blocks, 1)
 	assert.Equal(t, 1, got.Blocks[0].ColSpan)
-	assert.Equal(t, 1, got.Blocks[0].RowSpan)
 }
 
 func TestPresentConverter_RoundTrip(t *testing.T) {
@@ -118,4 +114,21 @@ func TestPresentConverter_RoundTrip(t *testing.T) {
 	assert.Equal(t, p.Reserved, got.Reserved)
 	assert.NotNil(t, got.Price)
 	assert.InDelta(t, *p.Price, *got.Price, 0.001)
+}
+
+func TestPresentConverter_NewFields(t *testing.T) {
+	p := entity.Present{
+		ID:                uuid.New(),
+		Title:             "Gift",
+		Type:              "multi",
+		ParticipantsCount: 3,
+		Images:            []string{"a.jpg", "b.jpg"},
+		Links:             []string{"http://x", "http://y"},
+		WishlistID:        uuid.New(),
+	}
+	got := toPresentEntity(toPresentModel(p))
+	assert.Equal(t, "multi", got.Type)
+	assert.Equal(t, 3, got.ParticipantsCount)
+	assert.Equal(t, []string{"a.jpg", "b.jpg"}, got.Images)
+	assert.Equal(t, []string{"http://x", "http://y"}, got.Links)
 }

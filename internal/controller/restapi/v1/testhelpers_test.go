@@ -141,6 +141,16 @@ func (m *MockPresentUC) Release(ctx context.Context, id uuid.UUID) error {
 	return args.Error(0)
 }
 
+func (m *MockPresentUC) Join(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *MockPresentUC) Leave(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
 // MockUploadUC
 
 type MockUploadUC struct{ mock.Mock }
@@ -178,9 +188,9 @@ func (m *MockTemplateUC) GetAllByUser(ctx context.Context, userID uuid.UUID) ([]
 	return args.Get(0).([]entity.Template), args.Error(1)
 }
 
-func (m *MockTemplateUC) GetPublic(ctx context.Context, limit int, cursor string) ([]entity.TemplateWithAuthor, string, error) {
-	args := m.Called(ctx, limit, cursor)
-	return args.Get(0).([]entity.TemplateWithAuthor), args.Get(1).(string), args.Error(2)
+func (m *MockTemplateUC) GetPublic(ctx context.Context, limit, page int, userID *uuid.UUID) ([]entity.TemplateWithAuthor, bool, error) {
+	args := m.Called(ctx, limit, page, userID)
+	return args.Get(0).([]entity.TemplateWithAuthor), args.Bool(1), args.Error(2)
 }
 
 func (m *MockTemplateUC) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, input usecase.UpdateTemplateInput) (entity.Template, error) {
@@ -196,4 +206,14 @@ func (m *MockTemplateUC) Delete(ctx context.Context, id uuid.UUID, userID uuid.U
 func (m *MockTemplateUC) CreateWishlistFromTemplate(ctx context.Context, templateID uuid.UUID, userID uuid.UUID, title string) (entity.Wishlist, error) {
 	args := m.Called(ctx, templateID, userID, title)
 	return args.Get(0).(entity.Wishlist), args.Error(1)
+}
+
+func (m *MockTemplateUC) Like(ctx context.Context, userID, templateID uuid.UUID) (usecase.LikeResult, error) {
+	args := m.Called(ctx, userID, templateID)
+	return args.Get(0).(usecase.LikeResult), args.Error(1)
+}
+
+func (m *MockTemplateUC) Unlike(ctx context.Context, userID, templateID uuid.UUID) (usecase.LikeResult, error) {
+	args := m.Called(ctx, userID, templateID)
+	return args.Get(0).(usecase.LikeResult), args.Error(1)
 }

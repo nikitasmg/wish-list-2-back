@@ -68,6 +68,9 @@ func (uc *presentUseCase) Create(ctx context.Context, wishlistID uuid.UUID, inpu
 		Link:        input.Link,
 		Price:       price,
 		Reserved:    false,
+		Type:        normalizeType(input.Type),
+		Images:      input.Images,
+		Links:       input.Links,
 	}
 
 	if err := uc.presentRepo.Create(ctx, p); err != nil {
@@ -116,6 +119,9 @@ func (uc *presentUseCase) Update(ctx context.Context, id uuid.UUID, input usecas
 	p.Title = input.Title
 	p.Description = input.Description
 	p.Link = input.Link
+	p.Type = normalizeType(input.Type)
+	p.Images = input.Images
+	p.Links = input.Links
 
 	price, err := parsePrice(input.PriceStr)
 	if err != nil {
@@ -181,6 +187,32 @@ func (uc *presentUseCase) Release(ctx context.Context, id uuid.UUID) error {
 	return uc.presentRepo.Update(ctx, p)
 }
 
+func (uc *presentUseCase) Join(ctx context.Context, id uuid.UUID) error {
+	p, err := uc.presentRepo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("present not found: %w", err)
+	}
+	if p.Type != "group" {
+		return errors.New("подарок не является групповым")
+	}
+	p.ParticipantsCount++
+	return uc.presentRepo.Update(ctx, p)
+}
+
+func (uc *presentUseCase) Leave(ctx context.Context, id uuid.UUID) error {
+	p, err := uc.presentRepo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("present not found: %w", err)
+	}
+	if p.Type != "group" {
+		return errors.New("подарок не является групповым")
+	}
+	if p.ParticipantsCount > 0 {
+		p.ParticipantsCount--
+	}
+	return uc.presentRepo.Update(ctx, p)
+}
+
 func (uc *presentUseCase) resolveCover(data []byte, name, url string) (string, error) {
 	if len(data) > 0 {
 		uploaded, err := uc.fileStorage.Upload(name, data)
@@ -219,4 +251,13 @@ func parsePrice(s string) (*float64, error) {
 		return nil, errors.New("неверный формат цены")
 	}
 	return &v, nil
+}
+
+func normalizeType(t string) string {
+	switch t {
+	case "group", "multi":
+		return t
+	default:
+		return "single"
+	}
 }

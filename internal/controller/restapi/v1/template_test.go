@@ -45,7 +45,7 @@ func TestGetPublicTemplates_Success(t *testing.T) {
 			UserDisplayName: "Никита",
 		},
 	}
-	tm.On("GetPublic", mock.Anything, 0, "").Return(templates, "", nil)
+	tm.On("GetPublic", mock.Anything, 0, 1, mock.Anything).Return(templates, false, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/templates", nil)
 	resp, err := app.Test(req)

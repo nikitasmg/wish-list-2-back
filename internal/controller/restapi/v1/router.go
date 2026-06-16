@@ -49,6 +49,8 @@ func NewRouter(
 	api.Get("/wishlists/:wishlistId/presents", presentH.getAll)
 	api.Put("/presents/:id/reserve", presentH.reserve)
 	api.Put("/presents/:id/release", presentH.release)
+	api.Put("/presents/:id/join", presentH.join)
+	api.Put("/presents/:id/leave", presentH.leave)
 
 	// Protected routes
 	protected := api.Group("")
