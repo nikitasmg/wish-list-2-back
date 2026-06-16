@@ -190,6 +190,52 @@ func TestPresentRepo_CreateAndGetAll(t *testing.T) {
 	assert.Equal(t, p.Title, presents[0].Title)
 }
 
+func TestPresentRepo_MultiType_ImagesLinksRoundTrip(t *testing.T) {
+	db := setupDB(t)
+	wishlistRepo := persistent.NewWishlistRepo(db)
+	presentRepo := persistent.NewPresentRepo(db)
+
+	wid := uuid.New()
+	w := entity.Wishlist{ID: wid, Title: "Gifts", UserID: uuid.New()}
+	require.NoError(t, wishlistRepo.Create(context.Background(), w))
+
+	pid := uuid.New()
+	p := entity.Present{
+		ID:         pid,
+		Title:      "Set of things",
+		Type:       "multi",
+		Images:     []string{"https://minio/a.jpg", "https://minio/b.jpg"},
+		Links:      []string{"https://shop/1", "https://shop/2"},
+		WishlistID: wid,
+	}
+	require.NoError(t, presentRepo.Create(context.Background(), p))
+
+	got, err := presentRepo.GetByID(context.Background(), pid)
+	require.NoError(t, err)
+	assert.Equal(t, "multi", got.Type)
+	assert.Equal(t, []string{"https://minio/a.jpg", "https://minio/b.jpg"}, got.Images)
+	assert.Equal(t, []string{"https://shop/1", "https://shop/2"}, got.Links)
+}
+
+func TestPresentRepo_GroupType_CounterRoundTrip(t *testing.T) {
+	db := setupDB(t)
+	wishlistRepo := persistent.NewWishlistRepo(db)
+	presentRepo := persistent.NewPresentRepo(db)
+
+	wid := uuid.New()
+	w := entity.Wishlist{ID: wid, Title: "Gifts", UserID: uuid.New()}
+	require.NoError(t, wishlistRepo.Create(context.Background(), w))
+
+	pid := uuid.New()
+	p := entity.Present{ID: pid, Title: "Money", Type: "group", ParticipantsCount: 3, WishlistID: wid}
+	require.NoError(t, presentRepo.Create(context.Background(), p))
+
+	got, err := presentRepo.GetByID(context.Background(), pid)
+	require.NoError(t, err)
+	assert.Equal(t, "group", got.Type)
+	assert.Equal(t, 3, got.ParticipantsCount)
+}
+
 func TestPresentRepo_Delete(t *testing.T) {
 	db := setupDB(t)
 	wishlistRepo := persistent.NewWishlistRepo(db)
