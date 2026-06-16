@@ -58,6 +58,9 @@ type CreatePresentInput struct {
 	Brand       string
 	Source      string // "ozon" | "wildberries" | "yamarket" | "other"
 	OriginalURL string
+	Type        string   // "single" | "group" | "multi"; пусто => "single"
+	Images      []string // галерея для multi
+	Links       []string // несколько ссылок для multi
 }
 
 // TelegramAuthInput — входные данные для Telegram-авторизации
