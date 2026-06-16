@@ -22,8 +22,8 @@ func (UserModel) TableName() string { return "users" }
 
 // WishlistModel — GORM-модель для таблицы "wishlists"
 type WishlistModel struct {
-	ID            uuid.UUID    `gorm:"primaryKey"`
-	Title         string       `gorm:"not null"`
+	ID            uuid.UUID `gorm:"primaryKey"`
+	Title         string    `gorm:"not null"`
 	Description   string
 	Cover         string
 	UserID        uuid.UUID    `gorm:"not null"`
@@ -40,16 +40,20 @@ func (WishlistModel) TableName() string { return "wishlists" }
 
 // PresentModel — GORM-модель для таблицы "presents"
 type PresentModel struct {
-	ID          uuid.UUID `gorm:"primaryKey"`
-	Title       string    `gorm:"not null"`
-	Description string
-	Reserved    bool
-	Cover       string
-	Link        string
-	Price       *float64  `gorm:"type:decimal(10,2)"`
-	CreatedAt   time.Time `gorm:"autoCreateTime"`
-	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
-	WishlistID  uuid.UUID `gorm:"not null"`
+	ID                uuid.UUID `gorm:"primaryKey"`
+	Title             string    `gorm:"not null"`
+	Description       string
+	Reserved          bool
+	Cover             string
+	Link              string
+	Price             *float64        `gorm:"type:decimal(10,2)"`
+	Type              string          `gorm:"not null;default:'single'"`
+	ParticipantsCount int             `gorm:"not null;default:0"`
+	Images            StringSliceJSON `gorm:"type:jsonb"`
+	Links             StringSliceJSON `gorm:"type:jsonb"`
+	CreatedAt         time.Time       `gorm:"autoCreateTime"`
+	UpdatedAt         time.Time       `gorm:"autoUpdateTime"`
+	WishlistID        uuid.UUID       `gorm:"not null"`
 }
 
 func (PresentModel) TableName() string { return "presents" }
@@ -165,4 +169,26 @@ func (b BlocksJSON) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return json.Marshal(b)
+}
+
+// StringSliceJSON — JSONB-тип для хранения массива строк (картинки/ссылки)
+type StringSliceJSON []string
+
+func (s *StringSliceJSON) Scan(value interface{}) error {
+	if value == nil {
+		*s = nil
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New("failed to scan StringSliceJSON")
+	}
+	return json.Unmarshal(bytes, s)
+}
+
+func (s StringSliceJSON) Value() (driver.Value, error) {
+	if s == nil {
+		return nil, nil
+	}
+	return json.Marshal(s)
 }

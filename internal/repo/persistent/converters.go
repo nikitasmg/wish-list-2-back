@@ -135,31 +135,39 @@ func toWishlistModel(w entity.Wishlist) WishlistModel {
 
 func toPresentEntity(m PresentModel) entity.Present {
 	return entity.Present{
-		ID:          m.ID,
-		Title:       m.Title,
-		Description: m.Description,
-		Reserved:    m.Reserved,
-		Cover:       m.Cover,
-		Link:        m.Link,
-		Price:       m.Price,
-		CreatedAt:   m.CreatedAt,
-		UpdatedAt:   m.UpdatedAt,
-		WishlistID:  m.WishlistID,
+		ID:                m.ID,
+		Title:             m.Title,
+		Description:       m.Description,
+		Reserved:          m.Reserved,
+		Cover:             m.Cover,
+		Link:              m.Link,
+		Price:             m.Price,
+		Type:              m.Type,
+		ParticipantsCount: m.ParticipantsCount,
+		Images:            []string(m.Images),
+		Links:             []string(m.Links),
+		CreatedAt:         m.CreatedAt,
+		UpdatedAt:         m.UpdatedAt,
+		WishlistID:        m.WishlistID,
 	}
 }
 
 func toPresentModel(p entity.Present) PresentModel {
 	return PresentModel{
-		ID:          p.ID,
-		Title:       p.Title,
-		Description: p.Description,
-		Reserved:    p.Reserved,
-		Cover:       p.Cover,
-		Link:        p.Link,
-		Price:       p.Price,
-		CreatedAt:   p.CreatedAt,
-		UpdatedAt:   p.UpdatedAt,
-		WishlistID:  p.WishlistID,
+		ID:                p.ID,
+		Title:             p.Title,
+		Description:       p.Description,
+		Reserved:          p.Reserved,
+		Cover:             p.Cover,
+		Link:              p.Link,
+		Price:             p.Price,
+		Type:              p.Type,
+		ParticipantsCount: p.ParticipantsCount,
+		Images:            StringSliceJSON(p.Images),
+		Links:             StringSliceJSON(p.Links),
+		CreatedAt:         p.CreatedAt,
+		UpdatedAt:         p.UpdatedAt,
+		WishlistID:        p.WishlistID,
 	}
 }
 

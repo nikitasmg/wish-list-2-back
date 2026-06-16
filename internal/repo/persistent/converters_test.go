@@ -119,3 +119,20 @@ func TestPresentConverter_RoundTrip(t *testing.T) {
 	assert.NotNil(t, got.Price)
 	assert.InDelta(t, *p.Price, *got.Price, 0.001)
 }
+
+func TestPresentConverter_NewFields(t *testing.T) {
+	p := entity.Present{
+		ID:                uuid.New(),
+		Title:             "Gift",
+		Type:              "multi",
+		ParticipantsCount: 3,
+		Images:            []string{"a.jpg", "b.jpg"},
+		Links:             []string{"http://x", "http://y"},
+		WishlistID:        uuid.New(),
+	}
+	got := toPresentEntity(toPresentModel(p))
+	assert.Equal(t, "multi", got.Type)
+	assert.Equal(t, 3, got.ParticipantsCount)
+	assert.Equal(t, []string{"a.jpg", "b.jpg"}, got.Images)
+	assert.Equal(t, []string{"http://x", "http://y"}, got.Links)
+}
