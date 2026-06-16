@@ -267,3 +267,44 @@ func TestUpdate_PresentTitleTooLong(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "title")
 }
+
+func TestCreate_MultiTypeFields(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
+	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
+	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
+
+	p, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{
+		Title:  "Set",
+		Type:   "multi",
+		Images: []string{"a.jpg", "b.jpg"},
+		Links:  []string{"http://x"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "multi", p.Type)
+	assert.Equal(t, []string{"a.jpg", "b.jpg"}, p.Images)
+	assert.Equal(t, []string{"http://x"}, p.Links)
+}
+
+func TestCreate_DefaultTypeSingle(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
+	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
+	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
+
+	p, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{Title: "X"})
+	require.NoError(t, err)
+	assert.Equal(t, "single", p.Type)
+}
