@@ -122,6 +122,8 @@ type PresentUseCase interface {
 	Delete(ctx context.Context, wishlistID, id uuid.UUID) error
 	Reserve(ctx context.Context, id uuid.UUID) error
 	Release(ctx context.Context, id uuid.UUID) error
+	Join(ctx context.Context, id uuid.UUID) error
+	Leave(ctx context.Context, id uuid.UUID) error
 }
 
 // UploadUseCase — загрузка файлов

@@ -308,3 +308,47 @@ func TestCreate_DefaultTypeSingle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "single", p.Type)
 }
+
+func TestJoin_GroupIncrements(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	id := uuid.New()
+	pr.On("GetByID", mock.Anything, id).Return(entity.Present{ID: id, Type: "group", ParticipantsCount: 1}, nil)
+	pr.On("Update", mock.Anything, mock.MatchedBy(func(p entity.Present) bool {
+		return p.ParticipantsCount == 2
+	})).Return(nil)
+
+	require.NoError(t, uc.Join(context.Background(), id))
+	pr.AssertExpectations(t)
+}
+
+func TestJoin_NonGroupErrors(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	id := uuid.New()
+	pr.On("GetByID", mock.Anything, id).Return(entity.Present{ID: id, Type: "single"}, nil)
+
+	err := uc.Join(context.Background(), id)
+	require.Error(t, err)
+}
+
+func TestLeave_NotBelowZero(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	id := uuid.New()
+	pr.On("GetByID", mock.Anything, id).Return(entity.Present{ID: id, Type: "group", ParticipantsCount: 0}, nil)
+	pr.On("Update", mock.Anything, mock.MatchedBy(func(p entity.Present) bool {
+		return p.ParticipantsCount == 0
+	})).Return(nil)
+
+	require.NoError(t, uc.Leave(context.Background(), id))
+}

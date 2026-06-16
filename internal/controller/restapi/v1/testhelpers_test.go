@@ -141,6 +141,16 @@ func (m *MockPresentUC) Release(ctx context.Context, id uuid.UUID) error {
 	return args.Error(0)
 }
 
+func (m *MockPresentUC) Join(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *MockPresentUC) Leave(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
 // MockUploadUC
 
 type MockUploadUC struct{ mock.Mock }

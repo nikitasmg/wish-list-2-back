@@ -187,6 +187,32 @@ func (uc *presentUseCase) Release(ctx context.Context, id uuid.UUID) error {
 	return uc.presentRepo.Update(ctx, p)
 }
 
+func (uc *presentUseCase) Join(ctx context.Context, id uuid.UUID) error {
+	p, err := uc.presentRepo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("present not found: %w", err)
+	}
+	if p.Type != "group" {
+		return errors.New("подарок не является групповым")
+	}
+	p.ParticipantsCount++
+	return uc.presentRepo.Update(ctx, p)
+}
+
+func (uc *presentUseCase) Leave(ctx context.Context, id uuid.UUID) error {
+	p, err := uc.presentRepo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("present not found: %w", err)
+	}
+	if p.Type != "group" {
+		return errors.New("подарок не является групповым")
+	}
+	if p.ParticipantsCount > 0 {
+		p.ParticipantsCount--
+	}
+	return uc.presentRepo.Update(ctx, p)
+}
+
 func (uc *presentUseCase) resolveCover(data []byte, name, url string) (string, error) {
 	if len(data) > 0 {
 		uploaded, err := uc.fileStorage.Upload(name, data)
