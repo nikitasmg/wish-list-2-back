@@ -45,3 +45,27 @@ type PresentRepo interface {
 	Reserve(ctx context.Context, id, guestID uuid.UUID) (bool, error)
 	Release(ctx context.Context, id, guestID uuid.UUID) (bool, error)
 }
+
+// GuestDataRepo — всё, что оставляют гости: ответы, голоса, треки, записи.
+//
+// Один интерфейс на четыре блока, а не четыре отдельных: у них общая механика
+// (привязка к блоку, дедупликация по гостю) и общий вызывающий.
+type GuestDataRepo interface {
+	UpsertRSVP(ctx context.Context, response entity.RSVPResponse) error
+	ListRSVP(ctx context.Context, blockID string) ([]entity.RSVPResponse, error)
+
+	UpsertPollVote(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, option int) error
+	CountPollVotes(ctx context.Context, blockID string, guestID uuid.UUID) (map[int]int, *int, error)
+
+	CountTracksByGuest(ctx context.Context, blockID string, guestID uuid.UUID) (int64, error)
+	CreateTrack(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, title string) (uuid.UUID, error)
+	ListTracks(ctx context.Context, blockID string, guestID uuid.UUID) ([]entity.PlaylistTrack, error)
+	TrackBlockID(ctx context.Context, trackID uuid.UUID) (uuid.UUID, string, error)
+	ToggleTrackVote(ctx context.Context, trackID, guestID uuid.UUID) (bool, error)
+
+	CountGuestbookByGuest(ctx context.Context, blockID string, guestID uuid.UUID) (int64, error)
+	CreateGuestbookEntry(ctx context.Context, entry entity.GuestbookEntry, wishlistID uuid.UUID, blockID string, guestID uuid.UUID) error
+	ListGuestbook(ctx context.Context, blockID string, guestID uuid.UUID, includeHidden bool) ([]entity.GuestbookEntry, error)
+	GuestbookEntryWishlist(ctx context.Context, entryID uuid.UUID) (uuid.UUID, error)
+	SetGuestbookHidden(ctx context.Context, entryID uuid.UUID, hidden bool) error
+}

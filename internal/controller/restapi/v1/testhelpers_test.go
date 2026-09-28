@@ -149,3 +149,73 @@ func (m *MockWishlistUC) CreateFromTemplate(ctx context.Context, userID uuid.UUI
 	args := m.Called(ctx, userID, input)
 	return args.Get(0).(entity.Wishlist), args.Error(1)
 }
+
+// MockGuestDataUC
+
+type MockGuestDataUC struct{ mock.Mock }
+
+func (m *MockGuestDataUC) SubmitRSVP(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, input usecase.RSVPInput) (entity.RSVPResponse, error) {
+	args := m.Called(ctx, wishlistID, blockID, guestID, input)
+	return args.Get(0).(entity.RSVPResponse), args.Error(1)
+}
+
+func (m *MockGuestDataUC) MyRSVP(ctx context.Context, blockID string, guestID uuid.UUID) (*entity.RSVPResponse, error) {
+	args := m.Called(ctx, blockID, guestID)
+	v, _ := args.Get(0).(*entity.RSVPResponse)
+	return v, args.Error(1)
+}
+
+func (m *MockGuestDataUC) OwnerRSVPSummary(ctx context.Context, userID, wishlistID uuid.UUID, blockID string) (entity.RSVPSummary, error) {
+	args := m.Called(ctx, userID, wishlistID, blockID)
+	return args.Get(0).(entity.RSVPSummary), args.Error(1)
+}
+
+func (m *MockGuestDataUC) Vote(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, option int) (entity.PollResults, error) {
+	args := m.Called(ctx, wishlistID, blockID, guestID, option)
+	return args.Get(0).(entity.PollResults), args.Error(1)
+}
+
+func (m *MockGuestDataUC) PollResults(ctx context.Context, blockID string, guestID uuid.UUID) (entity.PollResults, error) {
+	args := m.Called(ctx, blockID, guestID)
+	return args.Get(0).(entity.PollResults), args.Error(1)
+}
+
+func (m *MockGuestDataUC) SuggestTrack(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, title string) ([]entity.PlaylistTrack, error) {
+	args := m.Called(ctx, wishlistID, blockID, guestID, title)
+	v, _ := args.Get(0).([]entity.PlaylistTrack)
+	return v, args.Error(1)
+}
+
+func (m *MockGuestDataUC) Tracks(ctx context.Context, blockID string, guestID uuid.UUID) ([]entity.PlaylistTrack, error) {
+	args := m.Called(ctx, blockID, guestID)
+	v, _ := args.Get(0).([]entity.PlaylistTrack)
+	return v, args.Error(1)
+}
+
+func (m *MockGuestDataUC) ToggleTrackVote(ctx context.Context, trackID, guestID uuid.UUID) ([]entity.PlaylistTrack, error) {
+	args := m.Called(ctx, trackID, guestID)
+	v, _ := args.Get(0).([]entity.PlaylistTrack)
+	return v, args.Error(1)
+}
+
+func (m *MockGuestDataUC) AddGuestbookEntry(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, input usecase.GuestbookInput) (entity.GuestbookEntry, error) {
+	args := m.Called(ctx, wishlistID, blockID, guestID, input)
+	return args.Get(0).(entity.GuestbookEntry), args.Error(1)
+}
+
+func (m *MockGuestDataUC) Guestbook(ctx context.Context, blockID string, guestID uuid.UUID) ([]entity.GuestbookEntry, error) {
+	args := m.Called(ctx, blockID, guestID)
+	v, _ := args.Get(0).([]entity.GuestbookEntry)
+	return v, args.Error(1)
+}
+
+func (m *MockGuestDataUC) OwnerGuestbook(ctx context.Context, userID, wishlistID uuid.UUID, blockID string) ([]entity.GuestbookEntry, error) {
+	args := m.Called(ctx, userID, wishlistID, blockID)
+	v, _ := args.Get(0).([]entity.GuestbookEntry)
+	return v, args.Error(1)
+}
+
+func (m *MockGuestDataUC) OwnerSetGuestbookHidden(ctx context.Context, userID, entryID uuid.UUID, hidden bool) error {
+	args := m.Called(ctx, userID, entryID, hidden)
+	return args.Error(0)
+}

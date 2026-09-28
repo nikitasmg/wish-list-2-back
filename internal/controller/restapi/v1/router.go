@@ -16,6 +16,7 @@ func NewRouter(
 	wishlistUC usecase.WishlistUseCase,
 	presentUC usecase.PresentUseCase,
 	uploadUC usecase.UploadUseCase,
+	guestDataUC usecase.GuestDataUseCase,
 ) {
 	api := router.Group("/api/v1")
 
@@ -24,6 +25,7 @@ func NewRouter(
 	presentH := newPresentHandler(presentUC)
 	uploadH := newUploadHandler(uploadUC)
 	templateH := newTemplateHandler()
+	guestH := newGuestDataHandler(guestDataUC)
 
 	// Templates (public) — витрина шаблонов доступна и до регистрации
 	api.Get("/templates", templateH.getAll)
@@ -53,6 +55,19 @@ func NewRouter(
 	guest.Put("/presents/:id/reserve", presentH.reserve)
 	guest.Put("/presents/:id/release", presentH.release)
 
+	// Данные, которые оставляют гости. Сводка и модерация — в protected ниже,
+	// по отдельным путям: один и тот же путь не может быть и публичным,
+	// и защищённым.
+	guest.Get("/wishlists/:wishlistId/blocks/:blockId/rsvp", guestH.myRSVP)
+	guest.Post("/wishlists/:wishlistId/blocks/:blockId/rsvp", guestH.submitRSVP)
+	guest.Get("/wishlists/:wishlistId/blocks/:blockId/poll", guestH.pollResults)
+	guest.Post("/wishlists/:wishlistId/blocks/:blockId/poll", guestH.vote)
+	guest.Get("/wishlists/:wishlistId/blocks/:blockId/playlist", guestH.tracks)
+	guest.Post("/wishlists/:wishlistId/blocks/:blockId/playlist", guestH.suggestTrack)
+	guest.Put("/wishlists/:wishlistId/playlist/:trackId/vote", guestH.toggleTrackVote)
+	guest.Get("/wishlists/:wishlistId/blocks/:blockId/guestbook", guestH.guestbook)
+	guest.Post("/wishlists/:wishlistId/blocks/:blockId/guestbook", guestH.addGuestbookEntry)
+
 	// Protected routes
 	protected := api.Group("")
 	protected.Use(middleware.JWTProtected(jwtSecret))
@@ -69,6 +84,11 @@ func NewRouter(
 	protected.Put("/wishlists/:id", wishlistH.update)
 	protected.Put("/wishlists/:id/blocks", wishlistH.updateBlocks)
 	protected.Delete("/wishlists/:id", wishlistH.delete)
+
+	// Ответы гостей — только владельцу вишлиста
+	protected.Get("/wishlists/:wishlistId/blocks/:blockId/rsvp/summary", guestH.rsvpSummary)
+	protected.Get("/wishlists/:wishlistId/blocks/:blockId/guestbook/all", guestH.ownerGuestbook)
+	protected.Put("/wishlists/guestbook/:entryId/hidden", guestH.setGuestbookHidden)
 
 	// Presents (protected)
 	protected.Post("/wishlists/:wishlistId/presents", presentH.create)

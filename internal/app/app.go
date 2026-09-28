@@ -12,6 +12,7 @@ import (
 	"main/config"
 	"main/internal/controller/restapi"
 	"main/internal/repo/persistent"
+	guestDataUC "main/internal/usecase/guestdata"
 	presentUC "main/internal/usecase/present"
 	uploadUC "main/internal/usecase/upload"
 	userUC "main/internal/usecase/user"
@@ -34,6 +35,11 @@ func Run(cfg *config.Config) {
 		&persistent.WishlistModel{},
 		&persistent.PresentModel{},
 		&persistent.WishlistViewModel{},
+		&persistent.RSVPResponseModel{},
+		&persistent.PollVoteModel{},
+		&persistent.PlaylistTrackModel{},
+		&persistent.PlaylistVoteModel{},
+		&persistent.GuestbookEntryModel{},
 	); err != nil {
 		log.Fatalf("automigrate: %v", err)
 	}
@@ -57,6 +63,7 @@ func Run(cfg *config.Config) {
 	userRepo := persistent.NewUserRepo(db)
 	wishlistRepo := persistent.NewWishlistRepo(db)
 	presentRepo := persistent.NewPresentRepo(db)
+	guestDataRepo := persistent.NewGuestDataRepo(db)
 
 	// Hasher
 	pwHasher := hasher.New()
@@ -66,10 +73,11 @@ func Run(cfg *config.Config) {
 	wishlistUseCase := wishlistUC.New(wishlistRepo, fileStorage)
 	presentUseCase := presentUC.New(presentRepo, wishlistRepo, fileStorage)
 	uploadUseCase := uploadUC.New(fileStorage)
+	guestDataUseCase := guestDataUC.New(guestDataRepo, wishlistRepo)
 
 	// HTTP server
 	app := fiber.New()
-	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase)
+	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase, guestDataUseCase)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)

@@ -155,3 +155,44 @@ type FileInput struct {
 	Name  string
 	Data  []byte
 }
+
+// RSVPInput — ответ гостя на приглашение.
+type RSVPInput struct {
+	Name     string
+	Going    bool
+	PlusOne  int
+	Kids     int
+	Menu     string
+	Transfer bool
+	Comment  string
+}
+
+// GuestbookInput — запись в гостевой книге.
+type GuestbookInput struct {
+	Name     string
+	Text     string
+	PhotoURL string
+}
+
+// GuestDataUseCase — данные, которые оставляют гости публичной страницы.
+//
+// Все гостевые методы принимают guestID из куки: он решает, чей ответ
+// обновить, чей голос снять и какую запись пометить как свою. Методы со
+// словом Owner требуют userID и проверяют, что вишлист принадлежит ему.
+type GuestDataUseCase interface {
+	SubmitRSVP(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, input RSVPInput) (entity.RSVPResponse, error)
+	MyRSVP(ctx context.Context, blockID string, guestID uuid.UUID) (*entity.RSVPResponse, error)
+	OwnerRSVPSummary(ctx context.Context, userID, wishlistID uuid.UUID, blockID string) (entity.RSVPSummary, error)
+
+	Vote(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, option int) (entity.PollResults, error)
+	PollResults(ctx context.Context, blockID string, guestID uuid.UUID) (entity.PollResults, error)
+
+	SuggestTrack(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, title string) ([]entity.PlaylistTrack, error)
+	Tracks(ctx context.Context, blockID string, guestID uuid.UUID) ([]entity.PlaylistTrack, error)
+	ToggleTrackVote(ctx context.Context, trackID, guestID uuid.UUID) ([]entity.PlaylistTrack, error)
+
+	AddGuestbookEntry(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, input GuestbookInput) (entity.GuestbookEntry, error)
+	Guestbook(ctx context.Context, blockID string, guestID uuid.UUID) ([]entity.GuestbookEntry, error)
+	OwnerGuestbook(ctx context.Context, userID, wishlistID uuid.UUID, blockID string) ([]entity.GuestbookEntry, error)
+	OwnerSetGuestbookHidden(ctx context.Context, userID, entryID uuid.UUID, hidden bool) error
+}
