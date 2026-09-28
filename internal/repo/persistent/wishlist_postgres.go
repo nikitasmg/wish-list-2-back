@@ -3,11 +3,13 @@ package persistent
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"main/internal/entity"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type wishlistRepo struct {
@@ -92,4 +94,79 @@ func (r *wishlistRepo) DecrementPresentsCount(ctx context.Context, id uuid.UUID)
 		return fmt.Errorf("wishlistRepo.DecrementPresentsCount: %w", result.Error)
 	}
 	return nil
+}
+
+// ReservedCountsByUser — сколько подарков занято в каждом вишлисте пользователя.
+// Одним запросом с группировкой: карточка в кабинете показывает «4 из 8 заняты»,
+// и тянуть ради этой строки все подарки каждого вишлиста незачем.
+func (r *wishlistRepo) ReservedCountsByUser(ctx context.Context, userID uuid.UUID) (map[uuid.UUID]uint, error) {
+	var rows []struct {
+		WishlistID uuid.UUID
+		Reserved   uint
+	}
+
+	err := r.db.WithContext(ctx).
+		Model(&PresentModel{}).
+		Select("wishlist_id, count(*) as reserved").
+		Where("reserved = ? AND wishlist_id IN (?)", true,
+			r.db.Model(&WishlistModel{}).Select("id").Where("user_id = ?", userID)).
+		Group("wishlist_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("wishlistRepo.ReservedCountsByUser: %w", err)
+	}
+
+	counts := make(map[uuid.UUID]uint, len(rows))
+	for _, row := range rows {
+		counts[row.WishlistID] = row.Reserved
+	}
+	return counts, nil
+}
+
+// RegisterView — засчитывает просмотр публичной страницы. Дедупликация живёт
+// в уникальном ключе таблицы wishlist_views: повторная загрузка страницы тем же
+// гостем попадает в ON CONFLICT DO NOTHING и счётчик не трогает.
+func (r *wishlistRepo) RegisterView(ctx context.Context, wishlistID, guestID uuid.UUID) error {
+	view := WishlistViewModel{WishlistID: wishlistID, GuestID: guestID}
+
+	result := r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&view)
+	if result.Error != nil {
+		return fmt.Errorf("wishlistRepo.RegisterView: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return nil // этот гость уже был здесь
+	}
+
+	if err := r.db.WithContext(ctx).Model(&WishlistModel{}).
+		Where("id = ?", wishlistID).
+		UpdateColumn("views_count", gorm.Expr("views_count + 1")).Error; err != nil {
+		return fmt.Errorf("wishlistRepo.RegisterView: increment: %w", err)
+	}
+	return nil
+}
+
+// UpdateBlocks — запись блоков с проверкой версии. Условие по updated_at
+// заменяет чтение-перед-записью: если из другой вкладки уже сохранились другие
+// блоки, строка под условие не подойдёт и мы вернём false вместо молчаливой
+// перезаписи чужой правки.
+func (r *wishlistRepo) UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, blocksVersion int, expectedUpdatedAt time.Time) (bool, error) {
+	updates := map[string]interface{}{
+		"blocks":         toBlocksJSON(blocks),
+		"blocks_version": blocksVersion,
+	}
+
+	query := r.db.WithContext(ctx).Model(&WishlistModel{}).Where("id = ?", id)
+	if !expectedUpdatedAt.IsZero() {
+		// Postgres хранит микросекунды, клиент присылает их же в RFC3339 —
+		// сравнение точное, поэтому округлять ничего не нужно.
+		query = query.Where("updated_at = ?", expectedUpdatedAt)
+	}
+
+	result := query.Updates(updates)
+	if result.Error != nil {
+		return false, fmt.Errorf("wishlistRepo.UpdateBlocks: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
 }

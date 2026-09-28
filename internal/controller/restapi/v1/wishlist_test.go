@@ -24,7 +24,7 @@ func setupWishlistApp(wishlistMock usecase.WishlistUseCase) *fiber.App {
 	userMock := &MockUserUC{}
 	presentMock := &MockPresentUC{}
 	uploadMock := &MockUploadUC{}
-	v1.NewRouter(app, testSecret, "", userMock, wishlistMock, presentMock, uploadMock)
+	v1.NewRouter(app, testSecret, "", false, userMock, wishlistMock, presentMock, uploadMock)
 	return app
 }
 
@@ -108,7 +108,7 @@ func TestGetByShortID_NotFound(t *testing.T) {
 	wm := &MockWishlistUC{}
 	app := setupWishlistApp(wm)
 
-	wm.On("GetByShortID", mock.Anything, "abc-def-ghi").
+	wm.On("GetByShortID", mock.Anything, "abc-def-ghi", mock.AnythingOfType("uuid.UUID")).
 		Return(entity.Wishlist{}, errors.New("not found"))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/wishlists/s/abc-def-ghi", nil)
@@ -122,7 +122,7 @@ func TestGetByShortID_Success(t *testing.T) {
 	app := setupWishlistApp(wm)
 
 	wid := uuid.New()
-	wm.On("GetByShortID", mock.Anything, "abc-def-ghi").
+	wm.On("GetByShortID", mock.Anything, "abc-def-ghi", mock.AnythingOfType("uuid.UUID")).
 		Return(entity.Wishlist{ID: wid, ShortID: "abc-def-ghi", Title: "Test"}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/wishlists/s/abc-def-ghi", nil)

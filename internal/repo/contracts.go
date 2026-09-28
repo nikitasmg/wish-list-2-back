@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"time"
 
 	"main/internal/entity"
 
@@ -23,6 +24,14 @@ type WishlistRepo interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	IncrementPresentsCount(ctx context.Context, id uuid.UUID) error
 	DecrementPresentsCount(ctx context.Context, id uuid.UUID) error
+	// ReservedCountsByUser — занятые подарки по каждому вишлисту пользователя,
+	// одним запросом для карточек кабинета.
+	ReservedCountsByUser(ctx context.Context, userID uuid.UUID) (map[uuid.UUID]uint, error)
+	// RegisterView засчитывает просмотр, если этот гость его ещё не делал.
+	RegisterView(ctx context.Context, wishlistID, guestID uuid.UUID) error
+	// UpdateBlocks пишет блоки с проверкой версии. false — версия разошлась,
+	// вишлист успели изменить в другом месте.
+	UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, blocksVersion int, expectedUpdatedAt time.Time) (bool, error)
 }
 
 type PresentRepo interface {
@@ -31,4 +40,8 @@ type PresentRepo interface {
 	GetAllByWishlistID(ctx context.Context, wishlistID uuid.UUID) ([]entity.Present, error)
 	Update(ctx context.Context, present entity.Present) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	// Reserve и Release — условные апдейты. Возвращают false, когда строка под
+	// условие не подошла: подарок уже занят или бронь ставил другой гость.
+	Reserve(ctx context.Context, id, guestID uuid.UUID) (bool, error)
+	Release(ctx context.Context, id, guestID uuid.UUID) (bool, error)
 }

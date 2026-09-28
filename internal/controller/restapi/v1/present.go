@@ -1,12 +1,15 @@
 package v1
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
+	"main/internal/controller/restapi/middleware"
 	"main/internal/controller/restapi/v1/response"
+	"main/internal/entity"
 	"main/internal/usecase"
 )
 
@@ -41,6 +44,15 @@ func (h *presentHandler) getAll(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
 	}
+
+	// Кто забронировал — наружу не отдаём (поле помечено json:"-"), но текущему
+	// гостю показываем его собственные брони, чтобы он мог их снять.
+	guestID, _ := middleware.GuestIDFromCtx(c)
+	for i := range presents {
+		presents[i].ReservedByMe = presents[i].ReservedByGuest != "" &&
+			presents[i].ReservedByGuest == guestID.String()
+	}
+
 	return c.JSON(response.Data(presents))
 }
 
@@ -105,7 +117,12 @@ func (h *presentHandler) reserve(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid present ID"))
 	}
 
-	if err := h.uc.Reserve(c.Context(), id); err != nil {
+	guestID, ok := middleware.GuestIDFromCtx(c)
+	if !ok {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("не удалось определить гостя — включите куки и обновите страницу"))
+	}
+
+	if err := h.uc.Reserve(c.Context(), id, guestID); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
 	}
 	return c.JSON(response.Data(true))
@@ -117,8 +134,13 @@ func (h *presentHandler) release(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid present ID"))
 	}
 
-	if err := h.uc.Release(c.Context(), id); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
+	guestID, ok := middleware.GuestIDFromCtx(c)
+	if !ok {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("не удалось определить гостя — включите куки и обновите страницу"))
+	}
+
+	if err := h.uc.Release(c.Context(), id, guestID); err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(response.Error(err.Error()))
 	}
 	return c.JSON(response.Data(true))
 }
@@ -127,7 +149,7 @@ func (h *presentHandler) parsePresentInput(c *fiber.Ctx) (usecase.CreatePresentI
 	input := usecase.CreatePresentInput{
 		Title:       c.FormValue("title"),
 		Description: c.FormValue("description"),
-		Link:        c.FormValue("link"),
+		Links:       parseLinks(c),
 		PriceStr:    c.FormValue("price"),
 		CoverURL:    c.FormValue("cover_url"),
 	}
@@ -148,4 +170,29 @@ func (h *presentHandler) parsePresentInput(c *fiber.Ctx) (usecase.CreatePresentI
 	}
 
 	return input, nil
+}
+
+// parseLinks собирает ссылки на магазины из формы.
+//
+// Принимаем оба вида: links[0], links[1]… от нового фронта и одиночное поле
+// link от старого — иначе форма подарка перестала бы сохранять ссылку в тот
+// момент, когда бэк уже обновлён, а фронт ещё нет.
+func parseLinks(c *fiber.Ctx) []string {
+	var links []string
+
+	for i := 0; i < entity.MaxPresentLinks; i++ {
+		value := c.FormValue(fmt.Sprintf("links[%d]", i))
+		if value == "" {
+			continue
+		}
+		links = append(links, value)
+	}
+
+	if len(links) == 0 {
+		if single := c.FormValue("link"); single != "" {
+			links = append(links, single)
+		}
+	}
+
+	return links
 }

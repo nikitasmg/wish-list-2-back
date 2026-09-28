@@ -2,13 +2,19 @@ package wishlist
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
+	"regexp"
+	"time"
 
 	"github.com/google/uuid"
 
 	"main/internal/entity"
 	"main/internal/repo"
 	"main/internal/usecase"
+	"main/internal/usecase/template"
+	"main/pkg/imagefile"
 	minioPkg "main/pkg/minio"
 	"main/pkg/shortid"
 )
@@ -26,6 +32,10 @@ func New(wishlistRepo repo.WishlistRepo, fileStorage minioPkg.FileStorage) useca
 }
 
 func (uc *wishlistUseCase) Create(ctx context.Context, userID uuid.UUID, input usecase.CreateWishlistInput) (entity.Wishlist, error) {
+	if err := validateCustomScheme(input.ColorScheme, input.CustomScheme); err != nil {
+		return entity.Wishlist{}, err
+	}
+
 	coverURL, err := uc.resolveCover(input.CoverData, input.CoverName, input.CoverURL)
 	if err != nil {
 		return entity.Wishlist{}, err
@@ -37,22 +47,26 @@ func (uc *wishlistUseCase) Create(ctx context.Context, userID uuid.UUID, input u
 	}
 
 	w := entity.Wishlist{
-		ID:      uuid.New(),
-		UserID:  userID,
-		ShortID: sid,
-		Title:   input.Title,
+		ID:          uuid.New(),
+		UserID:      userID,
+		ShortID:     sid,
+		Title:       input.Title,
 		Description: input.Description,
-		Cover:   coverURL,
+		Cover:       coverURL,
 		Settings: entity.Settings{
 			ColorScheme:          input.ColorScheme,
 			ShowGiftAvailability: input.ShowGiftAvailability,
 			PresentsLayout:       input.PresentsLayout,
+			CustomScheme:         input.CustomScheme,
 		},
 		Location: entity.Location{
 			Name: input.LocationName,
 			Link: input.LocationLink,
 			Time: input.LocationTime,
 		},
+		EventDate:     input.EventDate,
+		Occasion:      input.Occasion,
+		BlocksVersion: entity.BlocksVersionCurrent,
 		PresentsCount: 0,
 	}
 
@@ -64,8 +78,72 @@ func (uc *wishlistUseCase) Create(ctx context.Context, userID uuid.UUID, input u
 }
 
 func (uc *wishlistUseCase) CreateConstructor(ctx context.Context, userID uuid.UUID, input usecase.CreateConstructorInput) (entity.Wishlist, error) {
-	if err := validateBlocks(input.Blocks); err != nil {
+	if err := validateNewBlocks(input.Blocks); err != nil {
 		return entity.Wishlist{}, err
+	}
+	if err := validateCustomScheme(input.ColorScheme, input.CustomScheme); err != nil {
+		return entity.Wishlist{}, err
+	}
+
+	sid, err := uc.generateUniqueShortID(ctx)
+	if err != nil {
+		return entity.Wishlist{}, err
+	}
+
+	w := entity.Wishlist{
+		ID:          uuid.New(),
+		UserID:      userID,
+		ShortID:     sid,
+		Title:       input.Title,
+		Description: input.Description,
+		Cover:       input.CoverURL,
+		Settings: entity.Settings{
+			ColorScheme:          input.ColorScheme,
+			ShowGiftAvailability: input.ShowGiftAvailability,
+			PresentsLayout:       input.PresentsLayout,
+			CustomScheme:         input.CustomScheme,
+		},
+		Location: entity.Location{
+			Name: input.LocationName,
+			Link: input.LocationLink,
+			Time: input.LocationTime,
+		},
+		EventDate:     input.EventDate,
+		Occasion:      input.Occasion,
+		Blocks:        input.Blocks,
+		BlocksVersion: entity.BlocksVersionCurrent,
+		PresentsCount: 0,
+	}
+
+	if err := uc.wishlistRepo.Create(ctx, w); err != nil {
+		return entity.Wishlist{}, fmt.Errorf("create constructor wishlist: %w", err)
+	}
+
+	return w, nil
+}
+
+func (uc *wishlistUseCase) CreateFromTemplate(ctx context.Context, userID uuid.UUID, input usecase.CreateFromTemplateInput) (entity.Wishlist, error) {
+	tpl, err := template.ByID(input.TemplateID)
+	if err != nil {
+		return entity.Wishlist{}, err
+	}
+
+	title := input.Title
+	if title == "" {
+		title = tpl.SampleTitle
+	}
+
+	// Копия: блоки шаблона общие для всех пользователей, и правка одного
+	// вишлиста не должна задеть тех, кто создаётся следом.
+	blocks := make([]entity.Block, len(tpl.Blocks))
+	copy(blocks, tpl.Blocks)
+
+	// Название с обложки должно совпадать с названием вишлиста — иначе человек
+	// вводит «Маше — 30!», а на странице остаётся «Ане — 28» из шаблона.
+	for i := range blocks {
+		if blocks[i].Type == "cover" {
+			blocks[i].Title = title
+		}
 	}
 
 	sid, err := uc.generateUniqueShortID(ctx)
@@ -77,25 +155,20 @@ func (uc *wishlistUseCase) CreateConstructor(ctx context.Context, userID uuid.UU
 		ID:      uuid.New(),
 		UserID:  userID,
 		ShortID: sid,
-		Title:   input.Title,
-		Description: input.Description,
-		Cover:   input.CoverURL,
+		Title:   title,
 		Settings: entity.Settings{
-			ColorScheme:          input.ColorScheme,
-			ShowGiftAvailability: input.ShowGiftAvailability,
-			PresentsLayout:       input.PresentsLayout,
+			ColorScheme:          tpl.ColorScheme,
+			ShowGiftAvailability: true,
+			PresentsLayout:       "list",
 		},
-		Location: entity.Location{
-			Name: input.LocationName,
-			Link: input.LocationLink,
-			Time: input.LocationTime,
-		},
-		Blocks:        input.Blocks,
-		PresentsCount: 0,
+		EventDate:     input.EventDate,
+		Occasion:      tpl.Occasion,
+		Blocks:        blocks,
+		BlocksVersion: entity.BlocksVersionCurrent,
 	}
 
 	if err := uc.wishlistRepo.Create(ctx, w); err != nil {
-		return entity.Wishlist{}, fmt.Errorf("create constructor wishlist: %w", err)
+		return entity.Wishlist{}, fmt.Errorf("create wishlist from template: %w", err)
 	}
 
 	return w, nil
@@ -105,12 +178,70 @@ func (uc *wishlistUseCase) GetByID(ctx context.Context, id uuid.UUID) (entity.Wi
 	return uc.wishlistRepo.GetByID(ctx, id)
 }
 
-func (uc *wishlistUseCase) GetByShortID(ctx context.Context, shortID string) (entity.Wishlist, error) {
-	return uc.wishlistRepo.GetByShortID(ctx, shortID)
+func (uc *wishlistUseCase) GetByShortID(ctx context.Context, shortID string, guestID uuid.UUID) (entity.Wishlist, error) {
+	w, err := uc.wishlistRepo.GetByShortID(ctx, shortID)
+	if err != nil {
+		return entity.Wishlist{}, err
+	}
+
+	if guestID != uuid.Nil {
+		// Просмотр не должен ронять страницу: счётчик в кабинете — не та вещь,
+		// ради которой гость заслуживает пятисотку.
+		if err := uc.wishlistRepo.RegisterView(ctx, w.ID, guestID); err != nil {
+			log.Printf("register view for wishlist %s: %v", w.ID, err)
+		}
+	}
+
+	w.Blocks = sanitizeBlocksForGuest(w.Blocks, time.Now())
+	return w, nil
 }
 
 func (uc *wishlistUseCase) GetAllByUser(ctx context.Context, userID uuid.UUID) ([]entity.Wishlist, error) {
-	return uc.wishlistRepo.GetAllByUserID(ctx, userID)
+	wishlists, err := uc.wishlistRepo.GetAllByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	reserved, err := uc.wishlistRepo.ReservedCountsByUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("reserved counts: %w", err)
+	}
+	for i := range wishlists {
+		wishlists[i].ReservedCount = reserved[wishlists[i].ID]
+	}
+
+	return wishlists, nil
+}
+
+// sanitizeBlocksForGuest готовит блоки к публичной выдаче.
+//
+// Скрытые блоки уходят целиком, а у нераскрытых секретов остаётся только тип и
+// дата раскрытия: прятать их на фронте бесполезно — содержимое всё равно видно
+// в ответе API, и весь смысл «секрета до даты» пропадает.
+func sanitizeBlocksForGuest(blocks []entity.Block, now time.Time) []entity.Block {
+	if blocks == nil {
+		return nil
+	}
+
+	visible := make([]entity.Block, 0, len(blocks))
+	for _, b := range blocks {
+		if b.Hidden {
+			continue
+		}
+		if b.IsSecret(now) {
+			b = entity.Block{
+				Type:           b.Type,
+				Position:       b.Position,
+				MobilePosition: b.MobilePosition,
+				ColSpan:        b.ColSpan,
+				RowSpan:        b.RowSpan,
+				RevealAt:       b.RevealAt,
+				Data:           json.RawMessage("{}"),
+			}
+		}
+		visible = append(visible, b)
+	}
+	return visible
 }
 
 func (uc *wishlistUseCase) Update(ctx context.Context, id uuid.UUID, input usecase.CreateWishlistInput) (entity.Wishlist, error) {
@@ -119,18 +250,25 @@ func (uc *wishlistUseCase) Update(ctx context.Context, id uuid.UUID, input useca
 		return entity.Wishlist{}, fmt.Errorf("wishlist not found: %w", err)
 	}
 
+	if err := validateCustomScheme(input.ColorScheme, input.CustomScheme); err != nil {
+		return entity.Wishlist{}, err
+	}
+
 	w.Title = input.Title
 	w.Description = input.Description
 	w.Settings = entity.Settings{
 		ColorScheme:          input.ColorScheme,
 		ShowGiftAvailability: input.ShowGiftAvailability,
 		PresentsLayout:       input.PresentsLayout,
+		CustomScheme:         input.CustomScheme,
 	}
 	w.Location = entity.Location{
 		Name: input.LocationName,
 		Link: input.LocationLink,
 		Time: input.LocationTime,
 	}
+	w.EventDate = input.EventDate
+	w.Occasion = input.Occasion
 
 	coverURL, err := uc.resolveCover(input.CoverData, input.CoverName, input.CoverURL)
 	if err != nil {
@@ -145,9 +283,17 @@ func (uc *wishlistUseCase) Update(ctx context.Context, id uuid.UUID, input useca
 	return w, nil
 }
 
-func (uc *wishlistUseCase) UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block) (entity.Wishlist, error) {
+func (uc *wishlistUseCase) UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error) {
+	// Legacy-типы здесь допускаются намеренно: вишлист формата v1 можно открыть
+	// и сохранить, не пересобирая его целиком. Запрещено только создавать из них
+	// новые — см. CreateConstructor.
 	if err := validateBlocks(blocks); err != nil {
 		return entity.Wishlist{}, err
+	}
+
+	updated, err := uc.wishlistRepo.UpdateBlocks(ctx, id, blocks, entity.BlocksVersionCurrent, expectedUpdatedAt)
+	if err != nil {
+		return entity.Wishlist{}, fmt.Errorf("update blocks: %w", err)
 	}
 
 	w, err := uc.wishlistRepo.GetByID(ctx, id)
@@ -155,10 +301,10 @@ func (uc *wishlistUseCase) UpdateBlocks(ctx context.Context, id uuid.UUID, block
 		return entity.Wishlist{}, fmt.Errorf("wishlist not found: %w", err)
 	}
 
-	w.Blocks = blocks
-
-	if err := uc.wishlistRepo.Update(ctx, w); err != nil {
-		return entity.Wishlist{}, fmt.Errorf("update blocks: %w", err)
+	if !updated {
+		// Отдаём актуальный вишлист вместе с ошибкой: клиенту есть что показать
+		// и с чем слить свою правку.
+		return w, usecase.ErrBlocksConflict
 	}
 
 	return w, nil
@@ -171,6 +317,9 @@ func (uc *wishlistUseCase) Delete(ctx context.Context, id uuid.UUID) error {
 // resolveCover — возвращает URL обложки: загружает файл в MinIO или возвращает URL as-is
 func (uc *wishlistUseCase) resolveCover(data []byte, name, url string) (string, error) {
 	if len(data) > 0 {
+		if err := imagefile.Validate(data); err != nil {
+			return "", err
+		}
 		uploaded, err := uc.fileStorage.Upload(name, data)
 		if err != nil {
 			return "", fmt.Errorf("upload cover: %w", err)
@@ -211,3 +360,42 @@ func validateBlocks(blocks []entity.Block) error {
 	}
 	return nil
 }
+
+// validateNewBlocks — то же плюс запрет на типы формата v1. Применяется только
+// при создании: старый вишлист должен оставаться сохраняемым.
+func validateNewBlocks(blocks []entity.Block) error {
+	if err := validateBlocks(blocks); err != nil {
+		return err
+	}
+	for i, b := range blocks {
+		if entity.LegacyBlockTypes[b.Type] {
+			return fmt.Errorf("block[%d]: тип %q больше не используется — его заменили list и media", i, b.Type)
+		}
+	}
+	return nil
+}
+
+// validateCustomScheme — «своя схема» приходит прямо из формы, поэтому база и
+// акцент проверяются: иначе в настройки уедет произвольная строка, которую
+// фронт потом подставит в CSS.
+func validateCustomScheme(colorScheme string, scheme *entity.CustomScheme) error {
+	if scheme == nil {
+		return nil
+	}
+	if colorScheme != CustomColorScheme {
+		return fmt.Errorf("customScheme задаётся только при colorScheme = %q", CustomColorScheme)
+	}
+	if scheme.Base != "dark" && scheme.Base != "light" {
+		return fmt.Errorf("customScheme.base должен быть dark или light")
+	}
+	if !hexColor.MatchString(scheme.Accent) {
+		return fmt.Errorf("customScheme.accent должен быть цветом вида #RRGGBB")
+	}
+	return nil
+}
+
+// CustomColorScheme — значение colorScheme, при котором цвета берутся из
+// customScheme, а не из готового набора схем.
+const CustomColorScheme = "custom"
+
+var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)

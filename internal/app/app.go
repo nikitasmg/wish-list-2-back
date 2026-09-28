@@ -33,8 +33,18 @@ func Run(cfg *config.Config) {
 		&persistent.UserModel{},
 		&persistent.WishlistModel{},
 		&persistent.PresentModel{},
+		&persistent.WishlistViewModel{},
 	); err != nil {
 		log.Fatalf("automigrate: %v", err)
+	}
+
+	// AutoMigrate добавляет колонки, но не переносит данные: дату праздника
+	// нужно достать из location вручную.
+	if err := persistent.BackfillEventDate(db); err != nil {
+		log.Fatalf("backfill event_date: %v", err)
+	}
+	if err := persistent.BackfillPresentLinks(db); err != nil {
+		log.Fatalf("backfill present links: %v", err)
 	}
 
 	// MinIO

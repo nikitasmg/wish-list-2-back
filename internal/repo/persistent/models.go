@@ -30,11 +30,28 @@ type WishlistModel struct {
 	PresentsCount uint
 	ShortID       *string    `gorm:"uniqueIndex;column:short_id"`
 	Blocks        BlocksJSON `gorm:"type:jsonb"`
-	CreatedAt     time.Time  `gorm:"autoCreateTime"`
-	UpdatedAt     time.Time  `gorm:"autoUpdateTime"`
+	// BlocksVersion: 1 — формат до редизайна, 2 — текущий. Существующие строки
+	// получают 1 через default, новые конструкторы пишут 2 явно.
+	BlocksVersion int        `gorm:"default:1"`
+	EventDate     *time.Time `gorm:"column:event_date;index"`
+	Occasion      string
+	ViewsCount    uint      `gorm:"column:views_count;default:0"`
+	CreatedAt     time.Time `gorm:"autoCreateTime"`
+	UpdatedAt     time.Time `gorm:"autoUpdateTime"`
 }
 
 func (WishlistModel) TableName() string { return "wishlists" }
+
+// WishlistViewModel — один просмотр публичной страницы одним гостем.
+// Таблица нужна только для дедупликации: без неё счётчик накручивается
+// перезагрузкой страницы.
+type WishlistViewModel struct {
+	WishlistID uuid.UUID `gorm:"primaryKey;column:wishlist_id"`
+	GuestID    uuid.UUID `gorm:"primaryKey;column:guest_id"`
+	CreatedAt  time.Time `gorm:"autoCreateTime"`
+}
+
+func (WishlistViewModel) TableName() string { return "wishlist_views" }
 
 // PresentModel — GORM-модель для таблицы "presents"
 type PresentModel struct {
@@ -42,21 +59,32 @@ type PresentModel struct {
 	Title       string    `gorm:"not null"`
 	Description string
 	Reserved    bool
-	Cover       string
-	Link        string
-	Price       *float64  `gorm:"type:decimal(10,2)"`
-	CreatedAt   time.Time `gorm:"autoCreateTime"`
-	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
-	WishlistID  uuid.UUID `gorm:"not null"`
+	// ReservedByGuest — кука гостя из middleware.GuestIdentity. Нужна, чтобы снять
+	// бронь мог только тот, кто её поставил; наружу это поле не выходит.
+	ReservedByGuest *string `gorm:"column:reserved_by_guest"`
+	Cover           string
+	Link            string
+	Links           LinksJSON `gorm:"type:jsonb"`
+	Price           *float64  `gorm:"type:decimal(10,2)"`
+	CreatedAt       time.Time `gorm:"autoCreateTime"`
+	UpdatedAt       time.Time `gorm:"autoUpdateTime"`
+	WishlistID      uuid.UUID `gorm:"not null"`
 }
 
 func (PresentModel) TableName() string { return "presents" }
 
 // SettingsJSON — JSON-тип для хранения настроек вишлиста
 type SettingsJSON struct {
-	ColorScheme          string `json:"colorScheme"`
-	ShowGiftAvailability bool   `json:"showGiftAvailability"`
-	PresentsLayout       string `json:"presentsLayout"`
+	ColorScheme          string            `json:"colorScheme"`
+	ShowGiftAvailability bool              `json:"showGiftAvailability"`
+	PresentsLayout       string            `json:"presentsLayout"`
+	CustomScheme         *CustomSchemeJSON `json:"customScheme,omitempty"`
+}
+
+// CustomSchemeJSON — «своя схема»: база и акцент, остальное выводит фронт.
+type CustomSchemeJSON struct {
+	Base   string `json:"base"`
+	Accent string `json:"accent"`
 }
 
 func (s *SettingsJSON) Scan(value interface{}) error {
@@ -99,6 +127,11 @@ type blockJSON struct {
 	MobilePosition *int            `json:"mobile_position"`
 	ColSpan        int             `json:"col_span"`
 	RowSpan        int             `json:"row_span"`
+	View           string          `json:"view"`
+	Caption        string          `json:"caption"`
+	Title          string          `json:"title"`
+	Hidden         bool            `json:"hidden"`
+	RevealAt       *time.Time      `json:"reveal_at"`
 	Data           json.RawMessage `json:"data"`
 }
 
@@ -119,4 +152,26 @@ func (b BlocksJSON) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return json.Marshal(b)
+}
+
+// LinksJSON — ссылки на магазины у подарка.
+type LinksJSON []string
+
+func (l *LinksJSON) Scan(value interface{}) error {
+	if value == nil {
+		*l = nil
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New("failed to scan LinksJSON")
+	}
+	return json.Unmarshal(bytes, l)
+}
+
+func (l LinksJSON) Value() (driver.Value, error) {
+	if l == nil {
+		return nil, nil
+	}
+	return json.Marshal(l)
 }

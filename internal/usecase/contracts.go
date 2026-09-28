@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"main/internal/entity"
@@ -28,6 +29,9 @@ type CreateWishlistInput struct {
 	LocationName         string
 	LocationLink         string
 	LocationTime         time.Time
+	CustomScheme         *entity.CustomScheme
+	EventDate            *time.Time
+	Occasion             string
 }
 
 // CreateConstructorInput — входные данные для создания/обновления вишлиста-конструктора
@@ -41,14 +45,24 @@ type CreateConstructorInput struct {
 	LocationName         string
 	LocationLink         string
 	LocationTime         time.Time
+	CustomScheme         *entity.CustomScheme
+	EventDate            *time.Time
+	Occasion             string
 	Blocks               []entity.Block
+}
+
+// CreateFromTemplateInput — создание вишлиста по готовому шаблону.
+type CreateFromTemplateInput struct {
+	TemplateID string
+	Title      string
+	EventDate  *time.Time
 }
 
 // CreatePresentInput — входные данные для создания/обновления подарка
 type CreatePresentInput struct {
 	Title       string
 	Description string
-	Link        string
+	Links       []string
 	PriceStr    string
 	CoverData   []byte
 	CoverName   string
@@ -89,13 +103,25 @@ type UserUseCase interface {
 type WishlistUseCase interface {
 	Create(ctx context.Context, userID uuid.UUID, input CreateWishlistInput) (entity.Wishlist, error)
 	CreateConstructor(ctx context.Context, userID uuid.UUID, input CreateConstructorInput) (entity.Wishlist, error)
+	// CreateFromTemplate копирует блоки шаблона вместе с текстами-подсказками:
+	// пользователь заменит их в конструкторе.
+	CreateFromTemplate(ctx context.Context, userID uuid.UUID, input CreateFromTemplateInput) (entity.Wishlist, error)
 	GetByID(ctx context.Context, id uuid.UUID) (entity.Wishlist, error)
-	GetByShortID(ctx context.Context, shortID string) (entity.Wishlist, error)
+	// GetByShortID — публичная страница: скрытые блоки вырезаются, нераскрытые
+	// секреты отдаются без содержимого, просмотр засчитывается гостю.
+	GetByShortID(ctx context.Context, shortID string, guestID uuid.UUID) (entity.Wishlist, error)
 	GetAllByUser(ctx context.Context, userID uuid.UUID) ([]entity.Wishlist, error)
 	Update(ctx context.Context, id uuid.UUID, input CreateWishlistInput) (entity.Wishlist, error)
-	UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block) (entity.Wishlist, error)
+	// UpdateBlocks: expectedUpdatedAt — версия, которую держит клиент. Нулевое
+	// время отключает проверку (старые клиенты без заголовка If-Match).
+	// Расхождение версий возвращает ErrBlocksConflict.
+	UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 }
+
+// ErrBlocksConflict — вишлист изменили в другом месте, пока клиент держал свою
+// версию. Обработчик отдаёт 409 и актуальный вишлист, чтобы было что показать.
+var ErrBlocksConflict = errors.New("вишлист изменили в другой вкладке")
 
 // PresentUseCase — бизнес-логика подарков
 type PresentUseCase interface {
@@ -104,8 +130,10 @@ type PresentUseCase interface {
 	GetAllByWishlist(ctx context.Context, wishlistID uuid.UUID) ([]entity.Present, error)
 	Update(ctx context.Context, id uuid.UUID, input CreatePresentInput) (entity.Present, error)
 	Delete(ctx context.Context, wishlistID, id uuid.UUID) error
-	Reserve(ctx context.Context, id uuid.UUID) error
-	Release(ctx context.Context, id uuid.UUID) error
+	// Reserve и Release принимают гостя из куки: бронь ставится от его имени,
+	// и снять её может только он.
+	Reserve(ctx context.Context, id, guestID uuid.UUID) error
+	Release(ctx context.Context, id, guestID uuid.UUID) error
 }
 
 // UploadUseCase — загрузка файлов

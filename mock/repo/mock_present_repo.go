@@ -37,3 +37,13 @@ func (m *MockPresentRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	args := m.Called(ctx, id)
 	return args.Error(0)
 }
+
+func (m *MockPresentRepo) Reserve(ctx context.Context, id, guestID uuid.UUID) (bool, error) {
+	args := m.Called(ctx, id, guestID)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockPresentRepo) Release(ctx context.Context, id, guestID uuid.UUID) (bool, error) {
+	args := m.Called(ctx, id, guestID)
+	return args.Bool(0), args.Error(1)
+}

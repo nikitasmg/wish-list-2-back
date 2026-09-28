@@ -67,8 +67,8 @@ func (m *MockWishlistUC) GetByID(ctx context.Context, id uuid.UUID) (entity.Wish
 	return args.Get(0).(entity.Wishlist), args.Error(1)
 }
 
-func (m *MockWishlistUC) GetByShortID(ctx context.Context, shortID string) (entity.Wishlist, error) {
-	args := m.Called(ctx, shortID)
+func (m *MockWishlistUC) GetByShortID(ctx context.Context, shortID string, guestID uuid.UUID) (entity.Wishlist, error) {
+	args := m.Called(ctx, shortID, guestID)
 	return args.Get(0).(entity.Wishlist), args.Error(1)
 }
 
@@ -82,8 +82,8 @@ func (m *MockWishlistUC) Update(ctx context.Context, id uuid.UUID, input usecase
 	return args.Get(0).(entity.Wishlist), args.Error(1)
 }
 
-func (m *MockWishlistUC) UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block) (entity.Wishlist, error) {
-	args := m.Called(ctx, id, blocks)
+func (m *MockWishlistUC) UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error) {
+	args := m.Called(ctx, id, blocks, expectedUpdatedAt)
 	return args.Get(0).(entity.Wishlist), args.Error(1)
 }
 
@@ -121,13 +121,13 @@ func (m *MockPresentUC) Delete(ctx context.Context, wishlistID, id uuid.UUID) er
 	return args.Error(0)
 }
 
-func (m *MockPresentUC) Reserve(ctx context.Context, id uuid.UUID) error {
-	args := m.Called(ctx, id)
+func (m *MockPresentUC) Reserve(ctx context.Context, id, guestID uuid.UUID) error {
+	args := m.Called(ctx, id, guestID)
 	return args.Error(0)
 }
 
-func (m *MockPresentUC) Release(ctx context.Context, id uuid.UUID) error {
-	args := m.Called(ctx, id)
+func (m *MockPresentUC) Release(ctx context.Context, id, guestID uuid.UUID) error {
+	args := m.Called(ctx, id, guestID)
 	return args.Error(0)
 }
 
@@ -143,4 +143,9 @@ func (m *MockUploadUC) Upload(ctx context.Context, name string, data []byte) (us
 func (m *MockUploadUC) BulkUpload(ctx context.Context, files []usecase.FileInput) ([]usecase.BulkUploadResult, error) {
 	args := m.Called(ctx, files)
 	return args.Get(0).([]usecase.BulkUploadResult), args.Error(1)
+}
+
+func (m *MockWishlistUC) CreateFromTemplate(ctx context.Context, userID uuid.UUID, input usecase.CreateFromTemplateInput) (entity.Wishlist, error) {
+	args := m.Called(ctx, userID, input)
+	return args.Get(0).(entity.Wishlist), args.Error(1)
 }

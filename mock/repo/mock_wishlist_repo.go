@@ -2,6 +2,7 @@ package mockrepo
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
@@ -51,4 +52,22 @@ func (m *MockWishlistRepo) IncrementPresentsCount(ctx context.Context, id uuid.U
 func (m *MockWishlistRepo) DecrementPresentsCount(ctx context.Context, id uuid.UUID) error {
 	args := m.Called(ctx, id)
 	return args.Error(0)
+}
+
+func (m *MockWishlistRepo) ReservedCountsByUser(ctx context.Context, userID uuid.UUID) (map[uuid.UUID]uint, error) {
+	args := m.Called(ctx, userID)
+	if counts, ok := args.Get(0).(map[uuid.UUID]uint); ok {
+		return counts, args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockWishlistRepo) RegisterView(ctx context.Context, wishlistID, guestID uuid.UUID) error {
+	args := m.Called(ctx, wishlistID, guestID)
+	return args.Error(0)
+}
+
+func (m *MockWishlistRepo) UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, blocksVersion int, expectedUpdatedAt time.Time) (bool, error) {
+	args := m.Called(ctx, id, blocks, blocksVersion, expectedUpdatedAt)
+	return args.Bool(0), args.Error(1)
 }

@@ -23,6 +23,11 @@ func NewRouter(
 	wishlistH := newWishlistHandler(wishlistUC)
 	presentH := newPresentHandler(presentUC)
 	uploadH := newUploadHandler(uploadUC)
+	templateH := newTemplateHandler()
+
+	// Templates (public) — витрина шаблонов доступна и до регистрации
+	api.Get("/templates", templateH.getAll)
+	api.Get("/templates/:id", templateH.getOne)
 
 	// Auth (public)
 	auth := api.Group("/auth")
@@ -36,12 +41,17 @@ func NewRouter(
 	authProtected.Get("/me", userH.me)
 	authProtected.Post("/logout", userH.logout)
 
-	// Wishlists (public) — статичные маршруты ПЕРЕД параметрическими
-	api.Get("/wishlists/s/:shortId", wishlistH.getByShortID)
-	api.Get("/wishlists/:id", wishlistH.getOne)
-	api.Get("/wishlists/:wishlistId/presents", presentH.getAll)
-	api.Put("/presents/:id/reserve", presentH.reserve)
-	api.Put("/presents/:id/release", presentH.release)
+	// Wishlists (public) — статичные маршруты ПЕРЕД параметрическими.
+	// Группа опознаёт гостя по куке: от этого зависит, чью бронь можно снять
+	// и чей ответ показать как свой.
+	guest := api.Group("")
+	guest.Use(middleware.GuestIdentity(jwtSecret, cookieDomain, secureCookie))
+
+	guest.Get("/wishlists/s/:shortId", wishlistH.getByShortID)
+	guest.Get("/wishlists/:id", wishlistH.getOne)
+	guest.Get("/wishlists/:wishlistId/presents", presentH.getAll)
+	guest.Put("/presents/:id/reserve", presentH.reserve)
+	guest.Put("/presents/:id/release", presentH.release)
 
 	// Protected routes
 	protected := api.Group("")
@@ -55,6 +65,7 @@ func NewRouter(
 	protected.Get("/wishlists", wishlistH.getAll)
 	protected.Post("/wishlists", wishlistH.create)
 	protected.Post("/wishlists/constructor", wishlistH.createConstructor)
+	protected.Post("/wishlists/from-template", wishlistH.createFromTemplate)
 	protected.Put("/wishlists/:id", wishlistH.update)
 	protected.Put("/wishlists/:id/blocks", wishlistH.updateBlocks)
 	protected.Delete("/wishlists/:id", wishlistH.delete)

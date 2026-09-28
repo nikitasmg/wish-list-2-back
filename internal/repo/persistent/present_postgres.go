@@ -60,3 +60,36 @@ func (r *presentRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 	return nil
 }
+
+// Reserve — атомарная бронь: одним условным UPDATE, без чтения перед записью.
+// Два гостя, нажавших «Забронировать» одновременно, попадают в один и тот же
+// WHERE reserved = false, но выиграет ровно один — второй получит 0 строк.
+func (r *presentRepo) Reserve(ctx context.Context, id, guestID uuid.UUID) (bool, error) {
+	guest := guestID.String()
+	result := r.db.WithContext(ctx).Model(&PresentModel{}).
+		Where("id = ? AND reserved = ?", id, false).
+		Updates(map[string]interface{}{
+			"reserved":          true,
+			"reserved_by_guest": &guest,
+		})
+	if result.Error != nil {
+		return false, fmt.Errorf("presentRepo.Reserve: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
+}
+
+// Release — снятие брони только тем гостем, который её поставил. Проверка живёт
+// в WHERE, а не в коде выше: иначе между чтением и записью успевает вклиниться
+// чужой запрос.
+func (r *presentRepo) Release(ctx context.Context, id, guestID uuid.UUID) (bool, error) {
+	result := r.db.WithContext(ctx).Model(&PresentModel{}).
+		Where("id = ? AND reserved = ? AND reserved_by_guest = ?", id, true, guestID.String()).
+		Updates(map[string]interface{}{
+			"reserved":          false,
+			"reserved_by_guest": nil,
+		})
+	if result.Error != nil {
+		return false, fmt.Errorf("presentRepo.Release: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
+}
