@@ -111,25 +111,32 @@ type WishlistUseCase interface {
 	// секреты отдаются без содержимого, просмотр засчитывается гостю.
 	GetByShortID(ctx context.Context, shortID string, guestID uuid.UUID) (entity.Wishlist, error)
 	GetAllByUser(ctx context.Context, userID uuid.UUID) ([]entity.Wishlist, error)
-	Update(ctx context.Context, id uuid.UUID, input CreateWishlistInput) (entity.Wishlist, error)
+	Update(ctx context.Context, userID, id uuid.UUID, input CreateWishlistInput) (entity.Wishlist, error)
 	// UpdateBlocks: expectedUpdatedAt — версия, которую держит клиент. Нулевое
 	// время отключает проверку (старые клиенты без заголовка If-Match).
 	// Расхождение версий возвращает ErrBlocksConflict.
-	UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error)
-	Delete(ctx context.Context, id uuid.UUID) error
+	UpdateBlocks(ctx context.Context, userID, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error)
+	Delete(ctx context.Context, userID, id uuid.UUID) error
 }
 
 // ErrBlocksConflict — вишлист изменили в другом месте, пока клиент держал свою
 // версию. Обработчик отдаёт 409 и актуальный вишлист, чтобы было что показать.
 var ErrBlocksConflict = errors.New("вишлист изменили в другой вкладке")
 
+// ErrForbidden — вишлист принадлежит другому пользователю.
+//
+// JWT сам по себе этого не ловит: он говорит, кто пришёл, но не чей вишлист
+// открыт. Без явной проверки любой залогиненный человек правил бы чужие
+// страницы, зная только UUID из публичной ссылки.
+var ErrForbidden = errors.New("это чужой вишлист")
+
 // PresentUseCase — бизнес-логика подарков
 type PresentUseCase interface {
-	Create(ctx context.Context, wishlistID uuid.UUID, input CreatePresentInput) (entity.Present, error)
-	GetByID(ctx context.Context, id uuid.UUID) (entity.Present, error)
+	Create(ctx context.Context, userID, wishlistID uuid.UUID, input CreatePresentInput) (entity.Present, error)
+	GetByID(ctx context.Context, userID, id uuid.UUID) (entity.Present, error)
 	GetAllByWishlist(ctx context.Context, wishlistID uuid.UUID) ([]entity.Present, error)
-	Update(ctx context.Context, id uuid.UUID, input CreatePresentInput) (entity.Present, error)
-	Delete(ctx context.Context, wishlistID, id uuid.UUID) error
+	Update(ctx context.Context, userID, id uuid.UUID, input CreatePresentInput) (entity.Present, error)
+	Delete(ctx context.Context, userID, wishlistID, id uuid.UUID) error
 	// Reserve и Release принимают гостя из куки: бронь ставится от его имени,
 	// и снять её может только он.
 	Reserve(ctx context.Context, id, guestID uuid.UUID) error

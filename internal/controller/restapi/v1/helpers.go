@@ -6,6 +6,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
+
+	"main/internal/controller/restapi/v1/response"
+	"main/internal/usecase"
 )
 
 func getUserID(c *fiber.Ctx) (uuid.UUID, error) {
@@ -30,4 +33,14 @@ func getUserID(c *fiber.Ctx) (uuid.UUID, error) {
 
 func stringToBool(s string) bool {
 	return s == "true" || s == "1"
+}
+
+// ownerError переводит отказ по правам в 403, всё остальное — в переданный
+// статус. Без отдельной ветки чужой вишлист отвечал бы «500 internal error»,
+// хотя запрос отработал ровно так, как должен.
+func ownerError(c *fiber.Ctx, err error, fallback int) error {
+	if errors.Is(err, usecase.ErrForbidden) {
+		return c.Status(fiber.StatusForbidden).JSON(response.Error(err.Error()))
+	}
+	return c.Status(fallback).JSON(response.Error(err.Error()))
 }

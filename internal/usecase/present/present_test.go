@@ -18,6 +18,9 @@ import (
 	mockrepo "main/mock/repo"
 )
 
+// owner — владелец вишлистов во всех тестах пакета: подарки правит только он.
+var owner = uuid.New()
+
 func newPresentUC(pr *mockrepo.MockPresentRepo, wr *mockrepo.MockWishlistRepo, fs *mockminio.MockFileStorage) usecase.PresentUseCase {
 	return presentUC.New(pr, wr, fs)
 }
@@ -29,11 +32,11 @@ func TestParsePrice_Empty(t *testing.T) {
 	uc := newPresentUC(pr, wr, fs)
 
 	wid := uuid.New()
-	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
-	p, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{
+	p, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
 		Title:    "Gift",
 		PriceStr: "",
 	})
@@ -48,11 +51,11 @@ func TestParsePrice_CommaSpaces(t *testing.T) {
 	uc := newPresentUC(pr, wr, fs)
 
 	wid := uuid.New()
-	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
-	p, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{
+	p, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
 		Title:    "Gift",
 		PriceStr: "1 500,50",
 	})
@@ -68,9 +71,9 @@ func TestParsePrice_Invalid(t *testing.T) {
 	uc := newPresentUC(pr, wr, fs)
 
 	wid := uuid.New()
-	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
 
-	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{
+	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
 		Title:    "Gift",
 		PriceStr: "abc",
 	})
@@ -164,7 +167,7 @@ func TestCreate_WishlistNotFound(t *testing.T) {
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{}, errors.New("not found"))
 
-	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{Title: "Gift"})
+	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{Title: "Gift"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "не существует")
 }
@@ -176,11 +179,11 @@ func TestCreate_Success(t *testing.T) {
 	uc := newPresentUC(pr, wr, fs)
 
 	wid := uuid.New()
-	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
-	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{Title: "Gift"})
+	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{Title: "Gift"})
 	require.NoError(t, err)
 	pr.AssertCalled(t, "Create", mock.Anything, mock.Anything)
 	wr.AssertCalled(t, "IncrementPresentsCount", mock.Anything, wid)
@@ -194,13 +197,58 @@ func TestDelete_Success(t *testing.T) {
 
 	id := uuid.New()
 	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
 	pr.On("Delete", mock.Anything, id).Return(nil)
 	wr.On("DecrementPresentsCount", mock.Anything, wid).Return(nil)
 
-	err := uc.Delete(context.Background(), wid, id)
+	err := uc.Delete(context.Background(), owner, wid, id)
 	require.NoError(t, err)
 	pr.AssertCalled(t, "Delete", mock.Anything, id)
 	wr.AssertCalled(t, "DecrementPresentsCount", mock.Anything, wid)
+}
+
+// Главная проверка авторизации: JWT говорит, кто пришёл, но не чей вишлист он
+// открыл. Без неё чужие подарки правились бы по одному UUID из публичной ссылки.
+func TestMutations_RejectForeignWishlist(t *testing.T) {
+	stranger := uuid.New()
+	wid, pid := uuid.New(), uuid.New()
+
+	newUC := func() (*mockrepo.MockPresentRepo, *mockrepo.MockWishlistRepo, usecase.PresentUseCase) {
+		pr := &mockrepo.MockPresentRepo{}
+		wr := &mockrepo.MockWishlistRepo{}
+		fs := &mockminio.MockFileStorage{}
+		wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+		return pr, wr, newPresentUC(pr, wr, fs)
+	}
+
+	t.Run("create", func(t *testing.T) {
+		pr, _, uc := newUC()
+		_, err := uc.Create(context.Background(), stranger, wid, usecase.CreatePresentInput{Title: "Gift"})
+		require.ErrorIs(t, err, usecase.ErrForbidden)
+		pr.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+	})
+
+	t.Run("update", func(t *testing.T) {
+		pr, _, uc := newUC()
+		pr.On("GetByID", mock.Anything, pid).Return(entity.Present{ID: pid, WishlistID: wid}, nil)
+		_, err := uc.Update(context.Background(), stranger, pid, usecase.CreatePresentInput{Title: "Gift"})
+		require.ErrorIs(t, err, usecase.ErrForbidden)
+		pr.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		pr, _, uc := newUC()
+		err := uc.Delete(context.Background(), stranger, wid, pid)
+		require.ErrorIs(t, err, usecase.ErrForbidden)
+		pr.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything)
+	})
+
+	t.Run("getByID", func(t *testing.T) {
+		pr, _, uc := newUC()
+		pr.On("GetByID", mock.Anything, pid).Return(entity.Present{ID: pid, WishlistID: wid}, nil)
+		_, err := uc.GetByID(context.Background(), stranger, pid)
+		require.ErrorIs(t, err, usecase.ErrForbidden)
+	})
 }
 
 func TestCreate_RejectsTooLongDescription(t *testing.T) {
@@ -210,9 +258,9 @@ func TestCreate_RejectsTooLongDescription(t *testing.T) {
 	uc := newPresentUC(pr, wr, fs)
 
 	wid := uuid.New()
-	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
 
-	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{
+	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
 		Title:       "Gift",
 		Description: strings.Repeat("я", entity.MaxPresentDescriptionLen+1),
 	})
@@ -231,11 +279,11 @@ func TestCreate_AllowsExactlyMaxCyrillicDescription(t *testing.T) {
 	uc := newPresentUC(pr, wr, fs)
 
 	wid := uuid.New()
-	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
-	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{
+	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
 		Title:       "Gift",
 		Description: strings.Repeat("я", entity.MaxPresentDescriptionLen),
 	})
@@ -250,9 +298,9 @@ func TestCreate_RejectsNonImageCover(t *testing.T) {
 	uc := newPresentUC(pr, wr, fs)
 
 	wid := uuid.New()
-	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
 
-	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{
+	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
 		Title:     "Gift",
 		CoverData: []byte("%PDF-1.7 это не картинка"),
 		CoverName: "doc.pdf",
@@ -270,11 +318,11 @@ func TestCreate_NormalizesLinks(t *testing.T) {
 	uc := newPresentUC(pr, wr, fs)
 
 	wid := uuid.New()
-	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
-	p, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{
+	p, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
 		Title: "Лампа-гриб",
 		Links: []string{" https://ozon.ru/p/1 ", "", "https://market.yandex.ru/p/2"},
 	})
@@ -292,9 +340,9 @@ func TestCreate_RejectsSchemelessLink(t *testing.T) {
 	uc := newPresentUC(pr, wr, fs)
 
 	wid := uuid.New()
-	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
 
-	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{
+	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
 		Title: "Лампа-гриб",
 		Links: []string{"ozon.ru/p/1"},
 	})
@@ -311,14 +359,14 @@ func TestCreate_RejectsTooManyLinks(t *testing.T) {
 	uc := newPresentUC(pr, wr, fs)
 
 	wid := uuid.New()
-	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid}, nil)
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
 
 	links := make([]string, entity.MaxPresentLinks+1)
 	for i := range links {
 		links[i] = "https://shop.example/p"
 	}
 
-	_, err := uc.Create(context.Background(), wid, usecase.CreatePresentInput{Title: "Gift", Links: links})
+	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{Title: "Gift", Links: links})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "не больше")

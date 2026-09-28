@@ -36,6 +36,10 @@ type Location struct {
 // по ним фильтруется публичная выдача, а копаться ради этого в произвольном
 // JSON каждого типа блока пришлось бы на каждом запросе.
 type Block struct {
+	// ID — стабильный идентификатор блока. К нему привязаны ответы гостей,
+	// голоса и треки: позиция для этого не годится, она меняется при каждой
+	// перестановке блоков.
+	ID             string     `json:"id"`
 	Type           string     `json:"type"`
 	Position       int        `json:"position"`
 	MobilePosition *int       `json:"mobilePosition"`

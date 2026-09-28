@@ -20,6 +20,9 @@ import (
 	"main/pkg/imagefile/imagefiletest"
 )
 
+// owner — владелец вишлистов в тестах пакета.
+var owner = uuid.New()
+
 func newWishlistUC(wr *mockrepo.MockWishlistRepo, fs *mockminio.MockFileStorage) usecase.WishlistUseCase {
 	return wishlistUC.New(wr, fs)
 }
@@ -159,9 +162,9 @@ func TestUpdateBlocks_Success(t *testing.T) {
 	blocks := []entity.Block{{Type: "text", Position: 0}}
 	wr.On("UpdateBlocks", mock.Anything, wid, blocks, entity.BlocksVersionCurrent, time.Time{}).
 		Return(true, nil)
-	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, Blocks: blocks}, nil)
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner, Blocks: blocks}, nil)
 
-	w, err := uc.UpdateBlocks(context.Background(), wid, blocks, time.Time{})
+	w, err := uc.UpdateBlocks(context.Background(), owner, wid, blocks, time.Time{})
 	require.NoError(t, err)
 	assert.Len(t, w.Blocks, 1)
 	wr.AssertExpectations(t)
@@ -176,14 +179,14 @@ func TestUpdateBlocks_Conflict(t *testing.T) {
 
 	wid := uuid.New()
 	stale := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	current := entity.Wishlist{ID: wid, Blocks: []entity.Block{{Type: "quote"}}}
+	current := entity.Wishlist{ID: wid, UserID: owner, Blocks: []entity.Block{{Type: "quote"}}}
 
 	blocks := []entity.Block{{Type: "text", Position: 0}}
 	wr.On("UpdateBlocks", mock.Anything, wid, blocks, entity.BlocksVersionCurrent, stale).
 		Return(false, nil)
 	wr.On("GetByID", mock.Anything, wid).Return(current, nil)
 
-	w, err := uc.UpdateBlocks(context.Background(), wid, blocks, stale)
+	w, err := uc.UpdateBlocks(context.Background(), owner, wid, blocks, stale)
 
 	require.ErrorIs(t, err, usecase.ErrBlocksConflict)
 	assert.Equal(t, "quote", w.Blocks[0].Type, "вместе с ошибкой отдаётся актуальная версия")
@@ -200,9 +203,9 @@ func TestUpdateBlocks_AllowsLegacyTypes(t *testing.T) {
 	blocks := []entity.Block{{Type: "agenda", Position: 0}}
 	wr.On("UpdateBlocks", mock.Anything, wid, blocks, entity.BlocksVersionCurrent, time.Time{}).
 		Return(true, nil)
-	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, Blocks: blocks}, nil)
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner, Blocks: blocks}, nil)
 
-	_, err := uc.UpdateBlocks(context.Background(), wid, blocks, time.Time{})
+	_, err := uc.UpdateBlocks(context.Background(), owner, wid, blocks, time.Time{})
 
 	require.NoError(t, err)
 }
@@ -406,4 +409,62 @@ func TestCreateFromTemplate_UnknownTemplate(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "не найден")
 	wr.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+}
+
+// Без проверки владельца любой залогиненный человек правил бы и удалял чужие
+// вишлисты, зная только UUID из публичной ссылки.
+func TestMutations_RejectForeignWishlist(t *testing.T) {
+	stranger := uuid.New()
+	wid := uuid.New()
+
+	newUC := func() (*mockrepo.MockWishlistRepo, usecase.WishlistUseCase) {
+		wr := &mockrepo.MockWishlistRepo{}
+		fs := &mockminio.MockFileStorage{}
+		wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+		return wr, newWishlistUC(wr, fs)
+	}
+
+	t.Run("update", func(t *testing.T) {
+		wr, uc := newUC()
+		_, err := uc.Update(context.Background(), stranger, wid, usecase.CreateWishlistInput{Title: "Чужой"})
+		require.ErrorIs(t, err, usecase.ErrForbidden)
+		wr.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	})
+
+	t.Run("updateBlocks", func(t *testing.T) {
+		wr, uc := newUC()
+		_, err := uc.UpdateBlocks(context.Background(), stranger, wid, []entity.Block{{Type: "text"}}, time.Time{})
+		require.ErrorIs(t, err, usecase.ErrForbidden)
+		wr.AssertNotCalled(t, "UpdateBlocks", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		wr, uc := newUC()
+		err := uc.Delete(context.Background(), stranger, wid)
+		require.ErrorIs(t, err, usecase.ErrForbidden)
+		wr.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything)
+	})
+}
+
+// Ответы гостей, голоса и треки привязаны к блоку, поэтому у каждого блока
+// должен быть стабильный id — позиция меняется при первой же перестановке.
+func TestCreateConstructor_AssignsBlockIDs(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	wr.On("GetByShortID", mock.Anything, mock.Anything).Return(entity.Wishlist{}, errors.New("not found"))
+	wr.On("Create", mock.Anything, mock.Anything).Return(nil)
+
+	w, err := uc.CreateConstructor(context.Background(), owner, usecase.CreateConstructorInput{
+		Title: "Test",
+		Blocks: []entity.Block{
+			{Type: "poll", Position: 0},
+			{Type: "text", Position: 1, ID: "уже-есть"},
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, w.Blocks[0].ID, "новому блоку выдаётся id")
+	assert.Equal(t, "уже-есть", w.Blocks[1].ID, "чужой id не перетирается")
 }

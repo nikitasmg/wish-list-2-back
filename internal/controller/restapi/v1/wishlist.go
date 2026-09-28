@@ -144,6 +144,10 @@ func (h *wishlistHandler) createFromTemplate(c *fiber.Ctx) error {
 }
 
 func (h *wishlistHandler) updateBlocks(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid wishlist ID"))
@@ -166,7 +170,7 @@ func (h *wishlistHandler) updateBlocks(c *fiber.Ctx) error {
 		expectedUpdatedAt = parsed
 	}
 
-	wishlist, err := h.uc.UpdateBlocks(c.Context(), id, blocks, expectedUpdatedAt)
+	wishlist, err := h.uc.UpdateBlocks(c.Context(), userID, id, blocks, expectedUpdatedAt)
 	if errors.Is(err, usecase.ErrBlocksConflict) {
 		// Отдаём актуальную версию: фронту есть что показать и с чем слить правку.
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
@@ -175,12 +179,16 @@ func (h *wishlistHandler) updateBlocks(c *fiber.Ctx) error {
 		})
 	}
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+		return ownerError(c, err, fiber.StatusBadRequest)
 	}
 	return c.JSON(response.Data(wishlist))
 }
 
 func (h *wishlistHandler) update(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid wishlist ID"))
@@ -194,21 +202,25 @@ func (h *wishlistHandler) update(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("поле название обязательно"))
 	}
 
-	wishlist, err := h.uc.Update(c.Context(), id, input)
+	wishlist, err := h.uc.Update(c.Context(), userID, id, input)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
+		return ownerError(c, err, fiber.StatusInternalServerError)
 	}
 	return c.JSON(response.Data(wishlist))
 }
 
 func (h *wishlistHandler) delete(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid wishlist ID"))
 	}
 
-	if err := h.uc.Delete(c.Context(), id); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
+	if err := h.uc.Delete(c.Context(), userID, id); err != nil {
+		return ownerError(c, err, fiber.StatusInternalServerError)
 	}
 	return c.JSON(response.Data(true))
 }

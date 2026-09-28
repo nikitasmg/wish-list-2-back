@@ -45,6 +45,7 @@ func toWishlistEntity(m WishlistModel) entity.Wishlist {
 				rowSpan = 1
 			}
 			blocks = append(blocks, entity.Block{
+				ID:             b.ID,
 				Type:           b.Type,
 				Position:       b.Position,
 				MobilePosition: b.MobilePosition,
@@ -234,6 +235,7 @@ func toBlocksJSON(blocks []entity.Block) BlocksJSON {
 			rowSpan = 1
 		}
 		out = append(out, blockJSON{
+			ID:             b.ID,
 			Type:           b.Type,
 			Position:       b.Position,
 			MobilePosition: b.MobilePosition,

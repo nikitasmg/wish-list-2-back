@@ -110,7 +110,7 @@ func (uc *wishlistUseCase) CreateConstructor(ctx context.Context, userID uuid.UU
 		},
 		EventDate:     input.EventDate,
 		Occasion:      input.Occasion,
-		Blocks:        input.Blocks,
+		Blocks:        ensureBlockIDs(input.Blocks),
 		BlocksVersion: entity.BlocksVersionCurrent,
 		PresentsCount: 0,
 	}
@@ -163,7 +163,7 @@ func (uc *wishlistUseCase) CreateFromTemplate(ctx context.Context, userID uuid.U
 		},
 		EventDate:     input.EventDate,
 		Occasion:      tpl.Occasion,
-		Blocks:        blocks,
+		Blocks:        ensureBlockIDs(blocks),
 		BlocksVersion: entity.BlocksVersionCurrent,
 	}
 
@@ -230,6 +230,9 @@ func sanitizeBlocksForGuest(blocks []entity.Block, now time.Time) []entity.Block
 		}
 		if b.IsSecret(now) {
 			b = entity.Block{
+				// ID остаётся: он не выдаёт содержимого, а фронту нужен, чтобы
+				// отличить один таймер от другого.
+				ID:             b.ID,
 				Type:           b.Type,
 				Position:       b.Position,
 				MobilePosition: b.MobilePosition,
@@ -244,10 +247,26 @@ func sanitizeBlocksForGuest(blocks []entity.Block, now time.Time) []entity.Block
 	return visible
 }
 
-func (uc *wishlistUseCase) Update(ctx context.Context, id uuid.UUID, input usecase.CreateWishlistInput) (entity.Wishlist, error) {
+// assertOwner — вишлист существует и принадлежит этому пользователю.
+//
+// JWT говорит, кто пришёл, но не чей вишлист он открыл: без этой проверки
+// любой залогиненный человек мог бы править и удалять чужие страницы, зная
+// только UUID из публичной ссылки.
+func (uc *wishlistUseCase) assertOwner(ctx context.Context, userID, id uuid.UUID) (entity.Wishlist, error) {
 	w, err := uc.wishlistRepo.GetByID(ctx, id)
 	if err != nil {
 		return entity.Wishlist{}, fmt.Errorf("wishlist not found: %w", err)
+	}
+	if w.UserID != userID {
+		return entity.Wishlist{}, usecase.ErrForbidden
+	}
+	return w, nil
+}
+
+func (uc *wishlistUseCase) Update(ctx context.Context, userID, id uuid.UUID, input usecase.CreateWishlistInput) (entity.Wishlist, error) {
+	w, err := uc.assertOwner(ctx, userID, id)
+	if err != nil {
+		return entity.Wishlist{}, err
 	}
 
 	if err := validateCustomScheme(input.ColorScheme, input.CustomScheme); err != nil {
@@ -283,13 +302,18 @@ func (uc *wishlistUseCase) Update(ctx context.Context, id uuid.UUID, input useca
 	return w, nil
 }
 
-func (uc *wishlistUseCase) UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error) {
+func (uc *wishlistUseCase) UpdateBlocks(ctx context.Context, userID, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error) {
+	if _, err := uc.assertOwner(ctx, userID, id); err != nil {
+		return entity.Wishlist{}, err
+	}
+
 	// Legacy-типы здесь допускаются намеренно: вишлист формата v1 можно открыть
 	// и сохранить, не пересобирая его целиком. Запрещено только создавать из них
 	// новые — см. CreateConstructor.
 	if err := validateBlocks(blocks); err != nil {
 		return entity.Wishlist{}, err
 	}
+	blocks = ensureBlockIDs(blocks)
 
 	updated, err := uc.wishlistRepo.UpdateBlocks(ctx, id, blocks, entity.BlocksVersionCurrent, expectedUpdatedAt)
 	if err != nil {
@@ -310,8 +334,25 @@ func (uc *wishlistUseCase) UpdateBlocks(ctx context.Context, id uuid.UUID, block
 	return w, nil
 }
 
-func (uc *wishlistUseCase) Delete(ctx context.Context, id uuid.UUID) error {
+func (uc *wishlistUseCase) Delete(ctx context.Context, userID, id uuid.UUID) error {
+	if _, err := uc.assertOwner(ctx, userID, id); err != nil {
+		return err
+	}
 	return uc.wishlistRepo.Delete(ctx, id)
+}
+
+// ensureBlockIDs выдаёт блокам стабильные идентификаторы.
+//
+// Позиция для этого не годится: ответы гостей, голоса и треки привязаны к
+// конкретному блоку, а позиция меняется при каждой перестановке — после
+// переноса блока вверх голоса уехали бы к соседу.
+func ensureBlockIDs(blocks []entity.Block) []entity.Block {
+	for i := range blocks {
+		if blocks[i].ID == "" {
+			blocks[i].ID = uuid.NewString()
+		}
+	}
+	return blocks
 }
 
 // resolveCover — возвращает URL обложки: загружает файл в MinIO или возвращает URL as-is

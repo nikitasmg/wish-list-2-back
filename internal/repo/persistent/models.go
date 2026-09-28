@@ -20,8 +20,8 @@ func (UserModel) TableName() string { return "users" }
 
 // WishlistModel — GORM-модель для таблицы "wishlists"
 type WishlistModel struct {
-	ID            uuid.UUID    `gorm:"primaryKey"`
-	Title         string       `gorm:"not null"`
+	ID            uuid.UUID `gorm:"primaryKey"`
+	Title         string    `gorm:"not null"`
 	Description   string
 	Cover         string
 	UserID        uuid.UUID    `gorm:"not null"`
@@ -122,6 +122,7 @@ func (l LocationJSON) Value() (driver.Value, error) {
 type BlocksJSON []blockJSON
 
 type blockJSON struct {
+	ID             string          `json:"id"`
 	Type           string          `json:"type"`
 	Position       int             `json:"position"`
 	MobilePosition *int            `json:"mobile_position"`

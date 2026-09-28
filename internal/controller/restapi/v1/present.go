@@ -22,14 +22,18 @@ func newPresentHandler(uc usecase.PresentUseCase) *presentHandler {
 }
 
 func (h *presentHandler) getOne(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid present ID"))
 	}
 
-	present, err := h.uc.GetByID(c.Context(), id)
+	present, err := h.uc.GetByID(c.Context(), userID, id)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(response.Error(err.Error()))
+		return ownerError(c, err, fiber.StatusNotFound)
 	}
 	return c.JSON(response.Data(present))
 }
@@ -57,6 +61,10 @@ func (h *presentHandler) getAll(c *fiber.Ctx) error {
 }
 
 func (h *presentHandler) create(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
 	wishlistID, err := uuid.Parse(c.Params("wishlistId"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid wishlist ID"))
@@ -70,14 +78,18 @@ func (h *presentHandler) create(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("title is required"))
 	}
 
-	present, err := h.uc.Create(c.Context(), wishlistID, input)
+	present, err := h.uc.Create(c.Context(), userID, wishlistID, input)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+		return ownerError(c, err, fiber.StatusBadRequest)
 	}
 	return c.Status(fiber.StatusCreated).JSON(response.Data(present))
 }
 
 func (h *presentHandler) update(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid present ID"))
@@ -88,14 +100,18 @@ func (h *presentHandler) update(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
 	}
 
-	present, err := h.uc.Update(c.Context(), id, input)
+	present, err := h.uc.Update(c.Context(), userID, id, input)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
+		return ownerError(c, err, fiber.StatusInternalServerError)
 	}
 	return c.JSON(response.Data(present))
 }
 
 func (h *presentHandler) delete(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid present ID"))
@@ -105,8 +121,8 @@ func (h *presentHandler) delete(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid wishlist ID"))
 	}
 
-	if err := h.uc.Delete(c.Context(), wishlistID, id); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
+	if err := h.uc.Delete(c.Context(), userID, wishlistID, id); err != nil {
+		return ownerError(c, err, fiber.StatusInternalServerError)
 	}
 	return c.JSON(response.Data(true))
 }

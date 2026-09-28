@@ -77,18 +77,18 @@ func (m *MockWishlistUC) GetAllByUser(ctx context.Context, userID uuid.UUID) ([]
 	return args.Get(0).([]entity.Wishlist), args.Error(1)
 }
 
-func (m *MockWishlistUC) Update(ctx context.Context, id uuid.UUID, input usecase.CreateWishlistInput) (entity.Wishlist, error) {
-	args := m.Called(ctx, id, input)
+func (m *MockWishlistUC) Update(ctx context.Context, userID, id uuid.UUID, input usecase.CreateWishlistInput) (entity.Wishlist, error) {
+	args := m.Called(ctx, userID, id, input)
 	return args.Get(0).(entity.Wishlist), args.Error(1)
 }
 
-func (m *MockWishlistUC) UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error) {
-	args := m.Called(ctx, id, blocks, expectedUpdatedAt)
+func (m *MockWishlistUC) UpdateBlocks(ctx context.Context, userID, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error) {
+	args := m.Called(ctx, userID, id, blocks, expectedUpdatedAt)
 	return args.Get(0).(entity.Wishlist), args.Error(1)
 }
 
-func (m *MockWishlistUC) Delete(ctx context.Context, id uuid.UUID) error {
-	args := m.Called(ctx, id)
+func (m *MockWishlistUC) Delete(ctx context.Context, userID, id uuid.UUID) error {
+	args := m.Called(ctx, userID, id)
 	return args.Error(0)
 }
 
@@ -96,13 +96,13 @@ func (m *MockWishlistUC) Delete(ctx context.Context, id uuid.UUID) error {
 
 type MockPresentUC struct{ mock.Mock }
 
-func (m *MockPresentUC) Create(ctx context.Context, wishlistID uuid.UUID, input usecase.CreatePresentInput) (entity.Present, error) {
-	args := m.Called(ctx, wishlistID, input)
+func (m *MockPresentUC) Create(ctx context.Context, userID, wishlistID uuid.UUID, input usecase.CreatePresentInput) (entity.Present, error) {
+	args := m.Called(ctx, userID, wishlistID, input)
 	return args.Get(0).(entity.Present), args.Error(1)
 }
 
-func (m *MockPresentUC) GetByID(ctx context.Context, id uuid.UUID) (entity.Present, error) {
-	args := m.Called(ctx, id)
+func (m *MockPresentUC) GetByID(ctx context.Context, userID, id uuid.UUID) (entity.Present, error) {
+	args := m.Called(ctx, userID, id)
 	return args.Get(0).(entity.Present), args.Error(1)
 }
 
@@ -111,13 +111,13 @@ func (m *MockPresentUC) GetAllByWishlist(ctx context.Context, wishlistID uuid.UU
 	return args.Get(0).([]entity.Present), args.Error(1)
 }
 
-func (m *MockPresentUC) Update(ctx context.Context, id uuid.UUID, input usecase.CreatePresentInput) (entity.Present, error) {
-	args := m.Called(ctx, id, input)
+func (m *MockPresentUC) Update(ctx context.Context, userID, id uuid.UUID, input usecase.CreatePresentInput) (entity.Present, error) {
+	args := m.Called(ctx, userID, id, input)
 	return args.Get(0).(entity.Present), args.Error(1)
 }
 
-func (m *MockPresentUC) Delete(ctx context.Context, wishlistID, id uuid.UUID) error {
-	args := m.Called(ctx, wishlistID, id)
+func (m *MockPresentUC) Delete(ctx context.Context, userID, wishlistID, id uuid.UUID) error {
+	args := m.Called(ctx, userID, wishlistID, id)
 	return args.Error(0)
 }
 

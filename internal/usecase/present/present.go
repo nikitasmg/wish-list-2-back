@@ -32,9 +32,25 @@ func New(presentRepo repo.PresentRepo, wishlistRepo repo.WishlistRepo, fileStora
 	}
 }
 
-func (uc *presentUseCase) Create(ctx context.Context, wishlistID uuid.UUID, input usecase.CreatePresentInput) (entity.Present, error) {
-	if _, err := uc.wishlistRepo.GetByID(ctx, wishlistID); err != nil {
-		return entity.Present{}, errors.New("вишлист с таким ID не существует")
+// assertOwner — подарки правит только владелец вишлиста.
+//
+// JWT подтверждает, кто пришёл, но не чей вишлист он открыл: без этой проверки
+// любой залогиненный человек добавлял бы и удалял подарки в чужих списках,
+// зная только UUID из публичной ссылки.
+func (uc *presentUseCase) assertOwner(ctx context.Context, userID, wishlistID uuid.UUID) error {
+	w, err := uc.wishlistRepo.GetByID(ctx, wishlistID)
+	if err != nil {
+		return errors.New("вишлист с таким ID не существует")
+	}
+	if w.UserID != userID {
+		return usecase.ErrForbidden
+	}
+	return nil
+}
+
+func (uc *presentUseCase) Create(ctx context.Context, userID, wishlistID uuid.UUID, input usecase.CreatePresentInput) (entity.Present, error) {
+	if err := uc.assertOwner(ctx, userID, wishlistID); err != nil {
+		return entity.Present{}, err
 	}
 
 	if err := validateDescription(input.Description); err != nil {
@@ -78,18 +94,29 @@ func (uc *presentUseCase) Create(ctx context.Context, wishlistID uuid.UUID, inpu
 	return p, nil
 }
 
-func (uc *presentUseCase) GetByID(ctx context.Context, id uuid.UUID) (entity.Present, error) {
-	return uc.presentRepo.GetByID(ctx, id)
+func (uc *presentUseCase) GetByID(ctx context.Context, userID, id uuid.UUID) (entity.Present, error) {
+	p, err := uc.presentRepo.GetByID(ctx, id)
+	if err != nil {
+		return entity.Present{}, err
+	}
+	if err := uc.assertOwner(ctx, userID, p.WishlistID); err != nil {
+		return entity.Present{}, err
+	}
+	return p, nil
 }
 
 func (uc *presentUseCase) GetAllByWishlist(ctx context.Context, wishlistID uuid.UUID) ([]entity.Present, error) {
 	return uc.presentRepo.GetAllByWishlistID(ctx, wishlistID)
 }
 
-func (uc *presentUseCase) Update(ctx context.Context, id uuid.UUID, input usecase.CreatePresentInput) (entity.Present, error) {
+func (uc *presentUseCase) Update(ctx context.Context, userID, id uuid.UUID, input usecase.CreatePresentInput) (entity.Present, error) {
 	p, err := uc.presentRepo.GetByID(ctx, id)
 	if err != nil {
 		return entity.Present{}, fmt.Errorf("present not found: %w", err)
+	}
+
+	if err := uc.assertOwner(ctx, userID, p.WishlistID); err != nil {
+		return entity.Present{}, err
 	}
 
 	if err := validateDescription(input.Description); err != nil {
@@ -124,7 +151,10 @@ func (uc *presentUseCase) Update(ctx context.Context, id uuid.UUID, input usecas
 	return p, nil
 }
 
-func (uc *presentUseCase) Delete(ctx context.Context, wishlistID, id uuid.UUID) error {
+func (uc *presentUseCase) Delete(ctx context.Context, userID, wishlistID, id uuid.UUID) error {
+	if err := uc.assertOwner(ctx, userID, wishlistID); err != nil {
+		return err
+	}
 	if err := uc.presentRepo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("delete present: %w", err)
 	}

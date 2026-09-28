@@ -87,7 +87,7 @@ func TestDelete_Success(t *testing.T) {
 	pid := uuid.New()
 	wid := uuid.New()
 
-	pm.On("Delete", mock.Anything, wid, pid).Return(nil)
+	pm.On("Delete", mock.Anything, userID, wid, pid).Return(nil)
 
 	req := httptest.NewRequest(
 		http.MethodDelete,
