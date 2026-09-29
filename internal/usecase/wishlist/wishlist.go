@@ -3,6 +3,7 @@ package wishlist
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
@@ -13,7 +14,7 @@ import (
 	"main/internal/entity"
 	"main/internal/repo"
 	"main/internal/usecase"
-	"main/internal/usecase/template"
+	"main/internal/usecase/systemtemplate"
 	"main/pkg/imagefile"
 	minioPkg "main/pkg/minio"
 	"main/pkg/shortid"
@@ -32,6 +33,16 @@ func New(wishlistRepo repo.WishlistRepo, fileStorage minioPkg.FileStorage) useca
 }
 
 func (uc *wishlistUseCase) Create(ctx context.Context, userID uuid.UUID, input usecase.CreateWishlistInput) (entity.Wishlist, error) {
+	count, err := uc.wishlistRepo.CountByUserID(ctx, userID)
+	if err != nil {
+		return entity.Wishlist{}, fmt.Errorf("count wishlists: %w", err)
+	}
+	if count >= usecase.MaxWishlistsPerUser {
+		return entity.Wishlist{}, errors.New("достигнут лимит вишлистов (20)")
+	}
+	if err := validateWishlistFields(input.Title, input.Description, input.LocationName, input.LocationLink, input.CoverURL); err != nil {
+		return entity.Wishlist{}, err
+	}
 	if err := validateCustomScheme(input.ColorScheme, input.CustomScheme); err != nil {
 		return entity.Wishlist{}, err
 	}
@@ -78,6 +89,16 @@ func (uc *wishlistUseCase) Create(ctx context.Context, userID uuid.UUID, input u
 }
 
 func (uc *wishlistUseCase) CreateConstructor(ctx context.Context, userID uuid.UUID, input usecase.CreateConstructorInput) (entity.Wishlist, error) {
+	count, err := uc.wishlistRepo.CountByUserID(ctx, userID)
+	if err != nil {
+		return entity.Wishlist{}, fmt.Errorf("count wishlists: %w", err)
+	}
+	if count >= usecase.MaxWishlistsPerUser {
+		return entity.Wishlist{}, errors.New("достигнут лимит вишлистов (20)")
+	}
+	if err := validateWishlistFields(input.Title, input.Description, input.LocationName, input.LocationLink, input.CoverURL); err != nil {
+		return entity.Wishlist{}, err
+	}
 	if err := validateNewBlocks(input.Blocks); err != nil {
 		return entity.Wishlist{}, err
 	}
@@ -122,15 +143,26 @@ func (uc *wishlistUseCase) CreateConstructor(ctx context.Context, userID uuid.UU
 	return w, nil
 }
 
-func (uc *wishlistUseCase) CreateFromTemplate(ctx context.Context, userID uuid.UUID, input usecase.CreateFromTemplateInput) (entity.Wishlist, error) {
-	tpl, err := template.ByID(input.TemplateID)
+func (uc *wishlistUseCase) CreateFromSystemTemplate(ctx context.Context, userID uuid.UUID, input usecase.CreateFromSystemTemplateInput) (entity.Wishlist, error) {
+	tpl, err := systemtemplate.Get(input.TemplateID)
 	if err != nil {
 		return entity.Wishlist{}, err
 	}
 
+	count, err := uc.wishlistRepo.CountByUserID(ctx, userID)
+	if err != nil {
+		return entity.Wishlist{}, fmt.Errorf("count wishlists: %w", err)
+	}
+	if count >= usecase.MaxWishlistsPerUser {
+		return entity.Wishlist{}, errors.New("достигнут лимит вишлистов (20)")
+	}
 	title := input.Title
 	if title == "" {
 		title = tpl.SampleTitle
+	}
+
+	if err := validateWishlistFields(title, "", "", "", ""); err != nil {
+		return entity.Wishlist{}, err
 	}
 
 	// Копия: блоки шаблона общие для всех пользователей, и правка одного
@@ -232,14 +264,13 @@ func sanitizeBlocksForGuest(blocks []entity.Block, now time.Time) []entity.Block
 			b = entity.Block{
 				// ID остаётся: он не выдаёт содержимого, а фронту нужен, чтобы
 				// отличить один таймер от другого.
-				ID:             b.ID,
-				Type:           b.Type,
-				Position:       b.Position,
-				MobilePosition: b.MobilePosition,
-				ColSpan:        b.ColSpan,
-				RowSpan:        b.RowSpan,
-				RevealAt:       b.RevealAt,
-				Data:           json.RawMessage("{}"),
+				ID:       b.ID,
+				Type:     b.Type,
+				Row:      b.Row,
+				Col:      b.Col,
+				ColSpan:  b.ColSpan,
+				RevealAt: b.RevealAt,
+				Data:     json.RawMessage("{}"),
 			}
 		}
 		visible = append(visible, b)
@@ -269,6 +300,9 @@ func (uc *wishlistUseCase) Update(ctx context.Context, userID, id uuid.UUID, inp
 		return entity.Wishlist{}, err
 	}
 
+	if err := validateWishlistFields(input.Title, input.Description, input.LocationName, input.LocationLink, input.CoverURL); err != nil {
+		return entity.Wishlist{}, err
+	}
 	if err := validateCustomScheme(input.ColorScheme, input.CustomScheme); err != nil {
 		return entity.Wishlist{}, err
 	}
@@ -396,8 +430,30 @@ func (uc *wishlistUseCase) generateUniqueShortID(ctx context.Context) (string, e
 	return "", fmt.Errorf("failed to generate unique short id after 5 attempts")
 }
 
+func validateWishlistFields(title, description, locationName, locationLink, coverURL string) error {
+	if len([]rune(title)) > usecase.MaxTitleLen {
+		return fmt.Errorf("title exceeds maximum length of %d characters", usecase.MaxTitleLen)
+	}
+	if len([]rune(description)) > usecase.MaxDescriptionLen {
+		return fmt.Errorf("description exceeds maximum length of %d characters", usecase.MaxDescriptionLen)
+	}
+	if len([]rune(locationName)) > usecase.MaxTitleLen {
+		return fmt.Errorf("location name exceeds maximum length of %d characters", usecase.MaxTitleLen)
+	}
+	if len(locationLink) > usecase.MaxURLLen {
+		return fmt.Errorf("location link exceeds maximum URL length of %d", usecase.MaxURLLen)
+	}
+	if len(coverURL) > usecase.MaxURLLen {
+		return fmt.Errorf("cover URL exceeds maximum URL length of %d", usecase.MaxURLLen)
+	}
+	return nil
+}
+
 // validateBlocks — проверяет типы блоков
 func validateBlocks(blocks []entity.Block) error {
+	if len(blocks) > usecase.MaxBlocksPerWishlist {
+		return fmt.Errorf("too many blocks: max %d", usecase.MaxBlocksPerWishlist)
+	}
 	for i, b := range blocks {
 		if !entity.ValidBlockTypes[b.Type] {
 			return fmt.Errorf("block[%d]: unknown type %q", i, b.Type)
@@ -405,8 +461,80 @@ func validateBlocks(blocks []entity.Block) error {
 		if b.ColSpan > 2 {
 			return fmt.Errorf("block[%d]: colSpan %d exceeds maximum of 2", i, b.ColSpan)
 		}
-		if b.RowSpan > 3 {
-			return fmt.Errorf("block[%d]: rowSpan %d exceeds maximum of 3", i, b.RowSpan)
+		if b.Row < 0 {
+			return fmt.Errorf("block[%d]: row must be >= 0", i)
+		}
+		if b.Col < 0 || b.Col > 1 {
+			return fmt.Errorf("block[%d]: col must be 0 or 1", i)
+		}
+		if len(b.Data) > usecase.MaxBlockDataSize {
+			return fmt.Errorf("block[%d]: data too large (max %d bytes)", i, usecase.MaxBlockDataSize)
+		}
+		if err := validateBlockData(i, b.Type, b.Data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateBlockData checks type-specific content constraints.
+// b.Data is guaranteed non-nil at this point (nil-substituted to "{}" in HTTP layer).
+func validateBlockData(idx int, blockType string, data json.RawMessage) error {
+	switch blockType {
+	case "text", "quote":
+		var d struct {
+			Content string `json:"content"`
+		}
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil // malformed but not oversized — let DB store it, frontend owns schema
+		}
+		if len([]rune(d.Content)) > usecase.MaxBlockTextField {
+			return fmt.Errorf("block[%d]: content exceeds maximum length of %d characters", idx, usecase.MaxBlockTextField)
+		}
+
+	case "checklist":
+		var d struct {
+			Items []struct {
+				Text string `json:"text"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil
+		}
+		if len(d.Items) > 100 {
+			return fmt.Errorf("block[%d]: checklist exceeds maximum of 100 items", idx)
+		}
+		for j, item := range d.Items {
+			if len([]rune(item.Text)) > 500 {
+				return fmt.Errorf("block[%d]: checklist item[%d] text exceeds 500 characters", idx, j)
+			}
+		}
+
+	case "image", "text_image", "video":
+		var d struct {
+			URL string `json:"url"`
+		}
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil
+		}
+		if len(d.URL) > usecase.MaxURLLen {
+			return fmt.Errorf("block[%d]: url exceeds maximum length of %d", idx, usecase.MaxURLLen)
+		}
+
+	case "gallery":
+		var d struct {
+			Images []string `json:"images"`
+		}
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil
+		}
+		if len(d.Images) > 50 {
+			return fmt.Errorf("block[%d]: gallery exceeds maximum of 50 images", idx)
+		}
+		for j, u := range d.Images {
+			if len(u) > usecase.MaxURLLen {
+				return fmt.Errorf("block[%d]: gallery image[%d] URL exceeds maximum length", idx, j)
+			}
 		}
 	}
 	return nil

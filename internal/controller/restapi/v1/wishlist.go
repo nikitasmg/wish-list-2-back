@@ -106,7 +106,7 @@ func (h *wishlistHandler) createConstructor(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(response.Data(wishlist))
 }
 
-func (h *wishlistHandler) createFromTemplate(c *fiber.Ctx) error {
+func (h *wishlistHandler) createFromSystemTemplate(c *fiber.Ctx) error {
 	userID, err := getUserID(c)
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
@@ -124,7 +124,7 @@ func (h *wishlistHandler) createFromTemplate(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("template_id is required"))
 	}
 
-	input := usecase.CreateFromTemplateInput{
+	input := usecase.CreateFromSystemTemplateInput{
 		TemplateID: body.TemplateID,
 		Title:      body.Title,
 	}
@@ -136,7 +136,7 @@ func (h *wishlistHandler) createFromTemplate(c *fiber.Ctx) error {
 		input.EventDate = &t
 	}
 
-	wishlist, err := h.uc.CreateFromTemplate(c.Context(), userID, input)
+	wishlist, err := h.uc.CreateFromSystemTemplate(c.Context(), userID, input)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
 	}
@@ -156,6 +156,12 @@ func (h *wishlistHandler) updateBlocks(c *fiber.Ctx) error {
 	var blocks []entity.Block
 	if err := c.BodyParser(&blocks); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid blocks JSON"))
+	}
+
+	for i := range blocks {
+		if blocks[i].Data == nil {
+			blocks[i].Data = json.RawMessage("{}")
+		}
 	}
 
 	expectedUpdatedAt, err := ifMatchVersion(c)
@@ -293,6 +299,11 @@ func (h *wishlistHandler) parseWishlistInput(c *fiber.Ctx) (usecase.CreateWishli
 		if err != nil {
 			return input, err
 		}
+
+		if len(data) > usecase.MaxFileSize {
+			return input, errors.New("файл слишком большой: максимум 10MB")
+		}
+
 		input.CoverData = data
 		input.CoverName = file.Filename
 	}

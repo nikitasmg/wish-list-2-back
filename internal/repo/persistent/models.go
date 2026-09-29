@@ -11,9 +11,11 @@ import (
 
 // UserModel — GORM-модель для таблицы "users"
 type UserModel struct {
-	ID       uuid.UUID `gorm:"primaryKey"`
-	Username string    `gorm:"unique;not null"`
-	Password string    `gorm:"not null"`
+	ID          uuid.UUID `gorm:"primaryKey"`
+	Username    string    `gorm:"unique;not null"`
+	Password    string    `gorm:"not null"`
+	DisplayName string
+	Avatar      string
 }
 
 func (UserModel) TableName() string { return "users" }
@@ -55,23 +57,60 @@ func (WishlistViewModel) TableName() string { return "wishlist_views" }
 
 // PresentModel — GORM-модель для таблицы "presents"
 type PresentModel struct {
-	ID          uuid.UUID `gorm:"primaryKey"`
-	Title       string    `gorm:"not null"`
-	Description string
-	Reserved    bool
-	// ReservedByGuest — кука гостя из middleware.GuestIdentity. Нужна, чтобы снять
-	// бронь мог только тот, кто её поставил; наружу это поле не выходит.
-	ReservedByGuest *string `gorm:"column:reserved_by_guest"`
-	Cover           string
-	Link            string
-	Links           LinksJSON `gorm:"type:jsonb"`
-	Price           *float64  `gorm:"type:decimal(10,2)"`
-	CreatedAt       time.Time `gorm:"autoCreateTime"`
-	UpdatedAt       time.Time `gorm:"autoUpdateTime"`
-	WishlistID      uuid.UUID `gorm:"not null"`
+	ID                uuid.UUID `gorm:"primaryKey"`
+	Title             string    `gorm:"not null"`
+	Description       string
+	Reserved          bool
+	ReservedByGuest   *string `gorm:"column:reserved_by_guest"`
+	Cover             string
+	Link              string
+	Price             *float64        `gorm:"type:decimal(10,2)"`
+	Type              string          `gorm:"not null;default:'single'"`
+	ParticipantsCount int             `gorm:"not null;default:0"`
+	Images            StringSliceJSON `gorm:"type:jsonb"`
+	Links             StringSliceJSON `gorm:"type:jsonb"`
+	CreatedAt         time.Time       `gorm:"autoCreateTime"`
+	UpdatedAt         time.Time       `gorm:"autoUpdateTime"`
+	WishlistID        uuid.UUID       `gorm:"not null"`
 }
 
 func (PresentModel) TableName() string { return "presents" }
+
+// PresentMetaModel — GORM-модель для таблицы "present_meta"
+type PresentMetaModel struct {
+	PresentID   uuid.UUID `gorm:"primaryKey"`
+	Source      string    `gorm:"not null"`
+	OriginalURL string    `gorm:"not null"`
+	Category    string
+	Brand       string
+	ParsedAt    time.Time `gorm:"not null"`
+}
+
+func (PresentMetaModel) TableName() string { return "present_meta" }
+
+// TemplateModel — GORM model for "templates" table
+type TemplateModel struct {
+	ID         uuid.UUID    `gorm:"primaryKey"`
+	UserID     uuid.UUID    `gorm:"not null;index"`
+	Name       string       `gorm:"not null"`
+	Settings   SettingsJSON `gorm:"type:json"`
+	Blocks     BlocksJSON   `gorm:"type:jsonb"`
+	IsPublic   bool         `gorm:"not null;default:false;index"`
+	LikesCount int          `gorm:"not null;default:0"`
+	CreatedAt  time.Time    `gorm:"autoCreateTime;index"`
+	UpdatedAt  time.Time    `gorm:"autoUpdateTime"`
+}
+
+func (TemplateModel) TableName() string { return "templates" }
+
+// TemplateLikeModel — GORM model for "template_likes" table
+type TemplateLikeModel struct {
+	UserID     uuid.UUID `gorm:"primaryKey;column:user_id"`
+	TemplateID uuid.UUID `gorm:"primaryKey;column:template_id"`
+	CreatedAt  time.Time `gorm:"not null;autoCreateTime"`
+}
+
+func (TemplateLikeModel) TableName() string { return "template_likes" }
 
 // SettingsJSON — JSON-тип для хранения настроек вишлиста
 type SettingsJSON struct {
@@ -122,18 +161,17 @@ func (l LocationJSON) Value() (driver.Value, error) {
 type BlocksJSON []blockJSON
 
 type blockJSON struct {
-	ID             string          `json:"id"`
-	Type           string          `json:"type"`
-	Position       int             `json:"position"`
-	MobilePosition *int            `json:"mobile_position"`
-	ColSpan        int             `json:"col_span"`
-	RowSpan        int             `json:"row_span"`
-	View           string          `json:"view"`
-	Caption        string          `json:"caption"`
-	Title          string          `json:"title"`
-	Hidden         bool            `json:"hidden"`
-	RevealAt       *time.Time      `json:"reveal_at"`
-	Data           json.RawMessage `json:"data"`
+	ID       string          `json:"id"`
+	Type     string          `json:"type"`
+	Row      int             `json:"row"`
+	Col      int             `json:"col"`
+	ColSpan  int             `json:"col_span"`
+	View     string          `json:"view"`
+	Caption  string          `json:"caption"`
+	Title    string          `json:"title"`
+	Hidden   bool            `json:"hidden"`
+	RevealAt *time.Time      `json:"reveal_at"`
+	Data     json.RawMessage `json:"data"`
 }
 
 func (b *BlocksJSON) Scan(value interface{}) error {
@@ -155,24 +193,27 @@ func (b BlocksJSON) Value() (driver.Value, error) {
 	return json.Marshal(b)
 }
 
-// LinksJSON — ссылки на магазины у подарка.
-type LinksJSON []string
+// StringSliceJSON — JSONB-тип для хранения массива строк (картинки/ссылки)
+type StringSliceJSON []string
 
-func (l *LinksJSON) Scan(value interface{}) error {
+func (s *StringSliceJSON) Scan(value interface{}) error {
 	if value == nil {
-		*l = nil
+		*s = nil
 		return nil
 	}
 	bytes, ok := value.([]byte)
 	if !ok {
-		return errors.New("failed to scan LinksJSON")
+		return errors.New("failed to scan StringSliceJSON")
 	}
-	return json.Unmarshal(bytes, l)
+	return json.Unmarshal(bytes, s)
 }
 
-func (l LinksJSON) Value() (driver.Value, error) {
-	if l == nil {
+func (s StringSliceJSON) Value() (driver.Value, error) {
+	if s == nil {
 		return nil, nil
 	}
-	return json.Marshal(l)
+	return json.Marshal(s)
 }
+
+// LinksJSON remains an alias for callers of the earlier redesign.
+type LinksJSON = StringSliceJSON

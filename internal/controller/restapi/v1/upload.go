@@ -35,6 +35,10 @@ func (h *uploadHandler) upload(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(response.Error("failed to read file"))
 	}
 
+	if len(data) > usecase.MaxFileSize {
+		return c.Status(fiber.StatusRequestEntityTooLarge).JSON(response.Error("файл слишком большой: максимум 10MB"))
+	}
+
 	result, err := h.uc.Upload(c.Context(), file.Filename, data)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
@@ -56,6 +60,10 @@ func (h *uploadHandler) bulkUpload(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("files are required"))
 	}
 
+	if len(fileHeaders) > usecase.MaxBulkUploadFiles {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("слишком много файлов: максимум 10"))
+	}
+
 	var inputs []usecase.FileInput
 	for i, fh := range fileHeaders {
 		f, err := fh.Open()
@@ -67,6 +75,11 @@ func (h *uploadHandler) bulkUpload(c *fiber.Ctx) error {
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(response.Error("failed to read file"))
 		}
+
+		if len(data) > usecase.MaxFileSize {
+			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(response.Error("файл слишком большой: максимум 10MB"))
+		}
+
 		inputs = append(inputs, usecase.FileInput{Index: i, Name: fh.Filename, Data: data})
 	}
 

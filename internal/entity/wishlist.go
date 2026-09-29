@@ -30,28 +30,27 @@ type Location struct {
 	Time time.Time `json:"time"`
 }
 
-// Block — один блок конструктора вишлиста.
+// Block — один блок конструктора вишлиста (координатная модель).
 //
-// View, Caption, Title, Hidden и RevealAt вынесены из Data отдельными полями:
-// по ним фильтруется публичная выдача, а копаться ради этого в произвольном
-// JSON каждого типа блока пришлось бы на каждом запросе.
+// Раскладка — Row/Col/ColSpan, как в продакшене. Остальное добавил редизайн:
+// View, Caption, Title, Hidden и RevealAt вынесены из Data отдельными полями,
+// потому что по ним фильтруется публичная выдача, а копаться ради этого в
+// произвольном JSON каждого типа блока пришлось бы на каждом запросе.
 type Block struct {
 	// ID — стабильный идентификатор блока. К нему привязаны ответы гостей,
-	// голоса и треки: позиция для этого не годится, она меняется при каждой
-	// перестановке блоков.
-	ID             string     `json:"id"`
-	Type           string     `json:"type"`
-	Position       int        `json:"position"`
-	MobilePosition *int       `json:"mobilePosition"`
-	ColSpan        int        `json:"colSpan"` // 1 or 2, default 1
-	RowSpan        int        `json:"rowSpan"` // 1–3, default 1
-	View           string     `json:"view"`    // вариант отображения внутри типа
-	Caption        string     `json:"caption"`
-	Title          string     `json:"title"`
-	Hidden         bool       `json:"hidden"`   // владелец скрыл блок со страницы
-	RevealAt       *time.Time `json:"revealAt"` // «секрет до даты»
-
-	Data json.RawMessage `json:"data"`
+	// голоса и треки: координаты для этого не годятся, они меняются при
+	// каждой перестановке блоков.
+	ID       string          `json:"id"`
+	Type     string          `json:"type"`
+	Row      int             `json:"row"`     // 0-based row in grid
+	Col      int             `json:"col"`     // 0 = left, 1 = right
+	ColSpan  int             `json:"colSpan"` // 1 or 2
+	View     string          `json:"view"`    // вариант отображения внутри типа
+	Caption  string          `json:"caption"`
+	Title    string          `json:"title"`
+	Hidden   bool            `json:"hidden"`   // владелец скрыл блок со страницы
+	RevealAt *time.Time      `json:"revealAt"` // «секрет до даты»
+	Data     json.RawMessage `json:"data"`
 }
 
 // IsSecret — блок ещё не раскрылся: гостю вместо содержимого показывается таймер.

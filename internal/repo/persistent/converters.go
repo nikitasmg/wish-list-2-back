@@ -10,17 +10,21 @@ import (
 
 func toUserEntity(m UserModel) entity.User {
 	return entity.User{
-		ID:       m.ID,
-		Username: m.Username,
-		Password: m.Password,
+		ID:          m.ID,
+		Username:    m.Username,
+		Password:    m.Password,
+		DisplayName: m.DisplayName,
+		Avatar:      m.Avatar,
 	}
 }
 
 func toUserModel(u entity.User) UserModel {
 	return UserModel{
-		ID:       u.ID,
-		Username: u.Username,
-		Password: u.Password,
+		ID:          u.ID,
+		Username:    u.Username,
+		Password:    u.Password,
+		DisplayName: u.DisplayName,
+		Avatar:      u.Avatar,
 	}
 }
 
@@ -40,23 +44,18 @@ func toWishlistEntity(m WishlistModel) entity.Wishlist {
 			if colSpan < 1 {
 				colSpan = 1
 			}
-			rowSpan := b.RowSpan
-			if rowSpan < 1 {
-				rowSpan = 1
-			}
 			blocks = append(blocks, entity.Block{
-				ID:             b.ID,
-				Type:           b.Type,
-				Position:       b.Position,
-				MobilePosition: b.MobilePosition,
-				ColSpan:        colSpan,
-				RowSpan:        rowSpan,
-				View:           b.View,
-				Caption:        b.Caption,
-				Title:          b.Title,
-				Hidden:         b.Hidden,
-				RevealAt:       b.RevealAt,
-				Data:           b.Data,
+				ID:       b.ID,
+				Type:     b.Type,
+				Row:      b.Row,
+				Col:      b.Col,
+				ColSpan:  colSpan,
+				View:     b.View,
+				Caption:  b.Caption,
+				Title:    b.Title,
+				Hidden:   b.Hidden,
+				RevealAt: b.RevealAt,
+				Data:     b.Data,
 			})
 		}
 	}
@@ -169,18 +168,21 @@ func toPresentEntity(m PresentModel) entity.Present {
 	}
 
 	return entity.Present{
-		ID:              m.ID,
-		Title:           m.Title,
-		Description:     m.Description,
-		Reserved:        m.Reserved,
-		ReservedByGuest: reservedBy,
-		Cover:           m.Cover,
-		Links:           links,
-		Link:            firstLink,
-		Price:           m.Price,
-		CreatedAt:       m.CreatedAt,
-		UpdatedAt:       m.UpdatedAt,
-		WishlistID:      m.WishlistID,
+		ID:                m.ID,
+		Title:             m.Title,
+		Description:       m.Description,
+		Reserved:          m.Reserved,
+		ReservedByGuest:   reservedBy,
+		Cover:             m.Cover,
+		Links:             links,
+		Link:              firstLink,
+		Price:             m.Price,
+		CreatedAt:         m.CreatedAt,
+		UpdatedAt:         m.UpdatedAt,
+		WishlistID:        m.WishlistID,
+		Type:              m.Type,
+		ParticipantsCount: m.ParticipantsCount,
+		Images:            []string(m.Images),
 	}
 }
 
@@ -198,19 +200,33 @@ func toPresentModel(p entity.Present) PresentModel {
 	}
 
 	return PresentModel{
-		ID:              p.ID,
-		Title:           p.Title,
-		Description:     p.Description,
-		Reserved:        p.Reserved,
-		ReservedByGuest: reservedBy,
-		Cover:           p.Cover,
-		Links:           LinksJSON(p.Links),
-		Link:            firstLink,
-		Price:           p.Price,
-		CreatedAt:       p.CreatedAt,
-		UpdatedAt:       p.UpdatedAt,
-		WishlistID:      p.WishlistID,
+		ID:                p.ID,
+		Title:             p.Title,
+		Description:       p.Description,
+		Reserved:          p.Reserved,
+		ReservedByGuest:   reservedBy,
+		Cover:             p.Cover,
+		Links:             LinksJSON(p.Links),
+		Link:              firstLink,
+		Price:             p.Price,
+		CreatedAt:         p.CreatedAt,
+		UpdatedAt:         p.UpdatedAt,
+		WishlistID:        p.WishlistID,
+		Type:              p.Type,
+		ParticipantsCount: p.ParticipantsCount,
+		Images:            StringSliceJSON(p.Images),
 	}
+}
+
+// Template
+
+func toTemplateEntity(m TemplateModel) entity.Template {
+	w := toWishlistEntity(WishlistModel{Blocks: m.Blocks, Settings: m.Settings})
+	return entity.Template{ID: m.ID, UserID: m.UserID, Name: m.Name, Settings: w.Settings, Blocks: w.Blocks, IsPublic: m.IsPublic, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt}
+}
+func toTemplateModel(t entity.Template) TemplateModel {
+	w := toWishlistModel(entity.Wishlist{Blocks: t.Blocks, Settings: t.Settings})
+	return TemplateModel{ID: t.ID, UserID: t.UserID, Name: t.Name, Settings: w.Settings, Blocks: w.Blocks, IsPublic: t.IsPublic, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
 }
 
 // toBlocksJSON — блоки в вид для jsonb. Вынесено из toWishlistModel, потому что
@@ -230,23 +246,18 @@ func toBlocksJSON(blocks []entity.Block) BlocksJSON {
 		if colSpan < 1 {
 			colSpan = 1
 		}
-		rowSpan := b.RowSpan
-		if rowSpan < 1 {
-			rowSpan = 1
-		}
 		out = append(out, blockJSON{
-			ID:             b.ID,
-			Type:           b.Type,
-			Position:       b.Position,
-			MobilePosition: b.MobilePosition,
-			ColSpan:        colSpan,
-			RowSpan:        rowSpan,
-			View:           b.View,
-			Caption:        b.Caption,
-			Title:          b.Title,
-			Hidden:         b.Hidden,
-			RevealAt:       b.RevealAt,
-			Data:           data,
+			ID:       b.ID,
+			Type:     b.Type,
+			Row:      b.Row,
+			Col:      b.Col,
+			ColSpan:  colSpan,
+			View:     b.View,
+			Caption:  b.Caption,
+			Title:    b.Title,
+			Hidden:   b.Hidden,
+			RevealAt: b.RevealAt,
+			Data:     data,
 		})
 	}
 	return out

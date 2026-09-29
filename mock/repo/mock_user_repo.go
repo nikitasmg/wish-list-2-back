@@ -27,3 +27,8 @@ func (m *MockUserRepo) GetByID(ctx context.Context, id uuid.UUID) (entity.User, 
 	args := m.Called(ctx, id)
 	return args.Get(0).(entity.User), args.Error(1)
 }
+
+func (m *MockUserRepo) Update(ctx context.Context, user entity.User) error {
+	args := m.Called(ctx, user)
+	return args.Error(0)
+}

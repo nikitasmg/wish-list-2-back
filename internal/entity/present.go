@@ -7,19 +7,20 @@ import (
 )
 
 type Present struct {
-	ID          uuid.UUID `json:"id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	Reserved    bool      `json:"reserved"`
-	Cover       string    `json:"cover"`
+	ID                uuid.UUID `json:"id"`
+	Title             string    `json:"title"`
+	Description       string    `json:"description"`
+	Reserved          bool      `json:"reserved"`
+	Cover             string    `json:"cover"`
+	Link              string    `json:"link"`
+	Price             *float64  `json:"price"`
+	Type              string    `json:"type"` // "single" | "group" | "multi"
+	ParticipantsCount int       `json:"participantsCount"`
+	Images            []string  `json:"images"`
 	// Links — магазины, где подарок можно купить. Название магазина отдельным
 	// полем не храним: это хост ссылки, и оно разъехалось бы с URL при первой
 	// же правке — фронт берёт подпись из самой ссылки.
-	Links []string `json:"links"`
-	// Link — первая из Links. Остаётся в ответе, пока фронт не переедет на
-	// массив; при записи её значение попадает в Links[0].
-	Link       string    `json:"link"`
-	Price      *float64  `json:"price"`
+	Links      []string  `json:"links"`
 	CreatedAt  time.Time `json:"createdAt"`
 	UpdatedAt  time.Time `json:"updatedAt"`
 	WishlistID uuid.UUID `json:"wishlistId"`

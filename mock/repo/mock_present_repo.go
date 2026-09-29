@@ -47,3 +47,8 @@ func (m *MockPresentRepo) Release(ctx context.Context, id, guestID uuid.UUID) (b
 	args := m.Called(ctx, id, guestID)
 	return args.Bool(0), args.Error(1)
 }
+
+func (m *MockPresentRepo) CountByWishlistID(ctx context.Context, wishlistID uuid.UUID) (int64, error) {
+	args := m.Called(ctx, wishlistID)
+	return args.Get(0).(int64), args.Error(1)
+}

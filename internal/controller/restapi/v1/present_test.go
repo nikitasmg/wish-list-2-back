@@ -23,7 +23,7 @@ func setupPresentApp(presentMock usecase.PresentUseCase) *fiber.App {
 	userMock := &MockUserUC{}
 	wishlistMock := &MockWishlistUC{}
 	uploadMock := &MockUploadUC{}
-	v1.NewRouter(app, testSecret, "", false, userMock, wishlistMock, presentMock, uploadMock, &MockGuestDataUC{})
+	v1.NewRouter(app, testSecret, "", false, userMock, wishlistMock, presentMock, uploadMock, &MockGuestDataUC{}, &MockTemplateUC{})
 	return app
 }
 
@@ -147,4 +147,21 @@ func TestRelease_ForeignBookingIsForbidden(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+}
+
+func TestJoin_Success(t *testing.T) {
+	pm := &MockPresentUC{}
+	app := setupPresentApp(pm)
+
+	pid := uuid.New()
+	pm.On("Join", mock.Anything, pid).Return(nil)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/presents/"+pid.String()+"/join", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	assert.Equal(t, true, result["data"])
 }

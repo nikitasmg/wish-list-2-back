@@ -1,71 +1,243 @@
-// Package template отдаёт заготовки страниц под повод.
-//
-// Данные лежат в templates.json рядом с кодом и вшиваются в бинарник через
-// go:embed: шаблоны правятся вместе с релизом, поэтому ни таблицы, ни админки,
-// ни отдельного файла в образе им не нужно.
 package template
 
 import (
-	_ "embed"
-	"encoding/json"
+	"context"
+	"errors"
 	"fmt"
-	"sync"
+
+	"github.com/google/uuid"
 
 	"main/internal/entity"
+	"main/internal/repo"
+	"main/internal/usecase"
+	"main/pkg/shortid"
 )
 
-//go:embed templates.json
-var templatesJSON []byte
+const maxTemplatesPerUser = 50
+const publicPageSize = 20
 
-var (
-	once      sync.Once
-	templates []entity.Template
-	loadErr   error
-)
-
-// All — все шаблоны в порядке показа.
-func All() ([]entity.Template, error) {
-	load()
-	if loadErr != nil {
-		return nil, loadErr
-	}
-	return templates, nil
+type templateUseCase struct {
+	templateRepo repo.TemplateRepo
+	wishlistRepo repo.WishlistRepo
 }
 
-// ByID — шаблон по идентификатору.
-func ByID(id string) (entity.Template, error) {
-	load()
-	if loadErr != nil {
-		return entity.Template{}, loadErr
+func New(templateRepo repo.TemplateRepo, wishlistRepo repo.WishlistRepo) usecase.TemplateUseCase {
+	return &templateUseCase{
+		templateRepo: templateRepo,
+		wishlistRepo: wishlistRepo,
 	}
-	for _, t := range templates {
-		if t.ID == id {
-			return t, nil
-		}
-	}
-	return entity.Template{}, fmt.Errorf("шаблон %q не найден", id)
 }
 
-func load() {
-	once.Do(func() {
-		if err := json.Unmarshal(templatesJSON, &templates); err != nil {
-			loadErr = fmt.Errorf("parse templates.json: %w", err)
-			return
+func (uc *templateUseCase) Create(ctx context.Context, userID uuid.UUID, input usecase.CreateTemplateInput) (entity.Template, error) {
+	if input.Name == "" {
+		return entity.Template{}, errors.New("name is required")
+	}
+	if len([]rune(input.Name)) > 200 {
+		return entity.Template{}, errors.New("name exceeds 200 characters")
+	}
+
+	wishlist, err := uc.wishlistRepo.GetByID(ctx, input.WishlistID)
+	if err != nil {
+		return entity.Template{}, fmt.Errorf("wishlist not found: %w", err)
+	}
+	if wishlist.UserID != userID {
+		return entity.Template{}, errors.New("forbidden")
+	}
+
+	count, err := uc.templateRepo.CountByUserID(ctx, userID)
+	if err != nil {
+		return entity.Template{}, fmt.Errorf("count templates: %w", err)
+	}
+	if count >= maxTemplatesPerUser {
+		return entity.Template{}, errors.New("достигнут лимит шаблонов (50)")
+	}
+
+	t := entity.Template{
+		ID:       uuid.New(),
+		UserID:   userID,
+		Name:     input.Name,
+		Settings: cloneSettings(wishlist.Settings),
+		Blocks:   cloneBlocks(wishlist.Blocks),
+		IsPublic: input.IsPublic,
+	}
+
+	if err := uc.templateRepo.Create(ctx, t); err != nil {
+		return entity.Template{}, fmt.Errorf("create template: %w", err)
+	}
+	return t, nil
+}
+
+func (uc *templateUseCase) GetAllByUser(ctx context.Context, userID uuid.UUID) ([]entity.Template, error) {
+	return uc.templateRepo.GetAllByUserID(ctx, userID)
+}
+
+func (uc *templateUseCase) GetPublic(ctx context.Context, limit, page int, userID *uuid.UUID) ([]entity.TemplateWithAuthor, bool, error) {
+	if limit <= 0 || limit > publicPageSize {
+		limit = publicPageSize
+	}
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	uid := uuid.Nil
+	if userID != nil {
+		uid = *userID
+	}
+
+	// Fetch one extra to determine hasMore
+	items, err := uc.templateRepo.GetPublic(ctx, limit+1, offset, uid)
+	if err != nil {
+		return nil, false, fmt.Errorf("get public templates: %w", err)
+	}
+
+	hasMore := len(items) > limit
+	if hasMore {
+		items = items[:limit]
+	}
+
+	return items, hasMore, nil
+}
+
+func (uc *templateUseCase) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, input usecase.UpdateTemplateInput) (entity.Template, error) {
+	t, err := uc.templateRepo.GetByID(ctx, id)
+	if err != nil {
+		return entity.Template{}, fmt.Errorf("template not found: %w", err)
+	}
+	if t.UserID != userID {
+		return entity.Template{}, errors.New("forbidden")
+	}
+	if input.Name == "" {
+		return entity.Template{}, errors.New("name is required")
+	}
+	if len([]rune(input.Name)) > 200 {
+		return entity.Template{}, errors.New("name exceeds 200 characters")
+	}
+
+	t.Name = input.Name
+	t.IsPublic = input.IsPublic
+
+	if err := uc.templateRepo.Update(ctx, t); err != nil {
+		return entity.Template{}, fmt.Errorf("update template: %w", err)
+	}
+	return t, nil
+}
+
+func (uc *templateUseCase) Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	t, err := uc.templateRepo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("template not found: %w", err)
+	}
+	if t.UserID != userID {
+		return errors.New("forbidden")
+	}
+	return uc.templateRepo.Delete(ctx, id)
+}
+
+func (uc *templateUseCase) CreateWishlistFromTemplate(ctx context.Context, templateID uuid.UUID, userID uuid.UUID, title string) (entity.Wishlist, error) {
+	if title == "" {
+		return entity.Wishlist{}, errors.New("title is required")
+	}
+
+	t, err := uc.templateRepo.GetByID(ctx, templateID)
+	if err != nil {
+		return entity.Wishlist{}, fmt.Errorf("template not found: %w", err)
+	}
+	if !t.IsPublic && t.UserID != userID {
+		return entity.Wishlist{}, errors.New("forbidden")
+	}
+
+	count, err := uc.wishlistRepo.CountByUserID(ctx, userID)
+	if err != nil {
+		return entity.Wishlist{}, fmt.Errorf("count wishlists: %w", err)
+	}
+	if count >= usecase.MaxWishlistsPerUser {
+		return entity.Wishlist{}, errors.New("достигнут лимит вишлистов (20)")
+	}
+
+	var sid string
+	for i := 0; i < 5; i++ {
+		s, err := shortid.Generate()
+		if err != nil {
+			return entity.Wishlist{}, fmt.Errorf("generate short id: %w", err)
 		}
-		// Опечатка в типе блока превратилась бы в шаблон, который невозможно
-		// применить: CreateConstructor отверг бы его на этапе валидации, а
-		// пользователь увидел бы невнятную ошибку вместо готовой страницы.
-		for _, t := range templates {
-			for i, b := range t.Blocks {
-				if !entity.ValidBlockTypes[b.Type] {
-					loadErr = fmt.Errorf("шаблон %q, блок %d: неизвестный тип %q", t.ID, i, b.Type)
-					return
-				}
-				if entity.LegacyBlockTypes[b.Type] {
-					loadErr = fmt.Errorf("шаблон %q, блок %d: тип %q устарел", t.ID, i, b.Type)
-					return
-				}
-			}
+		if _, err := uc.wishlistRepo.GetByShortID(ctx, s); err != nil {
+			sid = s
+			break
 		}
-	})
+	}
+	if sid == "" {
+		return entity.Wishlist{}, errors.New("failed to generate unique short id")
+	}
+
+	blocks := cloneBlocks(t.Blocks)
+
+	w := entity.Wishlist{
+		ID:            uuid.New(),
+		UserID:        userID,
+		ShortID:       sid,
+		Title:         title,
+		Settings:      cloneSettings(t.Settings),
+		Blocks:        blocks,
+		BlocksVersion: entity.BlocksVersionCurrent,
+	}
+
+	if err := uc.wishlistRepo.Create(ctx, w); err != nil {
+		return entity.Wishlist{}, fmt.Errorf("create wishlist from template: %w", err)
+	}
+	return w, nil
+}
+
+// Copies own their data and identities: guest responses are keyed by block ID.
+func cloneBlocks(source []entity.Block) []entity.Block {
+	if source == nil {
+		return nil
+	}
+	blocks := make([]entity.Block, len(source))
+	for i, block := range source {
+		blocks[i] = block
+		blocks[i].ID = uuid.NewString()
+		if block.Data != nil {
+			blocks[i].Data = append(block.Data[:0:0], block.Data...)
+		}
+		if block.RevealAt != nil {
+			revealAt := *block.RevealAt
+			blocks[i].RevealAt = &revealAt
+		}
+	}
+	return blocks
+}
+
+func cloneSettings(source entity.Settings) entity.Settings {
+	if source.CustomScheme != nil {
+		scheme := *source.CustomScheme
+		source.CustomScheme = &scheme
+	}
+	return source
+}
+
+func (uc *templateUseCase) Like(ctx context.Context, userID, templateID uuid.UUID) (usecase.LikeResult, error) {
+	t, err := uc.templateRepo.GetByID(ctx, templateID)
+	if err != nil {
+		return usecase.LikeResult{}, errors.New("template not found")
+	}
+	if !t.IsPublic && t.UserID != userID {
+		return usecase.LikeResult{}, errors.New("forbidden")
+	}
+	count, err := uc.templateRepo.Like(ctx, userID, templateID)
+	if err != nil {
+		return usecase.LikeResult{}, err
+	}
+	return usecase.LikeResult{LikesCount: count, LikedByMe: true}, nil
+}
+
+func (uc *templateUseCase) Unlike(ctx context.Context, userID, templateID uuid.UUID) (usecase.LikeResult, error) {
+	if _, err := uc.templateRepo.GetByID(ctx, templateID); err != nil {
+		return usecase.LikeResult{}, errors.New("template not found")
+	}
+	count, err := uc.templateRepo.Unlike(ctx, userID, templateID)
+	if err != nil {
+		return usecase.LikeResult{}, err
+	}
+	return usecase.LikeResult{LikesCount: count, LikedByMe: false}, nil
 }

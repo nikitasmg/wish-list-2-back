@@ -93,3 +93,9 @@ func (r *presentRepo) Release(ctx context.Context, id, guestID uuid.UUID) (bool,
 	}
 	return result.RowsAffected > 0, nil
 }
+
+func (r *presentRepo) CountByWishlistID(ctx context.Context, wishlistID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&PresentModel{}).Where("wishlist_id = ?", wishlistID).Count(&count).Error
+	return count, err
+}

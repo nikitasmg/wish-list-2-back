@@ -72,3 +72,8 @@ func (m *MockWishlistRepo) UpdateBlocks(ctx context.Context, id uuid.UUID, block
 	args := m.Called(ctx, id, blocks, blocksVersion, expectedUpdatedAt)
 	return args.Bool(0), args.Error(1)
 }
+
+func (m *MockWishlistRepo) CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
+	args := m.Called(ctx, userID)
+	return args.Get(0).(int64), args.Error(1)
+}

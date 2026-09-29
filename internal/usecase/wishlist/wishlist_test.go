@@ -29,6 +29,7 @@ func newWishlistUC(wr *mockrepo.MockWishlistRepo, fs *mockminio.MockFileStorage)
 
 func TestValidateBlocks_UnknownType(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -36,7 +37,7 @@ func TestValidateBlocks_UnknownType(t *testing.T) {
 	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{
 		Title: "Test",
 		Blocks: []entity.Block{
-			{Type: "unknown_type", Position: 0},
+			{Type: "unknown_type", Row: 0},
 		},
 	})
 	require.Error(t, err)
@@ -46,6 +47,7 @@ func TestValidateBlocks_UnknownType(t *testing.T) {
 
 func TestValidateBlocks_Valid(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -54,15 +56,15 @@ func TestValidateBlocks_Valid(t *testing.T) {
 	wr.On("Create", mock.Anything, mock.Anything).Return(nil)
 
 	blocks := []entity.Block{
-		{Type: "cover", Position: 0, View: "number"},
-		{Type: "text", Position: 1},
-		{Type: "media", Position: 2, View: "row"},
-		{Type: "list", Position: 3, View: "tags"},
-		{Type: "location", Position: 4},
-		{Type: "color_scheme", Position: 5},
-		{Type: "timing", Position: 6},
-		{Type: "wishlist", Position: 7, View: "cards"},
-		{Type: "rsvp", Position: 8},
+		{Type: "cover", Row: 0, View: "number"},
+		{Type: "text", Row: 1},
+		{Type: "media", Row: 2, View: "row"},
+		{Type: "list", Row: 3, View: "tags"},
+		{Type: "location", Row: 4},
+		{Type: "color_scheme", Row: 5},
+		{Type: "timing", Row: 6},
+		{Type: "wishlist", Row: 7, View: "cards"},
+		{Type: "rsvp", Row: 8},
 	}
 
 	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{
@@ -74,6 +76,7 @@ func TestValidateBlocks_Valid(t *testing.T) {
 
 func TestCreate_FileUpload(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -97,6 +100,7 @@ func TestCreate_FileUpload(t *testing.T) {
 // иначе валидацию можно обойти, подложив файл в поле обложки.
 func TestCreate_RejectsNonImageCover(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -116,6 +120,7 @@ func TestCreate_RejectsNonImageCover(t *testing.T) {
 
 func TestCreate_URLCover(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -134,6 +139,7 @@ func TestCreate_URLCover(t *testing.T) {
 
 func TestGenerateUniqueShortID_Collision(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -155,11 +161,12 @@ func TestGenerateUniqueShortID_Collision(t *testing.T) {
 
 func TestUpdateBlocks_Success(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
 	wid := uuid.New()
-	blocks := []entity.Block{{Type: "text", Position: 0}}
+	blocks := []entity.Block{{Type: "text", Row: 0}}
 	wr.On("UpdateBlocks", mock.Anything, wid, blocks, entity.BlocksVersionCurrent, time.Time{}).
 		Return(true, nil)
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner, Blocks: blocks}, nil)
@@ -174,6 +181,7 @@ func TestUpdateBlocks_Success(t *testing.T) {
 // получить конфликт, а не молча затереть чужую правку.
 func TestUpdateBlocks_Conflict(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -181,7 +189,7 @@ func TestUpdateBlocks_Conflict(t *testing.T) {
 	stale := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 	current := entity.Wishlist{ID: wid, UserID: owner, Blocks: []entity.Block{{Type: "quote"}}}
 
-	blocks := []entity.Block{{Type: "text", Position: 0}}
+	blocks := []entity.Block{{Type: "text", Row: 0}}
 	wr.On("UpdateBlocks", mock.Anything, wid, blocks, entity.BlocksVersionCurrent, stale).
 		Return(false, nil)
 	wr.On("GetByID", mock.Anything, wid).Return(current, nil)
@@ -196,11 +204,12 @@ func TestUpdateBlocks_Conflict(t *testing.T) {
 // старый список, поправит один заголовок и не сможет нажать «Сохранить».
 func TestUpdateBlocks_AllowsLegacyTypes(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
 	wid := uuid.New()
-	blocks := []entity.Block{{Type: "agenda", Position: 0}}
+	blocks := []entity.Block{{Type: "agenda", Row: 0}}
 	wr.On("UpdateBlocks", mock.Anything, wid, blocks, entity.BlocksVersionCurrent, time.Time{}).
 		Return(true, nil)
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner, Blocks: blocks}, nil)
@@ -213,12 +222,13 @@ func TestUpdateBlocks_AllowsLegacyTypes(t *testing.T) {
 // А вот собрать новый вишлист из блоков v1 уже нельзя.
 func TestCreateConstructor_RejectsLegacyTypes(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
 	_, err := uc.CreateConstructor(context.Background(), uuid.New(), usecase.CreateConstructorInput{
 		Title:  "Test",
-		Blocks: []entity.Block{{Type: "checklist", Position: 0}},
+		Blocks: []entity.Block{{Type: "checklist", Row: 0}},
 	})
 
 	require.Error(t, err)
@@ -228,6 +238,7 @@ func TestCreateConstructor_RejectsLegacyTypes(t *testing.T) {
 
 func TestGetByShortID_HidesHiddenAndSecretBlocks(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -238,11 +249,11 @@ func TestGetByShortID_HidesHiddenAndSecretBlocks(t *testing.T) {
 	wr.On("GetByShortID", mock.Anything, "abc-def-ghi").Return(entity.Wishlist{
 		ID: wid,
 		Blocks: []entity.Block{
-			{Type: "text", Position: 0, Data: json.RawMessage(`{"html":"виден"}`)},
-			{Type: "text", Position: 1, Hidden: true, Data: json.RawMessage(`{"html":"скрыт"}`)},
-			{Type: "poll", Position: 2, Title: "Мальчик или девочка?", RevealAt: &future,
+			{Type: "text", Row: 0, Data: json.RawMessage(`{"html":"виден"}`)},
+			{Type: "text", Row: 1, Hidden: true, Data: json.RawMessage(`{"html":"скрыт"}`)},
+			{ID: "secret", Type: "poll", Row: 2, Col: 1, ColSpan: 1, View: "cards", Caption: "секрет", Title: "Мальчик или девочка?", RevealAt: &future,
 				Data: json.RawMessage(`{"answer":"девочка"}`)},
-			{Type: "media", Position: 3, RevealAt: &past, Data: json.RawMessage(`{"url":"уже можно"}`)},
+			{Type: "media", Row: 3, RevealAt: &past, Data: json.RawMessage(`{"url":"уже можно"}`)},
 		},
 	}, nil)
 	wr.On("RegisterView", mock.Anything, wid, guest).Return(nil)
@@ -255,6 +266,12 @@ func TestGetByShortID_HidesHiddenAndSecretBlocks(t *testing.T) {
 	assert.JSONEq(t, `{"html":"виден"}`, string(w.Blocks[0].Data))
 
 	secret := w.Blocks[1]
+	assert.Equal(t, "secret", secret.ID)
+	assert.Equal(t, 2, secret.Row)
+	assert.Equal(t, 1, secret.Col)
+	assert.Equal(t, 1, secret.ColSpan)
+	assert.Empty(t, secret.View)
+	assert.Empty(t, secret.Caption)
 	assert.Equal(t, "poll", secret.Type, "тип нужен, чтобы нарисовать таймер")
 	assert.JSONEq(t, `{}`, string(secret.Data), "содержимое секрета не должно попадать в ответ")
 	assert.Empty(t, secret.Title, "заголовок тоже раскрывает секрет")
@@ -265,6 +282,7 @@ func TestGetByShortID_HidesHiddenAndSecretBlocks(t *testing.T) {
 
 func TestGetAllByUser_FillsReservedCount(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -301,6 +319,7 @@ func TestCustomScheme_Validation(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			wr := &mockrepo.MockWishlistRepo{}
+			wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 			fs := &mockminio.MockFileStorage{}
 			uc := newWishlistUC(wr, fs)
 			wr.On("GetByShortID", mock.Anything, mock.Anything).Return(entity.Wishlist{}, errors.New("not found"))
@@ -322,8 +341,9 @@ func TestCustomScheme_Validation(t *testing.T) {
 	}
 }
 
-func TestCreateFromTemplate_CopiesBlocksAndScheme(t *testing.T) {
+func TestCreateFromSystemTemplate_CopiesBlocksAndScheme(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -331,7 +351,7 @@ func TestCreateFromTemplate_CopiesBlocksAndScheme(t *testing.T) {
 	wr.On("Create", mock.Anything, mock.Anything).Return(nil)
 
 	eventDate := time.Date(2027, 6, 6, 15, 0, 0, 0, time.UTC)
-	w, err := uc.CreateFromTemplate(context.Background(), uuid.New(), usecase.CreateFromTemplateInput{
+	w, err := uc.CreateFromSystemTemplate(context.Background(), uuid.New(), usecase.CreateFromSystemTemplateInput{
 		TemplateID: "wedding",
 		Title:      "Маша и Петя",
 		EventDate:  &eventDate,
@@ -356,20 +376,21 @@ func TestCreateFromTemplate_CopiesBlocksAndScheme(t *testing.T) {
 }
 
 // Блоки шаблона общие для всех, поэтому вишлист должен получать копию.
-func TestCreateFromTemplate_DoesNotMutateTemplate(t *testing.T) {
+func TestCreateFromSystemTemplate_DoesNotMutateTemplate(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
 	wr.On("GetByShortID", mock.Anything, mock.Anything).Return(entity.Wishlist{}, errors.New("not found"))
 	wr.On("Create", mock.Anything, mock.Anything).Return(nil)
 
-	_, err := uc.CreateFromTemplate(context.Background(), uuid.New(), usecase.CreateFromTemplateInput{
+	_, err := uc.CreateFromSystemTemplate(context.Background(), uuid.New(), usecase.CreateFromSystemTemplateInput{
 		TemplateID: "boy", Title: "Первый",
 	})
 	require.NoError(t, err)
 
-	second, err := uc.CreateFromTemplate(context.Background(), uuid.New(), usecase.CreateFromTemplateInput{
+	second, err := uc.CreateFromSystemTemplate(context.Background(), uuid.New(), usecase.CreateFromSystemTemplateInput{
 		TemplateID: "boy", Title: "Второй",
 	})
 	require.NoError(t, err)
@@ -381,15 +402,16 @@ func TestCreateFromTemplate_DoesNotMutateTemplate(t *testing.T) {
 	}
 }
 
-func TestCreateFromTemplate_UsesSampleTitleWhenEmpty(t *testing.T) {
+func TestCreateFromSystemTemplate_UsesSampleTitleWhenEmpty(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
 	wr.On("GetByShortID", mock.Anything, mock.Anything).Return(entity.Wishlist{}, errors.New("not found"))
 	wr.On("Create", mock.Anything, mock.Anything).Return(nil)
 
-	w, err := uc.CreateFromTemplate(context.Background(), uuid.New(), usecase.CreateFromTemplateInput{
+	w, err := uc.CreateFromSystemTemplate(context.Background(), uuid.New(), usecase.CreateFromSystemTemplateInput{
 		TemplateID: "jubilee",
 	})
 
@@ -397,12 +419,13 @@ func TestCreateFromTemplate_UsesSampleTitleWhenEmpty(t *testing.T) {
 	assert.Equal(t, "Сергей Петрович", w.Title)
 }
 
-func TestCreateFromTemplate_UnknownTemplate(t *testing.T) {
+func TestCreateFromSystemTemplate_UnknownTemplate(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
-	_, err := uc.CreateFromTemplate(context.Background(), uuid.New(), usecase.CreateFromTemplateInput{
+	_, err := uc.CreateFromSystemTemplate(context.Background(), uuid.New(), usecase.CreateFromSystemTemplateInput{
 		TemplateID: "нет-такого",
 	})
 
@@ -419,6 +442,7 @@ func TestMutations_RejectForeignWishlist(t *testing.T) {
 
 	newUC := func() (*mockrepo.MockWishlistRepo, usecase.WishlistUseCase) {
 		wr := &mockrepo.MockWishlistRepo{}
+		wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 		fs := &mockminio.MockFileStorage{}
 		wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
 		return wr, newWishlistUC(wr, fs)
@@ -428,7 +452,7 @@ func TestMutations_RejectForeignWishlist(t *testing.T) {
 		wr, uc := newUC()
 		_, err := uc.Update(context.Background(), stranger, wid, usecase.CreateWishlistInput{Title: "Чужой"}, time.Time{})
 		require.ErrorIs(t, err, usecase.ErrForbidden)
-		wr.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+		wr.AssertNotCalled(t, "UpdateMetadata", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	})
 
 	t.Run("updateBlocks", func(t *testing.T) {
@@ -450,6 +474,7 @@ func TestMutations_RejectForeignWishlist(t *testing.T) {
 // должен быть стабильный id — позиция меняется при первой же перестановке.
 func TestCreateConstructor_AssignsBlockIDs(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -459,8 +484,8 @@ func TestCreateConstructor_AssignsBlockIDs(t *testing.T) {
 	w, err := uc.CreateConstructor(context.Background(), owner, usecase.CreateConstructorInput{
 		Title: "Test",
 		Blocks: []entity.Block{
-			{Type: "poll", Position: 0},
-			{Type: "text", Position: 1, ID: "уже-есть"},
+			{Type: "poll", Row: 0},
+			{Type: "text", Row: 1, ID: "уже-есть"},
 		},
 	})
 
@@ -474,6 +499,7 @@ func TestCreateConstructor_AssignsBlockIDs(t *testing.T) {
 // версию, которой уже нет, и проверка конфликтов перестала бы работать.
 func TestUpdate_ReturnsSavedVersion(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -496,6 +522,7 @@ func TestUpdate_ReturnsSavedVersion(t *testing.T) {
 
 func TestUpdate_Conflict(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -518,6 +545,7 @@ func TestUpdate_Conflict(t *testing.T) {
 // нет способа их затереть, потому что он их и не передаёт.
 func TestUpdate_DoesNotSendBlocks(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
 	fs := &mockminio.MockFileStorage{}
 	uc := newWishlistUC(wr, fs)
 
@@ -534,4 +562,221 @@ func TestUpdate_DoesNotSendBlocks(t *testing.T) {
 
 	require.NoError(t, err)
 	wr.AssertNotCalled(t, "UpdateBlocks", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestCreate_WishlistLimitExceeded(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(20), nil)
+
+	_, err := uc.Create(context.Background(), userID, usecase.CreateWishlistInput{Title: "X"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "лимит вишлистов")
+}
+
+func TestCreateFromSystemTemplate_Limits(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		count int64
+		title string
+		want  string
+	}{
+		{name: "wishlist count", count: 20, title: "Test", want: "лимит вишлистов"},
+		{name: "title length", title: string(make([]byte, 201)), want: "title"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wr := &mockrepo.MockWishlistRepo{}
+			wr.On("CountByUserID", mock.Anything, owner).Return(tc.count, nil)
+			uc := newWishlistUC(wr, &mockminio.MockFileStorage{})
+			_, err := uc.CreateFromSystemTemplate(context.Background(), owner, usecase.CreateFromSystemTemplateInput{
+				TemplateID: "wedding", Title: tc.title,
+			})
+			require.ErrorContains(t, err, tc.want)
+			wr.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+			wr.AssertExpectations(t)
+		})
+	}
+}
+
+func TestCreateConstructor_Coordinates(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		block entity.Block
+		want  string
+	}{
+		{name: "negative row", block: entity.Block{Type: "text", Row: -1}, want: "row"},
+		{name: "negative column", block: entity.Block{Type: "text", Col: -1}, want: "col"},
+		{name: "column outside grid", block: entity.Block{Type: "text", Col: 2}, want: "col"},
+		{name: "too wide", block: entity.Block{Type: "text", ColSpan: 3}, want: "colSpan"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wr := &mockrepo.MockWishlistRepo{}
+			wr.On("CountByUserID", mock.Anything, owner).Return(int64(0), nil)
+			uc := newWishlistUC(wr, &mockminio.MockFileStorage{})
+			_, err := uc.CreateConstructor(context.Background(), owner, usecase.CreateConstructorInput{
+				Title: "Test", Blocks: []entity.Block{tc.block},
+			})
+			require.ErrorContains(t, err, tc.want)
+			wr.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+		})
+	}
+}
+
+// Main's legacy blocks remain valid when saving an existing wishlist.
+func TestUpdateBlocks_LegacyCoordinates(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	uc := newWishlistUC(wr, &mockminio.MockFileStorage{})
+	wid := uuid.New()
+	blocks := []entity.Block{
+		{Type: "text", Row: 0, Col: 0, ColSpan: 1},
+		{Type: "image", Row: 0, Col: 1, ColSpan: 1},
+		{Type: "date", Row: 1, Col: 0, ColSpan: 1},
+		{Type: "location", Row: 1, Col: 1, ColSpan: 1},
+		{Type: "color_scheme", Row: 2, Col: 0, ColSpan: 1},
+		{Type: "timing", Row: 2, Col: 1, ColSpan: 1},
+		{Type: "text_image", Row: 3, Col: 0, ColSpan: 1},
+	}
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner, Blocks: blocks}, nil)
+	wr.On("UpdateBlocks", mock.Anything, wid, blocks, entity.BlocksVersionCurrent, time.Time{}).Return(true, nil)
+	w, err := uc.UpdateBlocks(context.Background(), owner, wid, blocks, time.Time{})
+	require.NoError(t, err)
+	assert.Equal(t, blocks, w.Blocks)
+	wr.AssertExpectations(t)
+}
+
+func TestCreateConstructor_WishlistLimitExceeded(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(20), nil)
+
+	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{Title: "X"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "лимит вишлистов")
+}
+
+func TestCreate_TitleTooLong(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
+
+	_, err := uc.Create(context.Background(), userID, usecase.CreateWishlistInput{
+		Title: string(make([]byte, 201)),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "title")
+}
+
+func TestCreate_DescriptionTooLong(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
+
+	_, err := uc.Create(context.Background(), userID, usecase.CreateWishlistInput{
+		Title:       "OK",
+		Description: string(make([]byte, 2001)),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "description")
+}
+
+func TestValidateBlocks_TooManyBlocks(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
+
+	blocks := make([]entity.Block, 101)
+	for i := range blocks {
+		blocks[i] = entity.Block{Type: "text"}
+	}
+	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{
+		Title:  "X",
+		Blocks: blocks,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "too many blocks")
+}
+
+func TestValidateBlocks_DataTooLarge(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
+
+	bigData := `{"content":"` + string(make([]byte, 11*1024)) + `"}`
+	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{
+		Title: "X",
+		Blocks: []entity.Block{
+			{Type: "text", Data: json.RawMessage(bigData)},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "data too large")
+}
+
+func TestValidateBlocks_TextContentTooLong(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
+
+	// Use ASCII chars so JSON stays under MaxBlockDataSize (10KB) but content > 5000 runes
+	buf := make([]byte, 5001)
+	for i := range buf {
+		buf[i] = 'a'
+	}
+	longContent := string(buf)
+	contentJSON, _ := json.Marshal(map[string]string{"content": longContent})
+	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{
+		Title: "X",
+		Blocks: []entity.Block{
+			{Type: "text", Data: json.RawMessage(contentJSON)},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "content")
+}
+
+func TestValidateBlocks_VideoURLTooLong(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	userID := uuid.New()
+	wr.On("CountByUserID", mock.Anything, userID).Return(int64(0), nil)
+
+	// Build a URL that exceeds MaxURLLen (2048) but keeps JSON under MaxBlockDataSize (10KB)
+	urlBuf := make([]byte, 2049)
+	urlBuf[0] = 'h'
+	for i := 1; i < len(urlBuf); i++ {
+		urlBuf[i] = 'a'
+	}
+	longURL := string(urlBuf)
+	urlJSON, _ := json.Marshal(map[string]string{"url": longURL})
+	_, err := uc.CreateConstructor(context.Background(), userID, usecase.CreateConstructorInput{
+		Title: "X",
+		Blocks: []entity.Block{
+			{Type: "video", Data: json.RawMessage(urlJSON)},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "url")
 }

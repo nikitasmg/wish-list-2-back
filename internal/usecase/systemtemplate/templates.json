@@ -1,0 +1,137 @@
+[
+  {
+    "id": "boy",
+    "category": "kids",
+    "name": "День рождения мальчика",
+    "colorScheme": "midnight",
+    "sampleTitle": "Тёме — семь!",
+    "occasion": "День рождения",
+    "blocks": [
+      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "number", "title": "Тёме — семь!", "data": { "number": "7", "subtitle": "суббота, 18 октября · 12:00" } },
+      { "type": "list", "row": 1, "col": 0, "colSpan": 2, "view": "tags", "caption": "Интересы", "title": "Что Тёма любит", "data": { "items": [{ "v": "Динозавры" }, { "v": "Конструкторы" }, { "v": "Космос" }, { "v": "Футбол" }] } },
+      { "type": "list", "row": 2, "col": 0, "colSpan": 2, "view": "tiles", "caption": "Размеры", "data": { "items": [{ "k": "рост", "v": "128" }, { "k": "обувь", "v": "30" }, { "k": "одежда", "v": "7–8 лет" }] } },
+      { "type": "list", "row": 3, "col": 0, "colSpan": 2, "view": "tags", "caption": "Стоп-лист", "title": "Уже есть — не дарите", "data": { "strike": true, "items": [{ "v": "самокат" }, { "v": "набор фломастеров" }, { "v": "сладкое" }] } },
+      { "type": "location", "row": 4, "col": 0, "colSpan": 2, "caption": "Место", "data": { "name": "Детский центр «Орбита»", "address": "ул. Ленина, 24, 2 этаж" } },
+      { "type": "wishlist", "row": 5, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} },
+      { "type": "rsvp", "row": 6, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": ["kids"] } },
+      { "type": "contact", "row": 7, "col": 0, "colSpan": 2, "caption": "Вопросы", "data": { "name": "Мама Тёмы", "role": "Организатор" } }
+    ]
+  },
+  {
+    "id": "girl",
+    "category": "kids",
+    "name": "День рождения девочки",
+    "colorScheme": "powder",
+    "sampleTitle": "Соне 5 лет",
+    "occasion": "День рождения",
+    "blocks": [
+      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "circle", "title": "Соне 5 лет", "data": { "subtitle": "воскресенье, 12 апреля · 14:00" } },
+      { "type": "list", "row": 1, "col": 0, "colSpan": 2, "view": "pairs", "caption": "Любимое", "data": { "items": [{ "k": "Цветы", "v": "ромашки" }, { "k": "Цвет", "v": "лавандовый" }, { "k": "Мультик", "v": "про фей" }, { "k": "Сладкое", "v": "зефир" }] } },
+      { "type": "list", "row": 2, "col": 0, "colSpan": 2, "view": "schedule", "caption": "Программа", "data": { "items": [{ "t": "14:00", "v": "Сбор гостей" }, { "t": "14:30", "v": "Шоу мыльных пузырей" }, { "t": "15:30", "v": "Торт" }] } },
+      { "type": "color_scheme", "row": 3, "col": 0, "colSpan": 2, "caption": "Дресс-код", "title": "Цвета праздника", "data": { "colors": ["#FBF3F5", "#F0DDE3", "#C93A6E", "#FFFFFF"] } },
+      { "type": "list", "row": 4, "col": 0, "colSpan": 2, "view": "tiles", "caption": "Размеры", "data": { "items": [{ "k": "рост", "v": "110" }, { "k": "обувь", "v": "28" }] } },
+      { "type": "wishlist", "row": 5, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} },
+      { "type": "rsvp", "row": 6, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": [] } }
+    ]
+  },
+  {
+    "id": "man",
+    "category": "bday",
+    "name": "День рождения мужчины",
+    "colorScheme": "graphite",
+    "sampleTitle": "Диме 35",
+    "occasion": "День рождения",
+    "blocks": [
+      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "left", "title": "Диме 35", "data": { "subtitle": "пятница, 3 июля · 19:00" } },
+      { "type": "wishlist", "row": 1, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} },
+      { "type": "list", "row": 2, "col": 0, "colSpan": 2, "view": "tags", "caption": "Стоп-лист", "title": "Не дарите, пожалуйста", "data": { "strike": true, "items": [{ "v": "носки" }, { "v": "парфюм" }, { "v": "кружки" }] } },
+      { "type": "location", "row": 3, "col": 0, "colSpan": 2, "caption": "Место", "data": { "name": "Бар «Гараж»", "address": "ул. Мира, 7" } },
+      { "type": "rsvp", "row": 4, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": ["who"] } }
+    ]
+  },
+  {
+    "id": "woman",
+    "category": "bday",
+    "name": "День рождения женщины",
+    "colorScheme": "lavender",
+    "sampleTitle": "Ане — 28",
+    "occasion": "День рождения",
+    "blocks": [
+      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "photo", "title": "Ане — 28", "data": { "subtitle": "суббота, 14 ноября · 19:00" } },
+      { "type": "quote", "row": 1, "col": 0, "colSpan": 2, "data": { "text": "Лучший подарок — это вы. Но если очень хочется что-то подарить, ниже есть подсказки" } },
+      { "type": "list", "row": 2, "col": 0, "colSpan": 2, "view": "tiles", "caption": "Размеры", "data": { "items": [{ "k": "одежда", "v": "S · 42" }, { "k": "обувь", "v": "37" }, { "k": "кольцо", "v": "16,5" }] } },
+      { "type": "list", "row": 3, "col": 0, "colSpan": 2, "view": "pairs", "caption": "Любимое", "data": { "items": [{ "k": "Цветы", "v": "пионы" }, { "k": "Кофе", "v": "флэт уайт" }, { "k": "Сладкое", "v": "тёмный шоколад" }] } },
+      { "type": "wishlist", "row": 4, "col": 0, "colSpan": 2, "view": "cards", "caption": "Подарки", "title": "Вишлист", "data": {} },
+      { "type": "playlist", "row": 5, "col": 0, "colSpan": 2, "caption": "Музыка", "title": "Предложите трек", "data": { "votes": true } },
+      { "type": "location", "row": 6, "col": 0, "colSpan": 2, "caption": "Место", "data": { "name": "Лофт «Веранда»", "address": "ул. Малышева, 51, 5 этаж" } },
+      { "type": "color_scheme", "row": 7, "col": 0, "colSpan": 2, "caption": "Дресс-код", "title": "Цвета вечера", "data": { "colors": ["#0F172A", "#475569", "#67E8F9", "#A78BFA", "#F8FAFC"] } },
+      { "type": "rsvp", "row": 8, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": ["plusOne"] } }
+    ]
+  },
+  {
+    "id": "wedding",
+    "category": "wedding",
+    "name": "Свадьба",
+    "colorScheme": "linen",
+    "sampleTitle": "Аня и Лев",
+    "occasion": "Свадьба",
+    "blocks": [
+      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "arch", "title": "Аня и Лев", "data": { "subtitle": "6 июня 2027" } },
+      { "type": "list", "row": 1, "col": 0, "colSpan": 2, "view": "timeline", "caption": "Наша история", "data": { "items": [{ "t": "2019", "v": "Познакомились в походе" }, { "t": "2022", "v": "Переехали вместе" }, { "t": "2026", "v": "Предложение" }] } },
+      { "type": "list", "row": 2, "col": 0, "colSpan": 2, "view": "schedule", "caption": "Программа", "data": { "items": [{ "t": "15:00", "v": "Церемония" }, { "t": "16:00", "v": "Фуршет" }, { "t": "18:00", "v": "Ужин" }, { "t": "21:00", "v": "Танцы" }] } },
+      { "type": "color_scheme", "row": 3, "col": 0, "colSpan": 2, "caption": "Дресс-код", "title": "Палитра дня", "data": { "colors": ["#F6F4EF", "#E6E1D6", "#85693A", "#24211C"] } },
+      { "type": "wishlist", "row": 4, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} },
+      { "type": "rsvp", "row": 5, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": ["plusOne", "menu", "transfer"] } },
+      { "type": "contact", "row": 6, "col": 0, "colSpan": 2, "caption": "Вопросы", "data": { "name": "Лена", "role": "Организатор" } }
+    ]
+  },
+  {
+    "id": "jubilee",
+    "category": "jubilee",
+    "name": "Юбилей",
+    "colorScheme": "malachite",
+    "sampleTitle": "Сергей Петрович",
+    "occasion": "Юбилей",
+    "blocks": [
+      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "number", "title": "Сергей Петрович", "data": { "number": "60", "subtitle": "суббота, 8 февраля · 17:00" } },
+      { "type": "media", "row": 1, "col": 0, "colSpan": 2, "view": "row", "caption": "Галерея", "data": { "images": [], "captions": ["1965", "1990", "2020"] } },
+      { "type": "guestbook", "row": 2, "col": 0, "colSpan": 2, "caption": "Стена поздравлений", "title": "Скажите пару слов", "data": { "photos": true } },
+      { "type": "location", "row": 3, "col": 0, "colSpan": 2, "caption": "Место", "data": { "name": "Ресторан «Дубрава»", "address": "пр. Победы, 12" } },
+      { "type": "wishlist", "row": 4, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} },
+      { "type": "rsvp", "row": 5, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": [] } }
+    ]
+  },
+  {
+    "id": "gender",
+    "category": "party",
+    "name": "Гендер-пати",
+    "colorScheme": "pastel",
+    "sampleTitle": "Он или она?",
+    "occasion": "Гендер-пати",
+    "blocks": [
+      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "center", "title": "Он или она?", "data": { "subtitle": "12 октября · 15:00" } },
+      { "type": "poll", "row": 1, "col": 0, "colSpan": 2, "caption": "Как думаете?", "data": { "question": "Мальчик или девочка?", "options": ["Мальчик", "Девочка"] } },
+      { "type": "media", "row": 2, "col": 0, "colSpan": 2, "view": "single", "caption": "Ответ", "title": "Откроется на празднике", "data": { "images": [] } },
+      { "type": "wishlist", "row": 3, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} },
+      { "type": "location", "row": 4, "col": 0, "colSpan": 2, "caption": "Место", "data": { "name": "Студия «Белая»", "address": "ул. Садовая, 3" } },
+      { "type": "rsvp", "row": 5, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": [] } }
+    ]
+  },
+  {
+    "id": "party",
+    "category": "party",
+    "name": "Вечеринка",
+    "colorScheme": "lagoon",
+    "sampleTitle": "Тусим до утра",
+    "occasion": "Вечеринка",
+    "blocks": [
+      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "left", "title": "Тусим до утра", "data": { "subtitle": "суббота, 20:00" } },
+      { "type": "video", "row": 1, "col": 0, "colSpan": 2, "caption": "Приглашение", "data": { "url": "" } },
+      { "type": "rsvp", "row": 2, "col": 0, "colSpan": 2, "caption": "Кто идёт?", "data": { "fields": ["who", "plusOne"] } },
+      { "type": "list", "row": 3, "col": 0, "colSpan": 2, "view": "schedule", "caption": "Лайн-ап", "data": { "items": [{ "t": "20:00", "v": "Сбор" }, { "t": "22:00", "v": "Диджей-сет" }, { "t": "02:00", "v": "Афтепати" }] } },
+      { "type": "playlist", "row": 4, "col": 0, "colSpan": 2, "caption": "Плейлист", "title": "Предложите трек", "data": { "votes": true } },
+      { "type": "color_scheme", "row": 5, "col": 0, "colSpan": 2, "caption": "Дресс-код", "data": { "colors": ["#07161A", "#1A3A40", "#5EEAD4"] } },
+      { "type": "wishlist", "row": 6, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} }
+    ]
+  }
+]

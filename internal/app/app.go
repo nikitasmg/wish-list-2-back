@@ -14,6 +14,7 @@ import (
 	"main/internal/repo/persistent"
 	guestDataUC "main/internal/usecase/guestdata"
 	presentUC "main/internal/usecase/present"
+	templateUC "main/internal/usecase/template"
 	uploadUC "main/internal/usecase/upload"
 	userUC "main/internal/usecase/user"
 	wishlistUC "main/internal/usecase/wishlist"
@@ -40,6 +41,9 @@ func Run(cfg *config.Config) {
 		&persistent.PlaylistTrackModel{},
 		&persistent.PlaylistVoteModel{},
 		&persistent.GuestbookEntryModel{},
+		&persistent.PresentMetaModel{},
+		&persistent.TemplateModel{},
+		&persistent.TemplateLikeModel{},
 	); err != nil {
 		log.Fatalf("automigrate: %v", err)
 	}
@@ -54,16 +58,19 @@ func Run(cfg *config.Config) {
 	}
 
 	// MinIO
-	fileStorage, err := minioPkg.New(cfg.Minio, cfg.App.CORSOrigin)
+	fileStorage, err := minioPkg.New(cfg.Minio, cfg.App.MinioPublicURL)
 	if err != nil {
 		log.Fatalf("minio: %v", err)
 	}
+	fileStorage = minioPkg.NewOptimizing(fileStorage)
 
 	// Repositories
 	userRepo := persistent.NewUserRepo(db)
 	wishlistRepo := persistent.NewWishlistRepo(db)
 	presentRepo := persistent.NewPresentRepo(db)
 	guestDataRepo := persistent.NewGuestDataRepo(db)
+	presentMetaRepo := persistent.NewPresentMetaRepo(db)
+	templateRepo := persistent.NewTemplateRepo(db)
 
 	// Hasher
 	pwHasher := hasher.New()
@@ -71,13 +78,16 @@ func Run(cfg *config.Config) {
 	// Use Cases
 	userUseCase := userUC.New(userRepo, pwHasher, cfg.Auth.JWTSecret, cfg.Auth.BotToken)
 	wishlistUseCase := wishlistUC.New(wishlistRepo, fileStorage)
-	presentUseCase := presentUC.New(presentRepo, wishlistRepo, fileStorage)
+	presentUseCase := presentUC.New(presentRepo, wishlistRepo, fileStorage, presentMetaRepo)
 	uploadUseCase := uploadUC.New(fileStorage)
 	guestDataUseCase := guestDataUC.New(guestDataRepo, wishlistRepo)
+	templateUseCase := templateUC.New(templateRepo, wishlistRepo)
 
 	// HTTP server
-	app := fiber.New()
-	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase, guestDataUseCase)
+	app := fiber.New(fiber.Config{
+		BodyLimit: 15 * 1024 * 1024, // 15MB — headroom for multipart overhead
+	})
+	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase, guestDataUseCase, templateUseCase)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)

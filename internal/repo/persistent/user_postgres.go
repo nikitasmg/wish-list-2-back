@@ -41,3 +41,11 @@ func (r *userRepo) GetByID(ctx context.Context, id uuid.UUID) (entity.User, erro
 	}
 	return toUserEntity(m), nil
 }
+
+func (r *userRepo) Update(ctx context.Context, user entity.User) error {
+	m := toUserModel(user)
+	if err := r.db.WithContext(ctx).Save(&m).Error; err != nil {
+		return fmt.Errorf("userRepo.Update: %w", err)
+	}
+	return nil
+}

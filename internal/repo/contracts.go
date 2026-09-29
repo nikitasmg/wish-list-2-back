@@ -13,6 +13,7 @@ type UserRepo interface {
 	Create(ctx context.Context, user entity.User) error
 	GetByUsername(ctx context.Context, username string) (entity.User, error)
 	GetByID(ctx context.Context, id uuid.UUID) (entity.User, error)
+	Update(ctx context.Context, user entity.User) error
 }
 
 type WishlistRepo interface {
@@ -35,6 +36,7 @@ type WishlistRepo interface {
 	// UpdateBlocks пишет блоки с проверкой версии. false — версия разошлась,
 	// вишлист успели изменить в другом месте.
 	UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, blocksVersion int, expectedUpdatedAt time.Time) (bool, error)
+	CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error)
 }
 
 type PresentRepo interface {
@@ -43,6 +45,7 @@ type PresentRepo interface {
 	GetAllByWishlistID(ctx context.Context, wishlistID uuid.UUID) ([]entity.Present, error)
 	Update(ctx context.Context, present entity.Present) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	CountByWishlistID(ctx context.Context, wishlistID uuid.UUID) (int64, error)
 	// Reserve и Release — условные апдейты. Возвращают false, когда строка под
 	// условие не подошла: подарок уже занят или бронь ставил другой гость.
 	Reserve(ctx context.Context, id, guestID uuid.UUID) (bool, error)
@@ -71,4 +74,20 @@ type GuestDataRepo interface {
 	ListGuestbook(ctx context.Context, blockID string, guestID uuid.UUID, includeHidden bool) ([]entity.GuestbookEntry, error)
 	GuestbookEntryWishlist(ctx context.Context, entryID uuid.UUID) (uuid.UUID, error)
 	SetGuestbookHidden(ctx context.Context, entryID uuid.UUID, hidden bool) error
+}
+
+type PresentMetaRepo interface {
+	Upsert(ctx context.Context, meta entity.PresentMeta) error
+}
+
+type TemplateRepo interface {
+	Create(ctx context.Context, template entity.Template) error
+	GetByID(ctx context.Context, id uuid.UUID) (entity.Template, error)
+	GetAllByUserID(ctx context.Context, userID uuid.UUID) ([]entity.Template, error)
+	GetPublic(ctx context.Context, limit, offset int, userID uuid.UUID) ([]entity.TemplateWithAuthor, error)
+	Update(ctx context.Context, template entity.Template) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error)
+	Like(ctx context.Context, userID, templateID uuid.UUID) (int, error)
+	Unlike(ctx context.Context, userID, templateID uuid.UUID) (int, error)
 }

@@ -51,8 +51,8 @@ type CreateConstructorInput struct {
 	Blocks               []entity.Block
 }
 
-// CreateFromTemplateInput — создание вишлиста по готовому шаблону.
-type CreateFromTemplateInput struct {
+// CreateFromSystemTemplateInput — создание вишлиста по готовому шаблону.
+type CreateFromSystemTemplateInput struct {
 	TemplateID string
 	Title      string
 	EventDate  *time.Time
@@ -60,13 +60,21 @@ type CreateFromTemplateInput struct {
 
 // CreatePresentInput — входные данные для создания/обновления подарка
 type CreatePresentInput struct {
+	Link        string
 	Title       string
 	Description string
-	Links       []string
 	PriceStr    string
 	CoverData   []byte
 	CoverName   string
 	CoverURL    string // URL картинки as-is (альтернатива CoverData)
+	// Parser metadata (optional, populated after /parse call)
+	Category    string
+	Brand       string
+	Source      string // "ozon" | "wildberries" | "yamarket" | "other"
+	OriginalURL string
+	Type        string   // "single" | "group" | "multi"; пусто => "single"
+	Images      []string // галерея для multi
+	Links       []string // несколько ссылок для multi
 }
 
 // TelegramAuthInput — входные данные для Telegram-авторизации
@@ -91,21 +99,29 @@ type BulkUploadResult struct {
 	URL   string
 }
 
+// UpdateProfileInput — данные для обновления профиля
+type UpdateProfileInput struct {
+	DisplayName *string // nil = не менять
+	Avatar      *string // nil = не менять
+}
+
 // UserUseCase — бизнес-логика пользователей
 type UserUseCase interface {
 	Register(ctx context.Context, username, password string) (AuthResult, error)
 	Login(ctx context.Context, username, password string) (AuthResult, error)
 	AuthenticateTelegram(ctx context.Context, input TelegramAuthInput) (AuthResult, error)
 	GetMe(ctx context.Context, userID uuid.UUID) (entity.User, error)
+	UpdateProfile(ctx context.Context, userID uuid.UUID, input UpdateProfileInput) (entity.User, error)
+	GetProfile(ctx context.Context, userID uuid.UUID) (entity.User, error)
 }
 
 // WishlistUseCase — бизнес-логика вишлистов
 type WishlistUseCase interface {
 	Create(ctx context.Context, userID uuid.UUID, input CreateWishlistInput) (entity.Wishlist, error)
 	CreateConstructor(ctx context.Context, userID uuid.UUID, input CreateConstructorInput) (entity.Wishlist, error)
-	// CreateFromTemplate копирует блоки шаблона вместе с текстами-подсказками:
+	// CreateFromSystemTemplate копирует блоки шаблона вместе с текстами-подсказками:
 	// пользователь заменит их в конструкторе.
-	CreateFromTemplate(ctx context.Context, userID uuid.UUID, input CreateFromTemplateInput) (entity.Wishlist, error)
+	CreateFromSystemTemplate(ctx context.Context, userID uuid.UUID, input CreateFromSystemTemplateInput) (entity.Wishlist, error)
 	GetByID(ctx context.Context, id uuid.UUID) (entity.Wishlist, error)
 	// GetByShortID — публичная страница: скрытые блоки вырезаются, нераскрытые
 	// секреты отдаются без содержимого, просмотр засчитывается гостю.
@@ -144,6 +160,8 @@ type PresentUseCase interface {
 	// и снять её может только он.
 	Reserve(ctx context.Context, id, guestID uuid.UUID) error
 	Release(ctx context.Context, id, guestID uuid.UUID) error
+	Join(ctx context.Context, id uuid.UUID) error
+	Leave(ctx context.Context, id uuid.UUID) error
 }
 
 // UploadUseCase — загрузка файлов
@@ -198,4 +216,35 @@ type GuestDataUseCase interface {
 	Guestbook(ctx context.Context, blockID string, guestID uuid.UUID) ([]entity.GuestbookEntry, error)
 	OwnerGuestbook(ctx context.Context, userID, wishlistID uuid.UUID, blockID string) ([]entity.GuestbookEntry, error)
 	OwnerSetGuestbookHidden(ctx context.Context, userID, entryID uuid.UUID, hidden bool) error
+}
+
+// CreateTemplateInput — data for creating a template from a wishlist
+type CreateTemplateInput struct {
+	WishlistID uuid.UUID
+	Name       string
+	IsPublic   bool
+}
+
+// UpdateTemplateInput — data for updating a template
+type UpdateTemplateInput struct {
+	Name     string
+	IsPublic bool
+}
+
+// LikeResult — returned by Like/Unlike operations
+type LikeResult struct {
+	LikesCount int  `json:"likesCount"`
+	LikedByMe  bool `json:"likedByMe"`
+}
+
+// TemplateUseCase — business logic for templates
+type TemplateUseCase interface {
+	Create(ctx context.Context, userID uuid.UUID, input CreateTemplateInput) (entity.Template, error)
+	GetAllByUser(ctx context.Context, userID uuid.UUID) ([]entity.Template, error)
+	GetPublic(ctx context.Context, limit, page int, userID *uuid.UUID) ([]entity.TemplateWithAuthor, bool, error)
+	Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, input UpdateTemplateInput) (entity.Template, error)
+	Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
+	CreateWishlistFromTemplate(ctx context.Context, templateID uuid.UUID, userID uuid.UUID, title string) (entity.Wishlist, error)
+	Like(ctx context.Context, userID, templateID uuid.UUID) (LikeResult, error)
+	Unlike(ctx context.Context, userID, templateID uuid.UUID) (LikeResult, error)
 }

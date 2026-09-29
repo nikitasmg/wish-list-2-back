@@ -22,7 +22,7 @@ import (
 var owner = uuid.New()
 
 func newPresentUC(pr *mockrepo.MockPresentRepo, wr *mockrepo.MockWishlistRepo, fs *mockminio.MockFileStorage) usecase.PresentUseCase {
-	return presentUC.New(pr, wr, fs)
+	return presentUC.New(pr, wr, fs, &mockrepo.MockPresentMetaRepo{})
 }
 
 func TestParsePrice_Empty(t *testing.T) {
@@ -33,6 +33,7 @@ func TestParsePrice_Empty(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil).Maybe()
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
@@ -52,6 +53,7 @@ func TestParsePrice_CommaSpaces(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil).Maybe()
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
@@ -72,6 +74,7 @@ func TestParsePrice_Invalid(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil).Maybe()
 
 	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
 		Title:    "Gift",
@@ -180,6 +183,7 @@ func TestCreate_Success(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil).Maybe()
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
@@ -198,6 +202,7 @@ func TestDelete_Success(t *testing.T) {
 	id := uuid.New()
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil).Maybe()
 	pr.On("Delete", mock.Anything, id).Return(nil)
 	wr.On("DecrementPresentsCount", mock.Anything, wid).Return(nil)
 
@@ -218,6 +223,7 @@ func TestMutations_RejectForeignWishlist(t *testing.T) {
 		wr := &mockrepo.MockWishlistRepo{}
 		fs := &mockminio.MockFileStorage{}
 		wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+		pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil).Maybe()
 		return pr, wr, newPresentUC(pr, wr, fs)
 	}
 
@@ -259,6 +265,7 @@ func TestCreate_RejectsTooLongDescription(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil).Maybe()
 
 	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
 		Title:       "Gift",
@@ -280,6 +287,7 @@ func TestCreate_AllowsExactlyMaxCyrillicDescription(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil).Maybe()
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
@@ -299,6 +307,7 @@ func TestCreate_RejectsNonImageCover(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil).Maybe()
 
 	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
 		Title:     "Gift",
@@ -319,6 +328,7 @@ func TestCreate_NormalizesLinks(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil).Maybe()
 	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
 
@@ -341,6 +351,7 @@ func TestCreate_RejectsSchemelessLink(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil).Maybe()
 
 	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
 		Title: "Лампа-гриб",
@@ -360,6 +371,7 @@ func TestCreate_RejectsTooManyLinks(t *testing.T) {
 
 	wid := uuid.New()
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil).Maybe()
 
 	links := make([]string, entity.MaxPresentLinks+1)
 	for i := range links {
@@ -370,4 +382,179 @@ func TestCreate_RejectsTooManyLinks(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "не больше")
+}
+
+func TestCreate_WithSource_SavesMeta(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	mr := &mockrepo.MockPresentMetaRepo{}
+	uc := presentUC.New(pr, wr, fs, mr)
+
+	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
+	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
+	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
+	mr.On("Upsert", mock.Anything, mock.MatchedBy(func(m entity.PresentMeta) bool {
+		return m.Source == "ozon" && m.OriginalURL == "https://ozon.ru/product/1"
+	})).Return(nil)
+
+	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
+		Title:       "Gift",
+		Source:      "ozon",
+		OriginalURL: "https://ozon.ru/product/1",
+	})
+	require.NoError(t, err)
+	mr.AssertExpectations(t)
+}
+
+func TestCreate_WithoutSource_SkipsMeta(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	mr := &mockrepo.MockPresentMetaRepo{}
+	uc := presentUC.New(pr, wr, fs, mr)
+
+	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
+	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
+	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
+
+	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{Title: "Gift"})
+	require.NoError(t, err)
+	mr.AssertNotCalled(t, "Upsert", mock.Anything, mock.Anything)
+}
+
+func TestCreate_PresentLimitExceeded(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(100), nil)
+
+	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{Title: "Gift"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "лимит подарков")
+}
+
+func TestCreate_PresentTitleTooLong(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
+
+	_, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
+		Title: string(make([]byte, 201)),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "title")
+}
+
+func TestUpdate_PresentTitleTooLong(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	// Validation runs before GetByID, so no mock setup needed.
+	id := uuid.New()
+	_, err := uc.Update(context.Background(), owner, id, usecase.CreatePresentInput{
+		Title: string(make([]byte, 201)),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "title")
+}
+
+func TestCreate_MultiTypeFields(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
+	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
+	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
+
+	p, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{
+		Title:  "Set",
+		Type:   "multi",
+		Images: []string{"a.jpg", "b.jpg"},
+		Links:  []string{"http://x"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "multi", p.Type)
+	assert.Equal(t, []string{"a.jpg", "b.jpg"}, p.Images)
+	assert.Equal(t, []string{"http://x"}, p.Links)
+}
+
+func TestCreate_DefaultTypeSingle(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner}, nil)
+	pr.On("CountByWishlistID", mock.Anything, wid).Return(int64(0), nil)
+	pr.On("Create", mock.Anything, mock.Anything).Return(nil)
+	wr.On("IncrementPresentsCount", mock.Anything, wid).Return(nil)
+
+	p, err := uc.Create(context.Background(), owner, wid, usecase.CreatePresentInput{Title: "X"})
+	require.NoError(t, err)
+	assert.Equal(t, "single", p.Type)
+}
+
+func TestJoin_GroupIncrements(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	id := uuid.New()
+	pr.On("GetByID", mock.Anything, id).Return(entity.Present{ID: id, Type: "group", ParticipantsCount: 1}, nil)
+	pr.On("Update", mock.Anything, mock.MatchedBy(func(p entity.Present) bool {
+		return p.ParticipantsCount == 2
+	})).Return(nil)
+
+	require.NoError(t, uc.Join(context.Background(), id))
+	pr.AssertExpectations(t)
+}
+
+func TestJoin_NonGroupErrors(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	id := uuid.New()
+	pr.On("GetByID", mock.Anything, id).Return(entity.Present{ID: id, Type: "single"}, nil)
+
+	err := uc.Join(context.Background(), id)
+	require.Error(t, err)
+}
+
+func TestLeave_NotBelowZero(t *testing.T) {
+	pr := &mockrepo.MockPresentRepo{}
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newPresentUC(pr, wr, fs)
+
+	id := uuid.New()
+	pr.On("GetByID", mock.Anything, id).Return(entity.Present{ID: id, Type: "group", ParticipantsCount: 0}, nil)
+	pr.On("Update", mock.Anything, mock.MatchedBy(func(p entity.Present) bool {
+		return p.ParticipantsCount == 0
+	})).Return(nil)
+
+	require.NoError(t, uc.Leave(context.Background(), id))
 }

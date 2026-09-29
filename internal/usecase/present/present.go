@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -22,13 +24,15 @@ type presentUseCase struct {
 	presentRepo  repo.PresentRepo
 	wishlistRepo repo.WishlistRepo
 	fileStorage  minioPkg.FileStorage
+	metaRepo     repo.PresentMetaRepo
 }
 
-func New(presentRepo repo.PresentRepo, wishlistRepo repo.WishlistRepo, fileStorage minioPkg.FileStorage) usecase.PresentUseCase {
+func New(presentRepo repo.PresentRepo, wishlistRepo repo.WishlistRepo, fileStorage minioPkg.FileStorage, metaRepo repo.PresentMetaRepo) usecase.PresentUseCase {
 	return &presentUseCase{
 		presentRepo:  presentRepo,
 		wishlistRepo: wishlistRepo,
 		fileStorage:  fileStorage,
+		metaRepo:     metaRepo,
 	}
 }
 
@@ -62,6 +66,17 @@ func (uc *presentUseCase) Create(ctx context.Context, userID, wishlistID uuid.UU
 		return entity.Present{}, err
 	}
 
+	count, err := uc.presentRepo.CountByWishlistID(ctx, wishlistID)
+	if err != nil {
+		return entity.Present{}, fmt.Errorf("count presents: %w", err)
+	}
+	if count >= usecase.MaxPresentsPerWishlist {
+		return entity.Present{}, errors.New("достигнут лимит подарков (100)")
+	}
+	if err := validatePresentFields(input.Title, input.Description, input.Link, input.CoverURL); err != nil {
+		return entity.Present{}, err
+	}
+
 	coverURL, err := uc.resolveCover(input.CoverData, input.CoverName, input.CoverURL)
 	if err != nil {
 		return entity.Present{}, err
@@ -81,6 +96,9 @@ func (uc *presentUseCase) Create(ctx context.Context, userID, wishlistID uuid.UU
 		Links:       links,
 		Price:       price,
 		Reserved:    false,
+		Type:        normalizeType(input.Type),
+		Images:      input.Images,
+		Link:        input.Link,
 	}
 
 	if err := uc.presentRepo.Create(ctx, p); err != nil {
@@ -89,6 +107,20 @@ func (uc *presentUseCase) Create(ctx context.Context, userID, wishlistID uuid.UU
 
 	if err := uc.wishlistRepo.IncrementPresentsCount(ctx, wishlistID); err != nil {
 		return entity.Present{}, fmt.Errorf("increment presents count: %w", err)
+	}
+
+	if input.Source != "" {
+		meta := entity.PresentMeta{
+			PresentID:   p.ID,
+			Source:      input.Source,
+			OriginalURL: input.OriginalURL,
+			Category:    input.Category,
+			Brand:       input.Brand,
+			ParsedAt:    time.Now().UTC(),
+		}
+		if err := uc.metaRepo.Upsert(ctx, meta); err != nil {
+			log.Printf("present_meta upsert failed for present %s: %v", p.ID, err)
+		}
 	}
 
 	return p, nil
@@ -110,6 +142,10 @@ func (uc *presentUseCase) GetAllByWishlist(ctx context.Context, wishlistID uuid.
 }
 
 func (uc *presentUseCase) Update(ctx context.Context, userID, id uuid.UUID, input usecase.CreatePresentInput) (entity.Present, error) {
+	if err := validatePresentFields(input.Title, input.Description, input.Link, input.CoverURL); err != nil {
+		return entity.Present{}, err
+	}
+
 	p, err := uc.presentRepo.GetByID(ctx, id)
 	if err != nil {
 		return entity.Present{}, fmt.Errorf("present not found: %w", err)
@@ -131,6 +167,9 @@ func (uc *presentUseCase) Update(ctx context.Context, userID, id uuid.UUID, inpu
 	p.Title = input.Title
 	p.Description = input.Description
 	p.Links = links
+	p.Link = input.Link
+	p.Type = normalizeType(input.Type)
+	p.Images = input.Images
 
 	price, err := parsePrice(input.PriceStr)
 	if err != nil {
@@ -146,6 +185,20 @@ func (uc *presentUseCase) Update(ctx context.Context, userID, id uuid.UUID, inpu
 
 	if err := uc.presentRepo.Update(ctx, p); err != nil {
 		return entity.Present{}, fmt.Errorf("update present: %w", err)
+	}
+
+	if input.Source != "" {
+		meta := entity.PresentMeta{
+			PresentID:   p.ID,
+			Source:      input.Source,
+			OriginalURL: input.OriginalURL,
+			Category:    input.Category,
+			Brand:       input.Brand,
+			ParsedAt:    time.Now().UTC(),
+		}
+		if err := uc.metaRepo.Upsert(ctx, meta); err != nil {
+			log.Printf("present_meta upsert failed for present %s: %v", p.ID, err)
+		}
 	}
 
 	return p, nil
@@ -196,8 +249,32 @@ func (uc *presentUseCase) Release(ctx context.Context, id, guestID uuid.UUID) er
 	return errors.New("снять бронь может только тот, кто её поставил")
 }
 
-// resolveCover — параметр назван coverURL, а не url: пакет net/url теперь
-// импортирован, и одноимённая переменная его бы перекрыла.
+func (uc *presentUseCase) Join(ctx context.Context, id uuid.UUID) error {
+	p, err := uc.presentRepo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("present not found: %w", err)
+	}
+	if p.Type != "group" {
+		return errors.New("подарок не является групповым")
+	}
+	p.ParticipantsCount++
+	return uc.presentRepo.Update(ctx, p)
+}
+
+func (uc *presentUseCase) Leave(ctx context.Context, id uuid.UUID) error {
+	p, err := uc.presentRepo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("present not found: %w", err)
+	}
+	if p.Type != "group" {
+		return errors.New("подарок не является групповым")
+	}
+	if p.ParticipantsCount > 0 {
+		p.ParticipantsCount--
+	}
+	return uc.presentRepo.Update(ctx, p)
+}
+
 func (uc *presentUseCase) resolveCover(data []byte, name, coverURL string) (string, error) {
 	if len(data) > 0 {
 		if err := imagefile.Validate(data); err != nil {
@@ -210,6 +287,22 @@ func (uc *presentUseCase) resolveCover(data []byte, name, coverURL string) (stri
 		return uploaded, nil
 	}
 	return coverURL, nil
+}
+
+func validatePresentFields(title, description, link, coverURL string) error {
+	if len([]rune(title)) > usecase.MaxTitleLen {
+		return fmt.Errorf("title exceeds maximum length of %d characters", usecase.MaxTitleLen)
+	}
+	if len([]rune(description)) > usecase.MaxDescriptionLen {
+		return fmt.Errorf("description exceeds maximum length of %d characters", usecase.MaxDescriptionLen)
+	}
+	if len(link) > usecase.MaxURLLen {
+		return fmt.Errorf("link exceeds maximum URL length of %d", usecase.MaxURLLen)
+	}
+	if len(coverURL) > usecase.MaxURLLen {
+		return fmt.Errorf("cover URL exceeds maximum URL length of %d", usecase.MaxURLLen)
+	}
+	return nil
 }
 
 func parsePrice(s string) (*float64, error) {
@@ -262,4 +355,13 @@ func normalizeLinks(links []string) ([]string, error) {
 		return nil, nil
 	}
 	return cleaned, nil
+}
+
+func normalizeType(t string) string {
+	switch t {
+	case "group", "multi":
+		return t
+	default:
+		return "single"
+	}
 }

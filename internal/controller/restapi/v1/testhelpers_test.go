@@ -48,6 +48,16 @@ func (m *MockUserUC) GetMe(ctx context.Context, userID uuid.UUID) (entity.User, 
 	return args.Get(0).(entity.User), args.Error(1)
 }
 
+func (m *MockUserUC) GetProfile(ctx context.Context, userID uuid.UUID) (entity.User, error) {
+	args := m.Called(ctx, userID)
+	return args.Get(0).(entity.User), args.Error(1)
+}
+
+func (m *MockUserUC) UpdateProfile(ctx context.Context, userID uuid.UUID, input usecase.UpdateProfileInput) (entity.User, error) {
+	args := m.Called(ctx, userID, input)
+	return args.Get(0).(entity.User), args.Error(1)
+}
+
 // MockWishlistUC
 
 type MockWishlistUC struct{ mock.Mock }
@@ -131,6 +141,16 @@ func (m *MockPresentUC) Release(ctx context.Context, id, guestID uuid.UUID) erro
 	return args.Error(0)
 }
 
+func (m *MockPresentUC) Join(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *MockPresentUC) Leave(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
 // MockUploadUC
 
 type MockUploadUC struct{ mock.Mock }
@@ -145,7 +165,7 @@ func (m *MockUploadUC) BulkUpload(ctx context.Context, files []usecase.FileInput
 	return args.Get(0).([]usecase.BulkUploadResult), args.Error(1)
 }
 
-func (m *MockWishlistUC) CreateFromTemplate(ctx context.Context, userID uuid.UUID, input usecase.CreateFromTemplateInput) (entity.Wishlist, error) {
+func (m *MockWishlistUC) CreateFromSystemTemplate(ctx context.Context, userID uuid.UUID, input usecase.CreateFromSystemTemplateInput) (entity.Wishlist, error) {
 	args := m.Called(ctx, userID, input)
 	return args.Get(0).(entity.Wishlist), args.Error(1)
 }
@@ -218,4 +238,48 @@ func (m *MockGuestDataUC) OwnerGuestbook(ctx context.Context, userID, wishlistID
 func (m *MockGuestDataUC) OwnerSetGuestbookHidden(ctx context.Context, userID, entryID uuid.UUID, hidden bool) error {
 	args := m.Called(ctx, userID, entryID, hidden)
 	return args.Error(0)
+}
+
+// MockTemplateUC
+
+type MockTemplateUC struct{ mock.Mock }
+
+func (m *MockTemplateUC) Create(ctx context.Context, userID uuid.UUID, input usecase.CreateTemplateInput) (entity.Template, error) {
+	args := m.Called(ctx, userID, input)
+	return args.Get(0).(entity.Template), args.Error(1)
+}
+
+func (m *MockTemplateUC) GetAllByUser(ctx context.Context, userID uuid.UUID) ([]entity.Template, error) {
+	args := m.Called(ctx, userID)
+	return args.Get(0).([]entity.Template), args.Error(1)
+}
+
+func (m *MockTemplateUC) GetPublic(ctx context.Context, limit, page int, userID *uuid.UUID) ([]entity.TemplateWithAuthor, bool, error) {
+	args := m.Called(ctx, limit, page, userID)
+	return args.Get(0).([]entity.TemplateWithAuthor), args.Bool(1), args.Error(2)
+}
+
+func (m *MockTemplateUC) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, input usecase.UpdateTemplateInput) (entity.Template, error) {
+	args := m.Called(ctx, id, userID, input)
+	return args.Get(0).(entity.Template), args.Error(1)
+}
+
+func (m *MockTemplateUC) Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	args := m.Called(ctx, id, userID)
+	return args.Error(0)
+}
+
+func (m *MockTemplateUC) CreateWishlistFromTemplate(ctx context.Context, templateID uuid.UUID, userID uuid.UUID, title string) (entity.Wishlist, error) {
+	args := m.Called(ctx, templateID, userID, title)
+	return args.Get(0).(entity.Wishlist), args.Error(1)
+}
+
+func (m *MockTemplateUC) Like(ctx context.Context, userID, templateID uuid.UUID) (usecase.LikeResult, error) {
+	args := m.Called(ctx, userID, templateID)
+	return args.Get(0).(usecase.LikeResult), args.Error(1)
+}
+
+func (m *MockTemplateUC) Unlike(ctx context.Context, userID, templateID uuid.UUID) (usecase.LikeResult, error) {
+	args := m.Called(ctx, userID, templateID)
+	return args.Get(0).(usecase.LikeResult), args.Error(1)
 }

@@ -207,3 +207,9 @@ func (r *wishlistRepo) UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []
 	}
 	return result.RowsAffected > 0, nil
 }
+
+func (r *wishlistRepo) CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&WishlistModel{}).Where("user_id = ?", userID).Count(&count).Error
+	return count, err
+}

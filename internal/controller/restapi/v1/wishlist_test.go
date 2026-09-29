@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"main/internal/entity"
 	v1 "main/internal/controller/restapi/v1"
+	"main/internal/entity"
 	"main/internal/usecase"
 )
 
@@ -24,7 +24,7 @@ func setupWishlistApp(wishlistMock usecase.WishlistUseCase) *fiber.App {
 	userMock := &MockUserUC{}
 	presentMock := &MockPresentUC{}
 	uploadMock := &MockUploadUC{}
-	v1.NewRouter(app, testSecret, "", false, userMock, wishlistMock, presentMock, uploadMock, &MockGuestDataUC{})
+	v1.NewRouter(app, testSecret, "", false, userMock, wishlistMock, presentMock, uploadMock, &MockGuestDataUC{}, &MockTemplateUC{})
 	return app
 }
 

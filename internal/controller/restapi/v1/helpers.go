@@ -44,3 +44,11 @@ func ownerError(c *fiber.Ctx, err error, fallback int) error {
 	}
 	return c.Status(fallback).JSON(response.Error(err.Error()))
 }
+
+func getOptionalUserID(c *fiber.Ctx) *uuid.UUID {
+	id, err := getUserID(c)
+	if err != nil {
+		return nil
+	}
+	return &id
+}

@@ -8,7 +8,8 @@
       "mcp__shadcn__get_item_examples_from_registries",
       "WebFetch(domain:reactbits.dev)",
       "WebFetch(domain:api.github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "mcp__plugin_context7_context7__query-docs"
     ],
     "deny": [
       "Bash(rm -rf *)",

@@ -17,19 +17,20 @@ func NewRouter(
 	presentUC usecase.PresentUseCase,
 	uploadUC usecase.UploadUseCase,
 	guestDataUC usecase.GuestDataUseCase,
+	templateUC usecase.TemplateUseCase,
 ) {
 	api := router.Group("/api/v1")
 
-	userH := newUserHandler(userUC, cookieDomain, secureCookie)
+	userH := newUserHandler(userUC, uploadUC, cookieDomain, secureCookie)
 	wishlistH := newWishlistHandler(wishlistUC)
 	presentH := newPresentHandler(presentUC)
 	uploadH := newUploadHandler(uploadUC)
-	templateH := newTemplateHandler()
+	templateH := newTemplateHandler(templateUC)
 	guestH := newGuestDataHandler(guestDataUC)
-
-	// Templates (public) — витрина шаблонов доступна и до регистрации
-	api.Get("/templates", templateH.getAll)
-	api.Get("/templates/:id", templateH.getOne)
+	systemH := newSystemTemplateHandler()
+	api.Get("/system-templates", systemH.getAll)
+	api.Get("/system-templates/:id", systemH.getOne)
+	api.Get("/templates", middleware.JWTOptional(jwtSecret), templateH.getPublic)
 
 	// Auth (public)
 	auth := api.Group("/auth")
@@ -67,10 +68,16 @@ func NewRouter(
 	guest.Put("/wishlists/:wishlistId/playlist/:trackId/vote", guestH.toggleTrackVote)
 	guest.Get("/wishlists/:wishlistId/blocks/:blockId/guestbook", guestH.guestbook)
 	guest.Post("/wishlists/:wishlistId/blocks/:blockId/guestbook", guestH.addGuestbookEntry)
+	guest.Put("/presents/:id/join", presentH.join)
+	guest.Put("/presents/:id/leave", presentH.leave)
 
 	// Protected routes
 	protected := api.Group("")
 	protected.Use(middleware.JWTProtected(jwtSecret))
+
+	// User profile
+	protected.Get("/users/me", userH.getProfile)
+	protected.Patch("/users/me", userH.updateProfile)
 
 	// Upload
 	protected.Post("/upload", uploadH.upload)
@@ -80,7 +87,7 @@ func NewRouter(
 	protected.Get("/wishlists", wishlistH.getAll)
 	protected.Post("/wishlists", wishlistH.create)
 	protected.Post("/wishlists/constructor", wishlistH.createConstructor)
-	protected.Post("/wishlists/from-template", wishlistH.createFromTemplate)
+	protected.Post("/wishlists/from-system-template", wishlistH.createFromSystemTemplate)
 	protected.Put("/wishlists/:id", wishlistH.update)
 	protected.Put("/wishlists/:id/blocks", wishlistH.updateBlocks)
 	protected.Delete("/wishlists/:id", wishlistH.delete)
@@ -95,4 +102,13 @@ func NewRouter(
 	protected.Get("/presents/:id", presentH.getOne)
 	protected.Put("/presents/:id", presentH.update)
 	protected.Delete("/wishlists/:wishlistId/presents/:id", presentH.delete)
+
+	// Templates (protected)
+	protected.Get("/templates/my", templateH.getMy)
+	protected.Post("/templates", templateH.create)
+	protected.Patch("/templates/:id", templateH.update)
+	protected.Delete("/templates/:id", templateH.delete)
+	protected.Post("/wishlists/from-template/:id", templateH.createWishlistFromTemplate)
+	protected.Post("/templates/:id/like", templateH.like)
+	protected.Delete("/templates/:id/like", templateH.unlike)
 }
