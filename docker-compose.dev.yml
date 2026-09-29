@@ -1,8 +1,16 @@
-version: '3.8'
-
-# Только инфраструктура для локальной разработки.
-# Бэк запускай нативно: go run ./cmd/app
-# Фронт запускай нативно: pnpm dev
+# Локальная разработка: инфраструктура и бэк.
+#
+# Фронт запускается нативно: pnpm dev (он ждёт API на http://localhost:8080).
+#
+# Бэк здесь собирается в контейнере, а не нативно, потому что chai2010/webp
+# тянет libwebp через cgo — на машине без C-компилятора `go run ./cmd/app`
+# не соберётся. В образе компилятор есть, и сборка получается ровно та же,
+# что уезжает в прод.
+#
+#   docker compose -f docker-compose.dev.yml up -d --build
+#   docker compose -f docker-compose.dev.yml logs -f server
+#
+# После правки Go-кода: docker compose -f docker-compose.dev.yml up -d --build server
 
 services:
   minio:
@@ -17,6 +25,11 @@ services:
       MINIO_ROOT_PASSWORD: minio_password
     volumes:
       - minio-dev:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
     networks:
       - dev
 
@@ -31,6 +44,48 @@ services:
       - "5430:5432"
     volumes:
       - pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wishlist_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks:
+      - dev
+
+  server:
+    container_name: wishlist_api_dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    # Внутри сети компоуза соседи зовутся по имени сервиса, а не localhost.
+    # Значения из .env, вшитого в образ, здесь перебиваются: godotenv не
+    # трогает переменные, которые уже выставлены.
+    environment:
+      APP_ENV: development
+      PORT: "8080"
+      CORS_ORIGIN: http://localhost:3000
+      COOKIE_DOMAIN: ""
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: wishlist_db
+      DB_SSLMODE: disable
+      MINIO_ENDPOINT: minio:9000
+      MINIO_BUCKET_NAME: wish-list-bucket
+      MINIO_ROOT_USER: root
+      MINIO_ROOT_PASSWORD: minio_password
+      MINIO_USE_SSL: "false"
+      # Ссылки на картинки уходят в браузер, поэтому адрес — с точки зрения
+      # браузера, а не контейнера.
+      MINIO_PUBLIC_URL: http://localhost:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     networks:
       - dev
 
