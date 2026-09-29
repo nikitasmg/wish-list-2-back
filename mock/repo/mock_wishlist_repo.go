@@ -34,9 +34,10 @@ func (m *MockWishlistRepo) GetAllByUserID(ctx context.Context, userID uuid.UUID)
 	return args.Get(0).([]entity.Wishlist), args.Error(1)
 }
 
-func (m *MockWishlistRepo) Update(ctx context.Context, wishlist entity.Wishlist) error {
-	args := m.Called(ctx, wishlist)
-	return args.Error(0)
+func (m *MockWishlistRepo) UpdateMetadata(ctx context.Context, id uuid.UUID, wishlist entity.Wishlist, expectedUpdatedAt time.Time) (entity.Wishlist, bool, error) {
+	args := m.Called(ctx, id, wishlist, expectedUpdatedAt)
+	saved, _ := args.Get(0).(entity.Wishlist)
+	return saved, args.Bool(1), args.Error(2)
 }
 
 func (m *MockWishlistRepo) Delete(ctx context.Context, id uuid.UUID) error {

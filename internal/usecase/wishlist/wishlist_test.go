@@ -188,7 +188,7 @@ func TestUpdateBlocks_Conflict(t *testing.T) {
 
 	w, err := uc.UpdateBlocks(context.Background(), owner, wid, blocks, stale)
 
-	require.ErrorIs(t, err, usecase.ErrBlocksConflict)
+	require.ErrorIs(t, err, usecase.ErrVersionConflict)
 	assert.Equal(t, "quote", w.Blocks[0].Type, "вместе с ошибкой отдаётся актуальная версия")
 }
 
@@ -426,7 +426,7 @@ func TestMutations_RejectForeignWishlist(t *testing.T) {
 
 	t.Run("update", func(t *testing.T) {
 		wr, uc := newUC()
-		_, err := uc.Update(context.Background(), stranger, wid, usecase.CreateWishlistInput{Title: "Чужой"})
+		_, err := uc.Update(context.Background(), stranger, wid, usecase.CreateWishlistInput{Title: "Чужой"}, time.Time{})
 		require.ErrorIs(t, err, usecase.ErrForbidden)
 		wr.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
 	})
@@ -467,4 +467,71 @@ func TestCreateConstructor_AssignsBlockIDs(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, w.Blocks[0].ID, "новому блоку выдаётся id")
 	assert.Equal(t, "уже-есть", w.Blocks[1].ID, "чужой id не перетирается")
+}
+
+// Наружу должна уходить версия, которую вернула база, а не та, что лежала в
+// памяти до записи: со старым updatedAt клиент унёс бы в следующий запрос
+// версию, которой уже нет, и проверка конфликтов перестала бы работать.
+func TestUpdate_ReturnsSavedVersion(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	wid := uuid.New()
+	was := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	became := time.Date(2026, 9, 29, 15, 30, 0, 0, time.UTC)
+
+	wr.On("GetByID", mock.Anything, wid).
+		Return(entity.Wishlist{ID: wid, UserID: owner, Title: "Было", UpdatedAt: was}, nil)
+	wr.On("UpdateMetadata", mock.Anything, wid, mock.Anything, was).
+		Return(entity.Wishlist{ID: wid, UserID: owner, Title: "Стало", UpdatedAt: became}, true, nil)
+
+	saved, err := uc.Update(context.Background(), owner, wid,
+		usecase.CreateWishlistInput{Title: "Стало"}, was)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Стало", saved.Title)
+	assert.Equal(t, became, saved.UpdatedAt, "отдаём версию из базы, а не из памяти")
+}
+
+func TestUpdate_Conflict(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	wid := uuid.New()
+	stale := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	current := entity.Wishlist{ID: wid, UserID: owner, Title: "Соседняя вкладка"}
+
+	wr.On("GetByID", mock.Anything, wid).Return(current, nil)
+	wr.On("UpdateMetadata", mock.Anything, wid, mock.Anything, stale).
+		Return(entity.Wishlist{}, false, nil)
+
+	w, err := uc.Update(context.Background(), owner, wid,
+		usecase.CreateWishlistInput{Title: "Затирание"}, stale)
+
+	require.ErrorIs(t, err, usecase.ErrVersionConflict)
+	assert.Equal(t, "Соседняя вкладка", w.Title, "вместе с ошибкой отдаётся актуальная версия")
+}
+
+// Настройки пишутся отдельным запросом, который не знает о блоках: у usecase
+// нет способа их затереть, потому что он их и не передаёт.
+func TestUpdate_DoesNotSendBlocks(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	fs := &mockminio.MockFileStorage{}
+	uc := newWishlistUC(wr, fs)
+
+	wid := uuid.New()
+	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{
+		ID: wid, UserID: owner,
+		Blocks: []entity.Block{{ID: "b1", Type: "text"}},
+	}, nil)
+	wr.On("UpdateMetadata", mock.Anything, wid, mock.Anything, mock.Anything).
+		Return(entity.Wishlist{ID: wid, UserID: owner}, true, nil)
+
+	_, err := uc.Update(context.Background(), owner, wid,
+		usecase.CreateWishlistInput{Title: "Стало"}, time.Time{})
+
+	require.NoError(t, err)
+	wr.AssertNotCalled(t, "UpdateBlocks", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }

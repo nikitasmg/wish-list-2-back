@@ -263,7 +263,7 @@ func (uc *wishlistUseCase) assertOwner(ctx context.Context, userID, id uuid.UUID
 	return w, nil
 }
 
-func (uc *wishlistUseCase) Update(ctx context.Context, userID, id uuid.UUID, input usecase.CreateWishlistInput) (entity.Wishlist, error) {
+func (uc *wishlistUseCase) Update(ctx context.Context, userID, id uuid.UUID, input usecase.CreateWishlistInput, expectedUpdatedAt time.Time) (entity.Wishlist, error) {
 	w, err := uc.assertOwner(ctx, userID, id)
 	if err != nil {
 		return entity.Wishlist{}, err
@@ -295,11 +295,21 @@ func (uc *wishlistUseCase) Update(ctx context.Context, userID, id uuid.UUID, inp
 	}
 	w.Cover = coverURL
 
-	if err := uc.wishlistRepo.Update(ctx, w); err != nil {
+	saved, updated, err := uc.wishlistRepo.UpdateMetadata(ctx, id, w, expectedUpdatedAt)
+	if err != nil {
 		return entity.Wishlist{}, fmt.Errorf("update wishlist: %w", err)
 	}
+	if !updated {
+		// Версия разошлась. Отдаём актуальный вишлист вместе с ошибкой: клиенту
+		// есть что показать и с чем слить свою правку.
+		current, err := uc.wishlistRepo.GetByID(ctx, id)
+		if err != nil {
+			return entity.Wishlist{}, fmt.Errorf("wishlist not found: %w", err)
+		}
+		return current, usecase.ErrVersionConflict
+	}
 
-	return w, nil
+	return saved, nil
 }
 
 func (uc *wishlistUseCase) UpdateBlocks(ctx context.Context, userID, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error) {
@@ -328,7 +338,7 @@ func (uc *wishlistUseCase) UpdateBlocks(ctx context.Context, userID, id uuid.UUI
 	if !updated {
 		// Отдаём актуальный вишлист вместе с ошибкой: клиенту есть что показать
 		// и с чем слить свою правку.
-		return w, usecase.ErrBlocksConflict
+		return w, usecase.ErrVersionConflict
 	}
 
 	return w, nil

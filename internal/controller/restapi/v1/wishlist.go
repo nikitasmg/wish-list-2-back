@@ -158,30 +158,45 @@ func (h *wishlistHandler) updateBlocks(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid blocks JSON"))
 	}
 
-	// If-Match несёт updatedAt, который держит клиент. Заголовок, а не поле в
-	// теле: так автосохранение продолжает работать без заголовка — проверка
-	// версии в этом случае просто не включается.
-	var expectedUpdatedAt time.Time
-	if header := c.Get(fiber.HeaderIfMatch); header != "" {
-		parsed, err := time.Parse(time.RFC3339Nano, header)
-		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(response.Error("If-Match должен быть временем в формате RFC3339"))
-		}
-		expectedUpdatedAt = parsed
+	expectedUpdatedAt, err := ifMatchVersion(c)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
 	}
 
 	wishlist, err := h.uc.UpdateBlocks(c.Context(), userID, id, blocks, expectedUpdatedAt)
-	if errors.Is(err, usecase.ErrBlocksConflict) {
-		// Отдаём актуальную версию: фронту есть что показать и с чем слить правку.
-		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-			"error": err.Error(),
-			"data":  wishlist,
-		})
+	if errors.Is(err, usecase.ErrVersionConflict) {
+		return conflictResponse(c, err, wishlist)
 	}
 	if err != nil {
 		return ownerError(c, err, fiber.StatusBadRequest)
 	}
 	return c.JSON(response.Data(wishlist))
+}
+
+// ifMatchVersion — версия вишлиста, которую держит клиент.
+//
+// Заголовок, а не поле в теле: так запрос без заголовка остаётся рабочим —
+// проверка версии в этом случае просто не включается, и старый клиент не
+// ломается на ровном месте.
+func ifMatchVersion(c *fiber.Ctx) (time.Time, error) {
+	header := c.Get(fiber.HeaderIfMatch)
+	if header == "" {
+		return time.Time{}, nil
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, header)
+	if err != nil {
+		return time.Time{}, errors.New("If-Match должен быть временем в формате RFC3339")
+	}
+	return parsed, nil
+}
+
+// conflictResponse отдаёт 409 вместе с актуальным вишлистом: фронту есть что
+// показать и с чем слить правку.
+func conflictResponse(c *fiber.Ctx, err error, current entity.Wishlist) error {
+	return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+		"error": err.Error(),
+		"data":  current,
+	})
 }
 
 func (h *wishlistHandler) update(c *fiber.Ctx) error {
@@ -202,7 +217,15 @@ func (h *wishlistHandler) update(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("поле название обязательно"))
 	}
 
-	wishlist, err := h.uc.Update(c.Context(), userID, id, input)
+	expectedUpdatedAt, err := ifMatchVersion(c)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+	}
+
+	wishlist, err := h.uc.Update(c.Context(), userID, id, input, expectedUpdatedAt)
+	if errors.Is(err, usecase.ErrVersionConflict) {
+		return conflictResponse(c, err, wishlist)
+	}
 	if err != nil {
 		return ownerError(c, err, fiber.StatusInternalServerError)
 	}

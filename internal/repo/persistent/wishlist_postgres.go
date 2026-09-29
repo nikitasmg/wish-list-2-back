@@ -56,12 +56,49 @@ func (r *wishlistRepo) GetAllByUserID(ctx context.Context, userID uuid.UUID) ([]
 	return wishlists, nil
 }
 
-func (r *wishlistRepo) Update(ctx context.Context, wishlist entity.Wishlist) error {
+// UpdateMetadata — запись настроек вишлиста с проверкой версии.
+//
+// Обновляются только метаданные, и сохранённая строка возвращается целиком
+// (RETURNING). Save() всей модели здесь не годится по двум причинам сразу:
+// он писал бы ещё и blocks из снимка, прочитанного до правки, — и настройки
+// молча затирали бы блоки, сохранённые в это время из конструктора; а клиент
+// получал бы в ответ прежний updated_at и уносил в следующий запрос версию,
+// которой в базе уже нет.
+func (r *wishlistRepo) UpdateMetadata(
+	ctx context.Context,
+	id uuid.UUID,
+	wishlist entity.Wishlist,
+	expectedUpdatedAt time.Time,
+) (entity.Wishlist, bool, error) {
 	m := toWishlistModel(wishlist)
-	if err := r.db.WithContext(ctx).Save(&m).Error; err != nil {
-		return fmt.Errorf("wishlistRepo.Update: %w", err)
+
+	query := `
+		UPDATE wishlists
+		SET title = ?, description = ?, cover = ?, settings = ?, location = ?,
+		    event_date = ?, occasion = ?, updated_at = ?
+		WHERE id = ?`
+	args := []interface{}{
+		m.Title, m.Description, m.Cover, m.Settings, m.Location,
+		m.EventDate, m.Occasion, time.Now(), id,
 	}
-	return nil
+
+	if !expectedUpdatedAt.IsZero() {
+		query += ` AND updated_at = ?`
+		args = append(args, expectedUpdatedAt)
+	}
+	query += ` RETURNING *`
+
+	// Скан в срез, а не в структуру: ноль строк — это «версия разошлась»,
+	// обычный исход, а не ошибка ErrRecordNotFound.
+	var saved []WishlistModel
+	if err := r.db.WithContext(ctx).Raw(query, args...).Scan(&saved).Error; err != nil {
+		return entity.Wishlist{}, false, fmt.Errorf("wishlistRepo.UpdateMetadata: %w", err)
+	}
+	if len(saved) == 0 {
+		return entity.Wishlist{}, false, nil
+	}
+
+	return toWishlistEntity(saved[0]), true, nil
 }
 
 func (r *wishlistRepo) Delete(ctx context.Context, id uuid.UUID) error {

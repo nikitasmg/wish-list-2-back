@@ -77,8 +77,8 @@ func (m *MockWishlistUC) GetAllByUser(ctx context.Context, userID uuid.UUID) ([]
 	return args.Get(0).([]entity.Wishlist), args.Error(1)
 }
 
-func (m *MockWishlistUC) Update(ctx context.Context, userID, id uuid.UUID, input usecase.CreateWishlistInput) (entity.Wishlist, error) {
-	args := m.Called(ctx, userID, id, input)
+func (m *MockWishlistUC) Update(ctx context.Context, userID, id uuid.UUID, input usecase.CreateWishlistInput, expectedUpdatedAt time.Time) (entity.Wishlist, error) {
+	args := m.Called(ctx, userID, id, input, expectedUpdatedAt)
 	return args.Get(0).(entity.Wishlist), args.Error(1)
 }
 

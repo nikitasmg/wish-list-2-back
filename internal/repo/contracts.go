@@ -20,7 +20,10 @@ type WishlistRepo interface {
 	GetByID(ctx context.Context, id uuid.UUID) (entity.Wishlist, error)
 	GetByShortID(ctx context.Context, shortID string) (entity.Wishlist, error)
 	GetAllByUserID(ctx context.Context, userID uuid.UUID) ([]entity.Wishlist, error)
-	Update(ctx context.Context, wishlist entity.Wishlist) error
+	// UpdateMetadata пишет только настройки и возвращает сохранённую версию.
+	// Полного Save модели здесь нет намеренно: он затирал бы блоки снимком,
+	// прочитанным до правки.
+	UpdateMetadata(ctx context.Context, id uuid.UUID, wishlist entity.Wishlist, expectedUpdatedAt time.Time) (entity.Wishlist, bool, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 	IncrementPresentsCount(ctx context.Context, id uuid.UUID) error
 	DecrementPresentsCount(ctx context.Context, id uuid.UUID) error

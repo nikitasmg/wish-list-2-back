@@ -6,6 +6,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -50,6 +51,7 @@ func setupDB(t *testing.T) *gorm.DB {
 		&persistent.UserModel{},
 		&persistent.WishlistModel{},
 		&persistent.PresentModel{},
+		&persistent.WishlistViewModel{},
 	)
 	require.NoError(t, err)
 
@@ -208,4 +210,127 @@ func TestPresentRepo_Delete(t *testing.T) {
 
 	_, err = presentRepo.GetByID(context.Background(), pid)
 	require.Error(t, err)
+}
+
+// Главная проверка версионируемого обновления настроек: метаданные не должны
+// трогать блоки. До появления UpdateMetadata здесь был Save() всей модели, и
+// сохранение настроек затирало блоки снимком, прочитанным до правки.
+func TestWishlistRepo_UpdateMetadata_DoesNotTouchBlocks(t *testing.T) {
+	db := setupDB(t)
+	repo := persistent.NewWishlistRepo(db)
+	ctx := context.Background()
+
+	id, userID := uuid.New(), uuid.New()
+	shortID := "abc-def-ghi"
+	require.NoError(t, repo.Create(ctx, entity.Wishlist{
+		ID: id, UserID: userID, ShortID: shortID, Title: "Было",
+		BlocksVersion: entity.BlocksVersionCurrent,
+		Blocks: []entity.Block{
+			{ID: "b1", Type: "text", Position: 0, Data: []byte(`{"html":"важный текст"}`)},
+		},
+	}))
+
+	stored, err := repo.GetByID(ctx, id)
+	require.NoError(t, err)
+
+	// Сохраняем настройки, подсунув устаревший снимок без блоков — именно так
+	// и выглядел бы вызов из формы настроек.
+	stale := stored
+	stale.Blocks = nil
+	stale.Title = "Стало"
+
+	saved, ok, err := repo.UpdateMetadata(ctx, id, stale, stored.UpdatedAt)
+	require.NoError(t, err)
+	require.True(t, ok, "версия совпадает — запись должна пройти")
+
+	assert.Equal(t, "Стало", saved.Title)
+	require.Len(t, saved.Blocks, 1, "блоки должны остаться нетронутыми")
+	assert.Equal(t, "b1", saved.Blocks[0].ID)
+	assert.JSONEq(t, `{"html":"важный текст"}`, string(saved.Blocks[0].Data))
+}
+
+// Клиент должен получить ту версию, что легла в базу: со старым updated_at он
+// унёс бы в следующий запрос версию, которой уже нет, и проверка конфликтов
+// перестала бы работать.
+func TestWishlistRepo_UpdateMetadata_ReturnsFreshVersion(t *testing.T) {
+	db := setupDB(t)
+	repo := persistent.NewWishlistRepo(db)
+	ctx := context.Background()
+
+	id := uuid.New()
+	shortID := "fresh-ver-sion"
+	require.NoError(t, repo.Create(ctx, entity.Wishlist{
+		ID: id, UserID: uuid.New(), ShortID: shortID, Title: "Было",
+	}))
+
+	before, err := repo.GetByID(ctx, id)
+	require.NoError(t, err)
+
+	updated := before
+	updated.Title = "Стало"
+	saved, ok, err := repo.UpdateMetadata(ctx, id, updated, before.UpdatedAt)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	assert.True(t, saved.UpdatedAt.After(before.UpdatedAt), "updatedAt должен обновиться")
+
+	reread, err := repo.GetByID(ctx, id)
+	require.NoError(t, err)
+	assert.WithinDuration(t, reread.UpdatedAt, saved.UpdatedAt, 0,
+		"вернули ровно ту версию, что лежит в базе")
+}
+
+func TestWishlistRepo_UpdateMetadata_RejectsStaleVersion(t *testing.T) {
+	db := setupDB(t)
+	repo := persistent.NewWishlistRepo(db)
+	ctx := context.Background()
+
+	id := uuid.New()
+	shortID := "stale-ver-sion"
+	require.NoError(t, repo.Create(ctx, entity.Wishlist{
+		ID: id, UserID: uuid.New(), ShortID: shortID, Title: "Было",
+	}))
+
+	first, err := repo.GetByID(ctx, id)
+	require.NoError(t, err)
+
+	// Кто-то сохранил раньше нас.
+	winner := first
+	winner.Title = "Соседняя вкладка"
+	_, ok, err := repo.UpdateMetadata(ctx, id, winner, first.UpdatedAt)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	// Наш запрос держит устаревшую версию.
+	loser := first
+	loser.Title = "Затирание"
+	_, ok, err = repo.UpdateMetadata(ctx, id, loser, first.UpdatedAt)
+	require.NoError(t, err)
+	assert.False(t, ok, "устаревшая версия не должна проходить")
+
+	current, err := repo.GetByID(ctx, id)
+	require.NoError(t, err)
+	assert.Equal(t, "Соседняя вкладка", current.Title, "чужая правка уцелела")
+}
+
+// Без If-Match проверка версии не включается: старый клиент должен работать.
+func TestWishlistRepo_UpdateMetadata_NoVersionMeansNoCheck(t *testing.T) {
+	db := setupDB(t)
+	repo := persistent.NewWishlistRepo(db)
+	ctx := context.Background()
+
+	id := uuid.New()
+	shortID := "no-ver-check"
+	require.NoError(t, repo.Create(ctx, entity.Wishlist{
+		ID: id, UserID: uuid.New(), ShortID: shortID, Title: "Было",
+	}))
+
+	stored, err := repo.GetByID(ctx, id)
+	require.NoError(t, err)
+	stored.Title = "Стало"
+
+	saved, ok, err := repo.UpdateMetadata(ctx, id, stored, time.Time{})
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, "Стало", saved.Title)
 }

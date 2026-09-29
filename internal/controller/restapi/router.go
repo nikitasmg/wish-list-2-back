@@ -28,8 +28,12 @@ func NewRouter(
 	app.Use(logger.New())
 	app.Use(compress.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     cfg.App.CORSOrigin,
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Custom-Header",
+		AllowOrigins: cfg.App.CORSOrigin,
+		// If-Match несёт версию вишлиста при сохранении блоков и метаданных.
+		// Без него браузер отрезает заголовок на preflight, и проверка версии
+		// перестаёт работать именно там, где она нужна: фронт живёт на другом
+		// поддомене, а падает это молча — запрос проходит, конфликт не ловится.
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Custom-Header, If-Match",
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS, PATCH",
 		AllowCredentials: true,
 		ExposeHeaders:    "Content-Length, X-Knowledge-Base",

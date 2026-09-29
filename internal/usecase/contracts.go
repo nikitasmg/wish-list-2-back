@@ -111,17 +111,20 @@ type WishlistUseCase interface {
 	// секреты отдаются без содержимого, просмотр засчитывается гостю.
 	GetByShortID(ctx context.Context, shortID string, guestID uuid.UUID) (entity.Wishlist, error)
 	GetAllByUser(ctx context.Context, userID uuid.UUID) ([]entity.Wishlist, error)
-	Update(ctx context.Context, userID, id uuid.UUID, input CreateWishlistInput) (entity.Wishlist, error)
+	// Update меняет только настройки и, как UpdateBlocks, проверяет версию:
+	// иначе сохранение настроек затирало бы блоки, сохранённые в соседней
+	// вкладке. Возвращает вишлист в том виде, в каком он лёг в базу.
+	Update(ctx context.Context, userID, id uuid.UUID, input CreateWishlistInput, expectedUpdatedAt time.Time) (entity.Wishlist, error)
 	// UpdateBlocks: expectedUpdatedAt — версия, которую держит клиент. Нулевое
 	// время отключает проверку (старые клиенты без заголовка If-Match).
-	// Расхождение версий возвращает ErrBlocksConflict.
+	// Расхождение версий возвращает ErrVersionConflict.
 	UpdateBlocks(ctx context.Context, userID, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error)
 	Delete(ctx context.Context, userID, id uuid.UUID) error
 }
 
-// ErrBlocksConflict — вишлист изменили в другом месте, пока клиент держал свою
+// ErrVersionConflict — вишлист изменили в другом месте, пока клиент держал свою
 // версию. Обработчик отдаёт 409 и актуальный вишлист, чтобы было что показать.
-var ErrBlocksConflict = errors.New("вишлист изменили в другой вкладке")
+var ErrVersionConflict = errors.New("вишлист изменили в другой вкладке")
 
 // ErrForbidden — вишлист принадлежит другому пользователю.
 //
