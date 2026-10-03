@@ -46,7 +46,10 @@ func (h *presentHandler) getAll(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid wishlist ID"))
 	}
 
-	presents, err := h.uc.GetAllByWishlist(c.Context(), wishlistID)
+	// Пользователь здесь необязателен: маршрут гостевой. Нужен он только
+	// для того, чтобы не показать владельцу имена дарителей.
+	viewerID, _ := getUserID(c)
+	presents, err := h.uc.GetAllByWishlist(c.Context(), wishlistID, viewerID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
 	}
@@ -140,7 +143,22 @@ func (h *presentHandler) reserve(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("не удалось определить гостя — включите куки и обновите страницу"))
 	}
 
-	if err := h.uc.Reserve(c.Context(), id, guestID); err != nil {
+	// Тело необязательно: старый клиент бронирует без подписи.
+	var body struct {
+		Name      string `json:"name"`
+		Anonymous bool   `json:"anonymous"`
+	}
+	if len(c.Body()) > 0 {
+		if err := json.Unmarshal(c.Body(), &body); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid JSON"))
+		}
+	}
+	name := body.Name
+	if body.Anonymous {
+		name = ""
+	}
+
+	if err := h.uc.Reserve(c.Context(), id, guestID, name); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
 	}
 	return c.JSON(response.Data(true))
@@ -161,6 +179,49 @@ func (h *presentHandler) release(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusForbidden).JSON(response.Error(err.Error()))
 	}
 	return c.JSON(response.Data(true))
+}
+
+func (h *presentHandler) reorder(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
+	wishlistID, err := uuid.Parse(c.Params("wishlistId"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid wishlist ID"))
+	}
+	var body struct {
+		IDs []uuid.UUID `json:"ids"`
+	}
+	if err := json.Unmarshal(c.Body(), &body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid JSON"))
+	}
+	if err := h.uc.Reorder(c.Context(), userID, wishlistID, body.IDs); err != nil {
+		return ownerError(c, err, fiber.StatusBadRequest)
+	}
+	return c.JSON(response.Data(true))
+}
+
+func (h *presentHandler) setGifted(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid present ID"))
+	}
+	var body struct {
+		Gifted bool `json:"gifted"`
+	}
+	if err := json.Unmarshal(c.Body(), &body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid JSON"))
+	}
+	present, err := h.uc.SetGifted(c.Context(), userID, id, body.Gifted)
+	if err != nil {
+		return ownerError(c, err, fiber.StatusBadRequest)
+	}
+	return c.JSON(response.Data(present))
 }
 
 func (h *presentHandler) join(c *fiber.Ctx) error {
@@ -211,6 +272,7 @@ func (h *presentHandler) parsePresentInput(c *fiber.Ctx) (usecase.CreatePresentI
 		PriceStr:    c.FormValue("price"),
 		CoverURL:    c.FormValue("cover_url"),
 		Type:        c.FormValue("type"),
+		IsMain:      stringToBool(c.FormValue("is_main")),
 	}
 
 	source := c.FormValue("source")

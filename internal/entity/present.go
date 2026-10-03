@@ -30,11 +30,24 @@ type Present struct {
 	ReservedByGuest string `json:"-"`
 	// ReservedByMe — вычисляется на выдаче для текущего гостя, в базе не хранится.
 	ReservedByMe bool `json:"reservedByMe"`
+	// ReservedByName — как подписался гость при брони («Дарит Аня»). Видят
+	// другие гости; владельцу не отдаётся, иначе сюрприз пропадает.
+	ReservedByName string `json:"reservedByName"`
+
+	// IsMain — «главная мечта»: первой и крупнее. Одна на вишлист.
+	IsMain bool `json:"isMain"`
+	// SortOrder — порядок в списке, задаётся перетаскиванием.
+	SortOrder int `json:"sortOrder"`
+	// Gifted — владелец отметил подарок подаренным; брони больше нет смысла.
+	Gifted bool `json:"gifted"`
 }
 
+// MaxReserverNameLen — подпись гостя при брони.
+const MaxReserverNameLen = 60
+
 // MaxPresentDescriptionLen — лимит описания подарка в символах (не в байтах:
-// описания пишут по-русски, и 500 байт это всего 250 букв).
-const MaxPresentDescriptionLen = 500
+// описания пишут по-русски, и 1000 байт — это всего 500 букв).
+const MaxPresentDescriptionLen = 1000
 
 // MaxPresentLinks — сколько магазинов помещается в карточку подарка.
 const MaxPresentLinks = 5

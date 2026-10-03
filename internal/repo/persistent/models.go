@@ -66,6 +66,10 @@ type PresentModel struct {
 	Description       string
 	Reserved          bool
 	ReservedByGuest   *string `gorm:"column:reserved_by_guest"`
+	ReservedByName    string  `gorm:"column:reserved_by_name;not null;default:''"`
+	IsMain            bool    `gorm:"column:is_main;not null;default:false"`
+	SortOrder         int     `gorm:"column:sort_order;not null;default:0"`
+	Gifted            bool    `gorm:"column:gifted;not null;default:false"`
 	Cover             string
 	Link              string
 	Price             *float64        `gorm:"type:decimal(10,2)"`

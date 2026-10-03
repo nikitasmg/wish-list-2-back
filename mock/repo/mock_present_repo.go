@@ -38,8 +38,20 @@ func (m *MockPresentRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	return args.Error(0)
 }
 
-func (m *MockPresentRepo) Reserve(ctx context.Context, id, guestID uuid.UUID) (bool, error) {
-	args := m.Called(ctx, id, guestID)
+func (m *MockPresentRepo) ClearMain(ctx context.Context, wishlistID, exceptID uuid.UUID) error {
+	return m.Called(ctx, wishlistID, exceptID).Error(0)
+}
+
+func (m *MockPresentRepo) Reorder(ctx context.Context, wishlistID uuid.UUID, ids []uuid.UUID) error {
+	return m.Called(ctx, wishlistID, ids).Error(0)
+}
+
+func (m *MockPresentRepo) SetGifted(ctx context.Context, id uuid.UUID, gifted bool) error {
+	return m.Called(ctx, id, gifted).Error(0)
+}
+
+func (m *MockPresentRepo) Reserve(ctx context.Context, id, guestID uuid.UUID, name string) (bool, error) {
+	args := m.Called(ctx, id, guestID, name)
 	return args.Bool(0), args.Error(1)
 }
 

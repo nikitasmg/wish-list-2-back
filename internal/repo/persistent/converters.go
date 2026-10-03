@@ -200,6 +200,10 @@ func toPresentEntity(m PresentModel) entity.Present {
 		Type:              m.Type,
 		ParticipantsCount: m.ParticipantsCount,
 		Images:            []string(m.Images),
+		ReservedByName:    m.ReservedByName,
+		IsMain:            m.IsMain,
+		SortOrder:         m.SortOrder,
+		Gifted:            m.Gifted,
 	}
 }
 
@@ -232,6 +236,10 @@ func toPresentModel(p entity.Present) PresentModel {
 		Type:              p.Type,
 		ParticipantsCount: p.ParticipantsCount,
 		Images:            StringSliceJSON(p.Images),
+		ReservedByName:    p.ReservedByName,
+		IsMain:            p.IsMain,
+		SortOrder:         p.SortOrder,
+		Gifted:            p.Gifted,
 	}
 }
 

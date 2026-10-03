@@ -92,10 +92,10 @@ func TestReserve_AlreadyReserved(t *testing.T) {
 
 	id, guest := uuid.New(), uuid.New()
 	// Условный апдейт не нашёл свободной строки — подарок успели занять.
-	pr.On("Reserve", mock.Anything, id, guest).Return(false, nil)
+	pr.On("Reserve", mock.Anything, id, guest, "").Return(false, nil)
 	pr.On("GetByID", mock.Anything, id).Return(entity.Present{ID: id, Reserved: true}, nil)
 
-	err := uc.Reserve(context.Background(), id, guest)
+	err := uc.Reserve(context.Background(), id, guest, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "уже был забронирован")
 }
@@ -107,10 +107,10 @@ func TestReserve_NotFound(t *testing.T) {
 	uc := newPresentUC(pr, wr, fs)
 
 	id, guest := uuid.New(), uuid.New()
-	pr.On("Reserve", mock.Anything, id, guest).Return(false, nil)
+	pr.On("Reserve", mock.Anything, id, guest, "").Return(false, nil)
 	pr.On("GetByID", mock.Anything, id).Return(entity.Present{}, errors.New("no rows"))
 
-	err := uc.Reserve(context.Background(), id, guest)
+	err := uc.Reserve(context.Background(), id, guest, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
@@ -122,9 +122,9 @@ func TestReserve_Success(t *testing.T) {
 	uc := newPresentUC(pr, wr, fs)
 
 	id, guest := uuid.New(), uuid.New()
-	pr.On("Reserve", mock.Anything, id, guest).Return(true, nil)
+	pr.On("Reserve", mock.Anything, id, guest, "").Return(true, nil)
 
-	err := uc.Reserve(context.Background(), id, guest)
+	err := uc.Reserve(context.Background(), id, guest, "")
 	require.NoError(t, err)
 	pr.AssertExpectations(t)
 	pr.AssertNotCalled(t, "GetByID", mock.Anything, id)
@@ -273,7 +273,7 @@ func TestCreate_RejectsTooLongDescription(t *testing.T) {
 	})
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "500")
+	assert.Contains(t, err.Error(), "1000")
 	pr.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
 }
 

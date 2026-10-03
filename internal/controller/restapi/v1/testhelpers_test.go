@@ -116,8 +116,8 @@ func (m *MockPresentUC) GetByID(ctx context.Context, userID, id uuid.UUID) (enti
 	return args.Get(0).(entity.Present), args.Error(1)
 }
 
-func (m *MockPresentUC) GetAllByWishlist(ctx context.Context, wishlistID uuid.UUID) ([]entity.Present, error) {
-	args := m.Called(ctx, wishlistID)
+func (m *MockPresentUC) GetAllByWishlist(ctx context.Context, wishlistID, viewerID uuid.UUID) ([]entity.Present, error) {
+	args := m.Called(ctx, wishlistID, viewerID)
 	return args.Get(0).([]entity.Present), args.Error(1)
 }
 
@@ -131,14 +131,23 @@ func (m *MockPresentUC) Delete(ctx context.Context, userID, wishlistID, id uuid.
 	return args.Error(0)
 }
 
-func (m *MockPresentUC) Reserve(ctx context.Context, id, guestID uuid.UUID) error {
-	args := m.Called(ctx, id, guestID)
+func (m *MockPresentUC) Reserve(ctx context.Context, id, guestID uuid.UUID, name string) error {
+	args := m.Called(ctx, id, guestID, name)
 	return args.Error(0)
 }
 
 func (m *MockPresentUC) Release(ctx context.Context, id, guestID uuid.UUID) error {
 	args := m.Called(ctx, id, guestID)
 	return args.Error(0)
+}
+
+func (m *MockPresentUC) Reorder(ctx context.Context, userID, wishlistID uuid.UUID, ids []uuid.UUID) error {
+	return m.Called(ctx, userID, wishlistID, ids).Error(0)
+}
+
+func (m *MockPresentUC) SetGifted(ctx context.Context, userID, id uuid.UUID, gifted bool) (entity.Present, error) {
+	args := m.Called(ctx, userID, id, gifted)
+	return args.Get(0).(entity.Present), args.Error(1)
 }
 
 func (m *MockPresentUC) Join(ctx context.Context, id uuid.UUID) error {

@@ -52,7 +52,7 @@ func NewRouter(
 
 	guest.Get("/wishlists/s/:shortId", wishlistH.getByShortID)
 	guest.Get("/wishlists/:id", wishlistH.getOne)
-	guest.Get("/wishlists/:wishlistId/presents", presentH.getAll)
+	guest.Get("/wishlists/:wishlistId/presents", middleware.JWTOptional(jwtSecret), presentH.getAll)
 	guest.Put("/presents/:id/reserve", presentH.reserve)
 	guest.Put("/presents/:id/release", presentH.release)
 
@@ -102,6 +102,8 @@ func NewRouter(
 	protected.Get("/presents/:id", presentH.getOne)
 	protected.Put("/presents/:id", presentH.update)
 	protected.Delete("/wishlists/:wishlistId/presents/:id", presentH.delete)
+	protected.Put("/wishlists/:wishlistId/presents/order", presentH.reorder)
+	protected.Put("/presents/:id/gifted", presentH.setGifted)
 
 	// Templates (protected)
 	protected.Get("/templates/my", templateH.getMy)

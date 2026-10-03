@@ -99,10 +99,19 @@ func (uc *presentUseCase) Create(ctx context.Context, userID, wishlistID uuid.UU
 		Type:        normalizeType(input.Type),
 		Images:      input.Images,
 		Link:        input.Link,
+		IsMain:      input.IsMain,
+		// Новый подарок встаёт в конец: порядок, выставленный руками, не
+		// должен перемешиваться от каждого добавления.
+		SortOrder: int(count),
 	}
 
 	if err := uc.presentRepo.Create(ctx, p); err != nil {
 		return entity.Present{}, fmt.Errorf("create present: %w", err)
+	}
+	if p.IsMain {
+		if err := uc.presentRepo.ClearMain(ctx, wishlistID, p.ID); err != nil {
+			return entity.Present{}, fmt.Errorf("clear main: %w", err)
+		}
 	}
 
 	if err := uc.wishlistRepo.IncrementPresentsCount(ctx, wishlistID); err != nil {
@@ -137,8 +146,27 @@ func (uc *presentUseCase) GetByID(ctx context.Context, userID, id uuid.UUID) (en
 	return p, nil
 }
 
-func (uc *presentUseCase) GetAllByWishlist(ctx context.Context, wishlistID uuid.UUID) ([]entity.Present, error) {
-	return uc.presentRepo.GetAllByWishlistID(ctx, wishlistID)
+func (uc *presentUseCase) GetAllByWishlist(ctx context.Context, wishlistID, viewerID uuid.UUID) ([]entity.Present, error) {
+	presents, err := uc.presentRepo.GetAllByWishlistID(ctx, wishlistID)
+	if err != nil {
+		return nil, err
+	}
+	if viewerID == uuid.Nil {
+		return presents, nil
+	}
+
+	// Владелец видит факт брони, но не имя: страница обещает гостям, что
+	// именинник не узнает, кто что дарит.
+	w, err := uc.wishlistRepo.GetByID(ctx, wishlistID)
+	if err != nil {
+		return nil, fmt.Errorf("wishlist not found: %w", err)
+	}
+	if w.UserID == viewerID {
+		for i := range presents {
+			presents[i].ReservedByName = ""
+		}
+	}
+	return presents, nil
 }
 
 func (uc *presentUseCase) Update(ctx context.Context, userID, id uuid.UUID, input usecase.CreatePresentInput) (entity.Present, error) {
@@ -170,6 +198,7 @@ func (uc *presentUseCase) Update(ctx context.Context, userID, id uuid.UUID, inpu
 	p.Link = input.Link
 	p.Type = normalizeType(input.Type)
 	p.Images = input.Images
+	p.IsMain = input.IsMain
 
 	price, err := parsePrice(input.PriceStr)
 	if err != nil {
@@ -183,6 +212,11 @@ func (uc *presentUseCase) Update(ctx context.Context, userID, id uuid.UUID, inpu
 	}
 	p.Cover = coverURL
 
+	if p.IsMain {
+		if err := uc.presentRepo.ClearMain(ctx, p.WishlistID, p.ID); err != nil {
+			return entity.Present{}, fmt.Errorf("clear main: %w", err)
+		}
+	}
 	if err := uc.presentRepo.Update(ctx, p); err != nil {
 		return entity.Present{}, fmt.Errorf("update present: %w", err)
 	}
@@ -217,8 +251,13 @@ func (uc *presentUseCase) Delete(ctx context.Context, userID, wishlistID, id uui
 	return nil
 }
 
-func (uc *presentUseCase) Reserve(ctx context.Context, id, guestID uuid.UUID) error {
-	reserved, err := uc.presentRepo.Reserve(ctx, id, guestID)
+func (uc *presentUseCase) Reserve(ctx context.Context, id, guestID uuid.UUID, name string) error {
+	name = strings.TrimSpace(name)
+	if utf8.RuneCountInString(name) > entity.MaxReserverNameLen {
+		return fmt.Errorf("подпись длиннее %d символов", entity.MaxReserverNameLen)
+	}
+
+	reserved, err := uc.presentRepo.Reserve(ctx, id, guestID, name)
 	if err != nil {
 		return fmt.Errorf("reserve present: %w", err)
 	}
@@ -247,6 +286,34 @@ func (uc *presentUseCase) Release(ctx context.Context, id, guestID uuid.UUID) er
 		return fmt.Errorf("present not found: %w", err)
 	}
 	return errors.New("снять бронь может только тот, кто её поставил")
+}
+
+func (uc *presentUseCase) Reorder(ctx context.Context, userID, wishlistID uuid.UUID, ids []uuid.UUID) error {
+	if err := uc.assertOwner(ctx, userID, wishlistID); err != nil {
+		return err
+	}
+	if len(ids) > usecase.MaxPresentsPerWishlist {
+		return errors.New("слишком много подарков в запросе")
+	}
+	if err := uc.presentRepo.Reorder(ctx, wishlistID, ids); err != nil {
+		return fmt.Errorf("reorder presents: %w", err)
+	}
+	return nil
+}
+
+func (uc *presentUseCase) SetGifted(ctx context.Context, userID, id uuid.UUID, gifted bool) (entity.Present, error) {
+	p, err := uc.presentRepo.GetByID(ctx, id)
+	if err != nil {
+		return entity.Present{}, fmt.Errorf("present not found: %w", err)
+	}
+	if err := uc.assertOwner(ctx, userID, p.WishlistID); err != nil {
+		return entity.Present{}, err
+	}
+	if err := uc.presentRepo.SetGifted(ctx, id, gifted); err != nil {
+		return entity.Present{}, fmt.Errorf("set gifted: %w", err)
+	}
+	p.Gifted = gifted
+	return p, nil
 }
 
 func (uc *presentUseCase) Join(ctx context.Context, id uuid.UUID) error {

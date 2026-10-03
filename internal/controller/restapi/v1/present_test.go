@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	v1 "main/internal/controller/restapi/v1"
+	"main/internal/entity"
 	"main/internal/usecase"
 )
 
@@ -32,7 +33,7 @@ func TestReserve_AlreadyReserved(t *testing.T) {
 	app := setupPresentApp(pm)
 
 	pid := uuid.New()
-	pm.On("Reserve", mock.Anything, pid, mock.AnythingOfType("uuid.UUID")).Return(errors.New("упс... подарок уже был забронирован, пожалуйста перезагрузите страницу"))
+	pm.On("Reserve", mock.Anything, pid, mock.AnythingOfType("uuid.UUID"), "").Return(errors.New("упс... подарок уже был забронирован, пожалуйста перезагрузите страницу"))
 
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/presents/"+pid.String()+"/reserve", nil)
 	resp, err := app.Test(req)
@@ -49,7 +50,7 @@ func TestReserve_Success(t *testing.T) {
 	app := setupPresentApp(pm)
 
 	pid := uuid.New()
-	pm.On("Reserve", mock.Anything, pid, mock.AnythingOfType("uuid.UUID")).Return(nil)
+	pm.On("Reserve", mock.Anything, pid, mock.AnythingOfType("uuid.UUID"), "").Return(nil)
 
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/presents/"+pid.String()+"/reserve", nil)
 	resp, err := app.Test(req)
@@ -113,7 +114,7 @@ func TestReserve_PassesGuestFromCookie(t *testing.T) {
 
 	pid := uuid.New()
 	var seen uuid.UUID
-	pm.On("Reserve", mock.Anything, pid, mock.AnythingOfType("uuid.UUID")).
+	pm.On("Reserve", mock.Anything, pid, mock.AnythingOfType("uuid.UUID"), "").
 		Run(func(args mock.Arguments) { seen = args.Get(2).(uuid.UUID) }).
 		Return(nil)
 
@@ -164,4 +165,41 @@ func TestJoin_Success(t *testing.T) {
 	var result map[string]interface{}
 	json.NewDecoder(resp.Body).Decode(&result)
 	assert.Equal(t, true, result["data"])
+}
+
+// Бронь с подписью: «Анонимно» перекрывает имя, даже если его успели ввести.
+func TestReserve_NameAndAnonymous(t *testing.T) {
+	cases := []struct{ body, want string }{
+		{`{"name":"Аня"}`, "Аня"},
+		{`{"name":"Аня","anonymous":true}`, ""},
+	}
+	for _, tc := range cases {
+		pm := &MockPresentUC{}
+		app := setupPresentApp(pm)
+		pid := uuid.New()
+		pm.On("Reserve", mock.Anything, pid, mock.AnythingOfType("uuid.UUID"), tc.want).Return(nil)
+
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/presents/"+pid.String()+"/reserve", bytes.NewBufferString(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		pm.AssertExpectations(t)
+	}
+}
+
+// Список подарков гостевой, но залогиненный владелец должен опознаваться:
+// иначе usecase не скроет от него имена дарителей.
+func TestGetAllPresents_PassesViewer(t *testing.T) {
+	pm := &MockPresentUC{}
+	app := setupPresentApp(pm)
+	userID, wid := uuid.New(), uuid.New()
+	pm.On("GetAllByWishlist", mock.Anything, wid, userID).Return([]entity.Present{}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/wishlists/"+wid.String()+"/presents", nil)
+	req.Header.Set("Authorization", "Bearer "+makeTestToken(userID))
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	pm.AssertExpectations(t)
 }

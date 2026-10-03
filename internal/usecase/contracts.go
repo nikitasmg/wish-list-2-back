@@ -78,6 +78,7 @@ type CreatePresentInput struct {
 	Type        string   // "single" | "group" | "multi"; пусто => "single"
 	Images      []string // галерея для multi
 	Links       []string // несколько ссылок для multi
+	IsMain      bool     // главная мечта
 }
 
 // TelegramAuthInput — входные данные для Telegram-авторизации
@@ -156,13 +157,20 @@ var ErrForbidden = errors.New("это чужой вишлист")
 type PresentUseCase interface {
 	Create(ctx context.Context, userID, wishlistID uuid.UUID, input CreatePresentInput) (entity.Present, error)
 	GetByID(ctx context.Context, userID, id uuid.UUID) (entity.Present, error)
-	GetAllByWishlist(ctx context.Context, wishlistID uuid.UUID) ([]entity.Present, error)
+	// GetAllByWishlist: viewerID — залогиненный пользователь или uuid.Nil.
+	// Владельцу не отдаётся имя забронировавшего гостя.
+	GetAllByWishlist(ctx context.Context, wishlistID, viewerID uuid.UUID) ([]entity.Present, error)
 	Update(ctx context.Context, userID, id uuid.UUID, input CreatePresentInput) (entity.Present, error)
 	Delete(ctx context.Context, userID, wishlistID, id uuid.UUID) error
 	// Reserve и Release принимают гостя из куки: бронь ставится от его имени,
 	// и снять её может только он.
-	Reserve(ctx context.Context, id, guestID uuid.UUID) error
+	// name — подпись гостя; пусто — анонимно.
+	Reserve(ctx context.Context, id, guestID uuid.UUID, name string) error
 	Release(ctx context.Context, id, guestID uuid.UUID) error
+	// Reorder задаёт порядок подарков: ids — все подарки вишлиста сверху вниз.
+	Reorder(ctx context.Context, userID, wishlistID uuid.UUID, ids []uuid.UUID) error
+	// SetGifted — владелец отмечает, что подарок уже подарен.
+	SetGifted(ctx context.Context, userID, id uuid.UUID, gifted bool) (entity.Present, error)
 	Join(ctx context.Context, id uuid.UUID) error
 	Leave(ctx context.Context, id uuid.UUID) error
 }

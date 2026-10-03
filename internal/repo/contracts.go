@@ -50,8 +50,13 @@ type PresentRepo interface {
 	CountByWishlistID(ctx context.Context, wishlistID uuid.UUID) (int64, error)
 	// Reserve и Release — условные апдейты. Возвращают false, когда строка под
 	// условие не подошла: подарок уже занят или бронь ставил другой гость.
-	Reserve(ctx context.Context, id, guestID uuid.UUID) (bool, error)
+	Reserve(ctx context.Context, id, guestID uuid.UUID, name string) (bool, error)
 	Release(ctx context.Context, id, guestID uuid.UUID) (bool, error)
+	// ClearMain снимает «главную мечту» со всех подарков вишлиста, кроме exceptID.
+	ClearMain(ctx context.Context, wishlistID, exceptID uuid.UUID) error
+	// Reorder проставляет sort_order по порядку ids в пределах вишлиста.
+	Reorder(ctx context.Context, wishlistID uuid.UUID, ids []uuid.UUID) error
+	SetGifted(ctx context.Context, id uuid.UUID, gifted bool) error
 }
 
 // GuestDataRepo — всё, что оставляют гости: ответы, голоса, треки, записи.
