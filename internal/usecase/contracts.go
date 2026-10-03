@@ -58,7 +58,9 @@ type CreateConstructorInput struct {
 type CreateFromSystemTemplateInput struct {
 	TemplateID string
 	Title      string
-	EventDate  *time.Time
+	// Name — имя виновника праздника, подставляется вместо {name} в текстах.
+	Name      string
+	EventDate *time.Time
 }
 
 // CreatePresentInput — входные данные для создания/обновления подарка

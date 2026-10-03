@@ -14,10 +14,13 @@ type SystemTemplate struct {
 	ColorScheme string `json:"colorScheme"`
 	// SampleTitle — название-пример («Тёме — семь!»), которое подставляется
 	// в превью и в поле «Для кого», пока пользователь не ввёл своё.
-	SampleTitle string        `json:"sampleTitle"`
-	Occasion    string        `json:"occasion"`
-	Blocks      []Block       `json:"blocks"`
-	Rows        []RowSettings `json:"rows,omitempty"`
+	SampleTitle string `json:"sampleTitle"`
+	// SampleName — имя-пример для {name} в текстах блоков («Тёма»). Есть только
+	// у шаблонов, где имя встречается не только на обложке.
+	SampleName string        `json:"sampleName,omitempty"`
+	Occasion   string        `json:"occasion"`
+	Blocks     []Block       `json:"blocks"`
+	Rows       []RowSettings `json:"rows,omitempty"`
 	// Look — шрифт и узор, с которыми заготовка нарисована в макете.
 	Look Look `json:"look"`
 }

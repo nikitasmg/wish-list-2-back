@@ -1,6 +1,8 @@
 package systemtemplate_test
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -90,4 +92,20 @@ func TestGet(t *testing.T) {
 	_, err = systemtemplate.Get("не-существует")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "не найден")
+}
+
+// Шаблон, где в текстах есть {name}, должен знать имя-пример: его видно в
+// превью и подставляется, когда человек не ввёл своё.
+func TestAll_NamePlaceholderHasSample(t *testing.T) {
+	templates, err := systemtemplate.All()
+	require.NoError(t, err)
+	for _, tpl := range templates {
+		raw, err := json.Marshal(tpl.Blocks)
+		require.NoError(t, err)
+		if strings.Contains(string(raw), "{name}") {
+			assert.NotEmpty(t, tpl.SampleName, "%s: есть {name}, но нет sampleName", tpl.ID)
+		} else {
+			assert.Empty(t, tpl.SampleName, "%s: sampleName без {name} в текстах", tpl.ID)
+		}
+	}
 }

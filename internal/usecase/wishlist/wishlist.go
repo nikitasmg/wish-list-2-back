@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -152,6 +154,31 @@ func (uc *wishlistUseCase) CreateConstructor(ctx context.Context, userID uuid.UU
 	return w, nil
 }
 
+// maxTemplateNameLen — имя виновника праздника для {name} в шаблоне.
+const maxTemplateNameLen = 40
+
+// fillTemplateName возвращает глубокую копию блоков с {name}, заменённым на
+// имя. Шаблоны пишут {name} только там, где имя стоит в именительном падеже,
+// поэтому подстановка не ломает грамматику. Имя экранируется как JSON-строка.
+func fillTemplateName(src []entity.Block, name string) ([]entity.Block, error) {
+	raw, err := json.Marshal(src)
+	if err != nil {
+		return nil, fmt.Errorf("copy template blocks: %w", err)
+	}
+	if name != "" {
+		quoted, err := json.Marshal(name)
+		if err != nil {
+			return nil, fmt.Errorf("encode name: %w", err)
+		}
+		raw = []byte(strings.ReplaceAll(string(raw), "{name}", string(quoted[1:len(quoted)-1])))
+	}
+	var blocks []entity.Block
+	if err := json.Unmarshal(raw, &blocks); err != nil {
+		return nil, fmt.Errorf("copy template blocks: %w", err)
+	}
+	return blocks, nil
+}
+
 func (uc *wishlistUseCase) CreateFromSystemTemplate(ctx context.Context, userID uuid.UUID, input usecase.CreateFromSystemTemplateInput) (entity.Wishlist, error) {
 	tpl, err := systemtemplate.Get(input.TemplateID)
 	if err != nil {
@@ -174,10 +201,21 @@ func (uc *wishlistUseCase) CreateFromSystemTemplate(ctx context.Context, userID 
 		return entity.Wishlist{}, err
 	}
 
+	name := strings.TrimSpace(input.Name)
+	if utf8.RuneCountInString(name) > maxTemplateNameLen {
+		return entity.Wishlist{}, fmt.Errorf("имя не длиннее %d символов", maxTemplateNameLen)
+	}
+	if name == "" {
+		name = tpl.SampleName
+	}
+
 	// Копия: блоки шаблона общие для всех пользователей, и правка одного
-	// вишлиста не должна задеть тех, кто создаётся следом.
-	blocks := make([]entity.Block, len(tpl.Blocks))
-	copy(blocks, tpl.Blocks)
+	// вишлиста не должна задеть тех, кто создаётся следом. Заодно
+	// подставляем имя — копия через JSON и так глубокая.
+	blocks, err := fillTemplateName(tpl.Blocks, name)
+	if err != nil {
+		return entity.Wishlist{}, err
+	}
 
 	// Название с обложки должно совпадать с названием вишлиста — иначе человек
 	// вводит «Маше — 30!», а на странице остаётся «Ане — 28» из шаблона.

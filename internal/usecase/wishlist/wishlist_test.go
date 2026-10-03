@@ -420,6 +420,60 @@ func TestCreateFromSystemTemplate_UsesSampleTitleWhenEmpty(t *testing.T) {
 	assert.Equal(t, "Сергей Петрович", w.Title)
 }
 
+// Имя виновника праздника подставляется во все тексты шаблона — иначе в
+// вишлисте Пети остаётся «Стол забронирован на имя Дима».
+func TestCreateFromSystemTemplate_FillsName(t *testing.T) {
+	w := createFromTemplateForTest(t, usecase.CreateFromSystemTemplateInput{TemplateID: "man", Title: "Пете 40", Name: "  Петя "})
+	raw := blocksJSON(t, w)
+	assert.Contains(t, raw, "Стол забронирован на имя: Петя.")
+	assert.NotContains(t, raw, "{name}")
+	assert.NotContains(t, raw, "Дима")
+}
+
+func TestCreateFromSystemTemplate_SampleNameWhenEmpty(t *testing.T) {
+	w := createFromTemplateForTest(t, usecase.CreateFromSystemTemplateInput{TemplateID: "boy"})
+	raw := blocksJSON(t, w)
+	assert.Contains(t, raw, "Что Тёма любит")
+	assert.NotContains(t, raw, "{name}")
+}
+
+// Имя попадает внутрь JSON блоков — кавычки и обратные слэши не должны его ломать.
+func TestCreateFromSystemTemplate_NameIsEscaped(t *testing.T) {
+	w := createFromTemplateForTest(t, usecase.CreateFromSystemTemplateInput{TemplateID: "man", Name: "Саша \"Бро\" \\ок"})
+	assert.Contains(t, blocksJSON(t, w), "Саша \\\"Бро\\\" \\\\ок")
+}
+
+func TestCreateFromSystemTemplate_NameTooLong(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
+	uc := newWishlistUC(wr, &mockminio.MockFileStorage{})
+	long := ""
+	for i := 0; i < 41; i++ {
+		long += "я"
+	}
+	_, err := uc.CreateFromSystemTemplate(context.Background(), uuid.New(), usecase.CreateFromSystemTemplateInput{TemplateID: "man", Name: long})
+	require.Error(t, err)
+}
+
+func createFromTemplateForTest(t *testing.T, input usecase.CreateFromSystemTemplateInput) entity.Wishlist {
+	t.Helper()
+	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
+	wr.On("GetByShortID", mock.Anything, mock.Anything).Return(entity.Wishlist{}, errors.New("not found"))
+	wr.On("Create", mock.Anything, mock.Anything).Return(nil)
+	uc := newWishlistUC(wr, &mockminio.MockFileStorage{})
+	w, err := uc.CreateFromSystemTemplate(context.Background(), uuid.New(), input)
+	require.NoError(t, err)
+	return w
+}
+
+func blocksJSON(t *testing.T, w entity.Wishlist) string {
+	t.Helper()
+	raw, err := json.Marshal(w.Blocks)
+	require.NoError(t, err)
+	return string(raw)
+}
+
 func TestCreateFromSystemTemplate_UnknownTemplate(t *testing.T) {
 	wr := &mockrepo.MockWishlistRepo{}
 	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
