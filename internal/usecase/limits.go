@@ -12,4 +12,5 @@ const (
 	MaxURLLen         = 2048
 	MaxBlockDataSize  = 10 * 1024 // 10KB per block (raw JSON bytes)
 	MaxBlockTextField = 5000      // chars for text/quote/checklist content
+	MaxSecretTextLen  = 120       // надпись на замке секрета
 )

@@ -188,9 +188,10 @@ func (r *wishlistRepo) RegisterView(ctx context.Context, wishlistID, guestID uui
 // заменяет чтение-перед-записью: если из другой вкладки уже сохранились другие
 // блоки, строка под условие не подойдёт и мы вернём false вместо молчаливой
 // перезаписи чужой правки.
-func (r *wishlistRepo) UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, blocksVersion int, expectedUpdatedAt time.Time) (bool, error) {
+func (r *wishlistRepo) UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, rows []entity.RowSettings, blocksVersion int, expectedUpdatedAt time.Time) (bool, error) {
 	updates := map[string]interface{}{
 		"blocks":         toBlocksJSON(blocks),
+		"rows":           RowsJSON(rows),
 		"blocks_version": blocksVersion,
 	}
 

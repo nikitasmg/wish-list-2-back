@@ -35,7 +35,9 @@ type WishlistRepo interface {
 	RegisterView(ctx context.Context, wishlistID, guestID uuid.UUID) error
 	// UpdateBlocks пишет блоки с проверкой версии. false — версия разошлась,
 	// вишлист успели изменить в другом месте.
-	UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, blocksVersion int, expectedUpdatedAt time.Time) (bool, error)
+	// Ряды пишутся тем же запросом: их настройки адресуются индексом ряда и
+	// без блоков смысла не имеют.
+	UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, rows []entity.RowSettings, blocksVersion int, expectedUpdatedAt time.Time) (bool, error)
 	CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error)
 }
 

@@ -167,11 +167,11 @@ func TestUpdateBlocks_Success(t *testing.T) {
 
 	wid := uuid.New()
 	blocks := []entity.Block{{Type: "text", Row: 0}}
-	wr.On("UpdateBlocks", mock.Anything, wid, blocks, entity.BlocksVersionCurrent, time.Time{}).
+	wr.On("UpdateBlocks", mock.Anything, wid, blocks, []entity.RowSettings(nil), entity.BlocksVersionCurrent, time.Time{}).
 		Return(true, nil)
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner, Blocks: blocks}, nil)
 
-	w, err := uc.UpdateBlocks(context.Background(), owner, wid, blocks, time.Time{})
+	w, err := uc.UpdateBlocks(context.Background(), owner, wid, blocks, nil, time.Time{})
 	require.NoError(t, err)
 	assert.Len(t, w.Blocks, 1)
 	wr.AssertExpectations(t)
@@ -190,11 +190,11 @@ func TestUpdateBlocks_Conflict(t *testing.T) {
 	current := entity.Wishlist{ID: wid, UserID: owner, Blocks: []entity.Block{{Type: "quote"}}}
 
 	blocks := []entity.Block{{Type: "text", Row: 0}}
-	wr.On("UpdateBlocks", mock.Anything, wid, blocks, entity.BlocksVersionCurrent, stale).
+	wr.On("UpdateBlocks", mock.Anything, wid, blocks, []entity.RowSettings(nil), entity.BlocksVersionCurrent, stale).
 		Return(false, nil)
 	wr.On("GetByID", mock.Anything, wid).Return(current, nil)
 
-	w, err := uc.UpdateBlocks(context.Background(), owner, wid, blocks, stale)
+	w, err := uc.UpdateBlocks(context.Background(), owner, wid, blocks, nil, stale)
 
 	require.ErrorIs(t, err, usecase.ErrVersionConflict)
 	assert.Equal(t, "quote", w.Blocks[0].Type, "вместе с ошибкой отдаётся актуальная версия")
@@ -210,11 +210,11 @@ func TestUpdateBlocks_AllowsLegacyTypes(t *testing.T) {
 
 	wid := uuid.New()
 	blocks := []entity.Block{{Type: "agenda", Row: 0}}
-	wr.On("UpdateBlocks", mock.Anything, wid, blocks, entity.BlocksVersionCurrent, time.Time{}).
+	wr.On("UpdateBlocks", mock.Anything, wid, blocks, []entity.RowSettings(nil), entity.BlocksVersionCurrent, time.Time{}).
 		Return(true, nil)
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner, Blocks: blocks}, nil)
 
-	_, err := uc.UpdateBlocks(context.Background(), owner, wid, blocks, time.Time{})
+	_, err := uc.UpdateBlocks(context.Background(), owner, wid, blocks, nil, time.Time{})
 
 	require.NoError(t, err)
 }
@@ -457,9 +457,9 @@ func TestMutations_RejectForeignWishlist(t *testing.T) {
 
 	t.Run("updateBlocks", func(t *testing.T) {
 		wr, uc := newUC()
-		_, err := uc.UpdateBlocks(context.Background(), stranger, wid, []entity.Block{{Type: "text"}}, time.Time{})
+		_, err := uc.UpdateBlocks(context.Background(), stranger, wid, []entity.Block{{Type: "text"}}, nil, time.Time{})
 		require.ErrorIs(t, err, usecase.ErrForbidden)
-		wr.AssertNotCalled(t, "UpdateBlocks", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		wr.AssertNotCalled(t, "UpdateBlocks", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	})
 
 	t.Run("delete", func(t *testing.T) {
@@ -561,7 +561,7 @@ func TestUpdate_DoesNotSendBlocks(t *testing.T) {
 		usecase.CreateWishlistInput{Title: "Стало"}, time.Time{})
 
 	require.NoError(t, err)
-	wr.AssertNotCalled(t, "UpdateBlocks", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	wr.AssertNotCalled(t, "UpdateBlocks", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestCreate_WishlistLimitExceeded(t *testing.T) {
@@ -640,8 +640,8 @@ func TestUpdateBlocks_LegacyCoordinates(t *testing.T) {
 		{Type: "text_image", Row: 3, Col: 0, ColSpan: 1},
 	}
 	wr.On("GetByID", mock.Anything, wid).Return(entity.Wishlist{ID: wid, UserID: owner, Blocks: blocks}, nil)
-	wr.On("UpdateBlocks", mock.Anything, wid, blocks, entity.BlocksVersionCurrent, time.Time{}).Return(true, nil)
-	w, err := uc.UpdateBlocks(context.Background(), owner, wid, blocks, time.Time{})
+	wr.On("UpdateBlocks", mock.Anything, wid, blocks, []entity.RowSettings(nil), entity.BlocksVersionCurrent, time.Time{}).Return(true, nil)
+	w, err := uc.UpdateBlocks(context.Background(), owner, wid, blocks, nil, time.Time{})
 	require.NoError(t, err)
 	assert.Equal(t, blocks, w.Blocks)
 	wr.AssertExpectations(t)

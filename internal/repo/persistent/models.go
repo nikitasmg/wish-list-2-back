@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"main/internal/entity"
 )
 
 // UserModel — GORM-модель для таблицы "users"
@@ -32,6 +34,8 @@ type WishlistModel struct {
 	PresentsCount uint
 	ShortID       *string    `gorm:"uniqueIndex;column:short_id"`
 	Blocks        BlocksJSON `gorm:"type:jsonb"`
+	// Rows — настройки рядов формата v3 по индексу ряда.
+	Rows RowsJSON `gorm:"type:jsonb"`
 	// BlocksVersion: 1 — формат до редизайна, 2 — текущий. Существующие строки
 	// получают 1 через default, новые конструкторы пишут 2 явно.
 	BlocksVersion int        `gorm:"default:1"`
@@ -95,6 +99,7 @@ type TemplateModel struct {
 	Name       string       `gorm:"not null"`
 	Settings   SettingsJSON `gorm:"type:json"`
 	Blocks     BlocksJSON   `gorm:"type:jsonb"`
+	Rows       RowsJSON     `gorm:"type:jsonb"`
 	IsPublic   bool         `gorm:"not null;default:false;index"`
 	LikesCount int          `gorm:"not null;default:0"`
 	CreatedAt  time.Time    `gorm:"autoCreateTime;index"`
@@ -118,6 +123,11 @@ type SettingsJSON struct {
 	ShowGiftAvailability bool              `json:"showGiftAvailability"`
 	PresentsLayout       string            `json:"presentsLayout"`
 	CustomScheme         *CustomSchemeJSON `json:"customScheme,omitempty"`
+	HeadingFont          string            `json:"headingFont,omitempty"`
+	Pattern              string            `json:"pattern,omitempty"`
+	MainDreamLarge       bool              `json:"mainDreamLarge,omitempty"`
+	ConfettiOnReserve    bool              `json:"confettiOnReserve,omitempty"`
+	LiveTimer            bool              `json:"liveTimer,omitempty"`
 }
 
 // CustomSchemeJSON — «своя схема»: база и акцент, остальное выводит фронт.
@@ -161,17 +171,43 @@ func (l LocationJSON) Value() (driver.Value, error) {
 type BlocksJSON []blockJSON
 
 type blockJSON struct {
-	ID       string          `json:"id"`
-	Type     string          `json:"type"`
-	Row      int             `json:"row"`
-	Col      int             `json:"col"`
-	ColSpan  int             `json:"col_span"`
-	View     string          `json:"view"`
-	Caption  string          `json:"caption"`
-	Title    string          `json:"title"`
-	Hidden   bool            `json:"hidden"`
-	RevealAt *time.Time      `json:"reveal_at"`
-	Data     json.RawMessage `json:"data"`
+	ID         string          `json:"id"`
+	Type       string          `json:"type"`
+	Row        int             `json:"row"`
+	Col        int             `json:"col"`
+	ColSpan    int             `json:"col_span"`
+	View       string          `json:"view"`
+	Caption    string          `json:"caption"`
+	Title      string          `json:"title"`
+	Hidden     bool            `json:"hidden"`
+	RevealAt   *time.Time      `json:"reveal_at"`
+	SecretMode string          `json:"secret_mode,omitempty"`
+	SecretText string          `json:"secret_text,omitempty"`
+	Width      string          `json:"width,omitempty"`
+	Data       json.RawMessage `json:"data"`
+}
+
+// RowsJSON — настройки рядов (jsonb). nil — у вишлиста нет настроек рядов,
+// все ряды по умолчанию.
+type RowsJSON []entity.RowSettings
+
+func (r *RowsJSON) Scan(value interface{}) error {
+	if value == nil {
+		*r = nil
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New("failed to scan RowsJSON")
+	}
+	return json.Unmarshal(bytes, r)
+}
+
+func (r RowsJSON) Value() (driver.Value, error) {
+	if r == nil {
+		return nil, nil
+	}
+	return json.Marshal(r)
 }
 
 func (b *BlocksJSON) Scan(value interface{}) error {

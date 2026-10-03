@@ -92,8 +92,8 @@ func (m *MockWishlistUC) Update(ctx context.Context, userID, id uuid.UUID, input
 	return args.Get(0).(entity.Wishlist), args.Error(1)
 }
 
-func (m *MockWishlistUC) UpdateBlocks(ctx context.Context, userID, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error) {
-	args := m.Called(ctx, userID, id, blocks, expectedUpdatedAt)
+func (m *MockWishlistUC) UpdateBlocks(ctx context.Context, userID, id uuid.UUID, blocks []entity.Block, rows []entity.RowSettings, expectedUpdatedAt time.Time) (entity.Wishlist, error) {
+	args := m.Called(ctx, userID, id, blocks, rows, expectedUpdatedAt)
 	return args.Get(0).(entity.Wishlist), args.Error(1)
 }
 

@@ -32,6 +32,7 @@ type CreateWishlistInput struct {
 	CustomScheme         *entity.CustomScheme
 	EventDate            *time.Time
 	Occasion             string
+	Look                 entity.Look
 }
 
 // CreateConstructorInput — входные данные для создания/обновления вишлиста-конструктора
@@ -48,7 +49,9 @@ type CreateConstructorInput struct {
 	CustomScheme         *entity.CustomScheme
 	EventDate            *time.Time
 	Occasion             string
+	Look                 entity.Look
 	Blocks               []entity.Block
+	Rows                 []entity.RowSettings
 }
 
 // CreateFromSystemTemplateInput — создание вишлиста по готовому шаблону.
@@ -134,7 +137,7 @@ type WishlistUseCase interface {
 	// UpdateBlocks: expectedUpdatedAt — версия, которую держит клиент. Нулевое
 	// время отключает проверку (старые клиенты без заголовка If-Match).
 	// Расхождение версий возвращает ErrVersionConflict.
-	UpdateBlocks(ctx context.Context, userID, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error)
+	UpdateBlocks(ctx context.Context, userID, id uuid.UUID, blocks []entity.Block, rows []entity.RowSettings, expectedUpdatedAt time.Time) (entity.Wishlist, error)
 	Delete(ctx context.Context, userID, id uuid.UUID) error
 }
 

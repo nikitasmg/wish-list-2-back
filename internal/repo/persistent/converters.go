@@ -45,17 +45,20 @@ func toWishlistEntity(m WishlistModel) entity.Wishlist {
 				colSpan = 1
 			}
 			blocks = append(blocks, entity.Block{
-				ID:       b.ID,
-				Type:     b.Type,
-				Row:      b.Row,
-				Col:      b.Col,
-				ColSpan:  colSpan,
-				View:     b.View,
-				Caption:  b.Caption,
-				Title:    b.Title,
-				Hidden:   b.Hidden,
-				RevealAt: b.RevealAt,
-				Data:     b.Data,
+				ID:         b.ID,
+				Type:       b.Type,
+				Row:        b.Row,
+				Col:        b.Col,
+				ColSpan:    colSpan,
+				View:       b.View,
+				Caption:    b.Caption,
+				Title:      b.Title,
+				Hidden:     b.Hidden,
+				RevealAt:   b.RevealAt,
+				SecretMode: b.SecretMode,
+				SecretText: b.SecretText,
+				Width:      b.Width,
+				Data:       b.Data,
 			})
 		}
 	}
@@ -85,6 +88,13 @@ func toWishlistEntity(m WishlistModel) entity.Wishlist {
 			ShowGiftAvailability: m.Settings.ShowGiftAvailability,
 			PresentsLayout:       m.Settings.PresentsLayout,
 			CustomScheme:         customScheme,
+			Look: entity.Look{
+				HeadingFont:       m.Settings.HeadingFont,
+				Pattern:           m.Settings.Pattern,
+				MainDreamLarge:    m.Settings.MainDreamLarge,
+				ConfettiOnReserve: m.Settings.ConfettiOnReserve,
+				LiveTimer:         m.Settings.LiveTimer,
+			},
 		},
 		Location: entity.Location{
 			Name: m.Location.Name,
@@ -94,6 +104,7 @@ func toWishlistEntity(m WishlistModel) entity.Wishlist {
 		PresentsCount: m.PresentsCount,
 		ShortID:       shortID,
 		Blocks:        blocks,
+		Rows:          []entity.RowSettings(m.Rows),
 		BlocksVersion: blocksVersion,
 		EventDate:     m.EventDate,
 		Occasion:      m.Occasion,
@@ -131,6 +142,11 @@ func toWishlistModel(w entity.Wishlist) WishlistModel {
 			ShowGiftAvailability: w.Settings.ShowGiftAvailability,
 			PresentsLayout:       w.Settings.PresentsLayout,
 			CustomScheme:         customScheme,
+			HeadingFont:          w.Settings.HeadingFont,
+			Pattern:              w.Settings.Pattern,
+			MainDreamLarge:       w.Settings.MainDreamLarge,
+			ConfettiOnReserve:    w.Settings.ConfettiOnReserve,
+			LiveTimer:            w.Settings.LiveTimer,
 		},
 		Location: LocationJSON{
 			Name: w.Location.Name,
@@ -140,6 +156,7 @@ func toWishlistModel(w entity.Wishlist) WishlistModel {
 		PresentsCount: w.PresentsCount,
 		ShortID:       shortID,
 		Blocks:        blocks,
+		Rows:          RowsJSON(w.Rows),
 		BlocksVersion: w.BlocksVersion,
 		EventDate:     w.EventDate,
 		Occasion:      w.Occasion,
@@ -221,12 +238,12 @@ func toPresentModel(p entity.Present) PresentModel {
 // Template
 
 func toTemplateEntity(m TemplateModel) entity.Template {
-	w := toWishlistEntity(WishlistModel{Blocks: m.Blocks, Settings: m.Settings})
-	return entity.Template{ID: m.ID, UserID: m.UserID, Name: m.Name, Settings: w.Settings, Blocks: w.Blocks, IsPublic: m.IsPublic, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt}
+	w := toWishlistEntity(WishlistModel{Blocks: m.Blocks, Rows: m.Rows, Settings: m.Settings})
+	return entity.Template{ID: m.ID, UserID: m.UserID, Name: m.Name, Settings: w.Settings, Blocks: w.Blocks, Rows: w.Rows, IsPublic: m.IsPublic, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt}
 }
 func toTemplateModel(t entity.Template) TemplateModel {
-	w := toWishlistModel(entity.Wishlist{Blocks: t.Blocks, Settings: t.Settings})
-	return TemplateModel{ID: t.ID, UserID: t.UserID, Name: t.Name, Settings: w.Settings, Blocks: w.Blocks, IsPublic: t.IsPublic, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
+	w := toWishlistModel(entity.Wishlist{Blocks: t.Blocks, Rows: t.Rows, Settings: t.Settings})
+	return TemplateModel{ID: t.ID, UserID: t.UserID, Name: t.Name, Settings: w.Settings, Blocks: w.Blocks, Rows: w.Rows, IsPublic: t.IsPublic, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
 }
 
 // toBlocksJSON — блоки в вид для jsonb. Вынесено из toWishlistModel, потому что
@@ -247,17 +264,20 @@ func toBlocksJSON(blocks []entity.Block) BlocksJSON {
 			colSpan = 1
 		}
 		out = append(out, blockJSON{
-			ID:       b.ID,
-			Type:     b.Type,
-			Row:      b.Row,
-			Col:      b.Col,
-			ColSpan:  colSpan,
-			View:     b.View,
-			Caption:  b.Caption,
-			Title:    b.Title,
-			Hidden:   b.Hidden,
-			RevealAt: b.RevealAt,
-			Data:     data,
+			ID:         b.ID,
+			Type:       b.Type,
+			Row:        b.Row,
+			Col:        b.Col,
+			ColSpan:    colSpan,
+			View:       b.View,
+			Caption:    b.Caption,
+			Title:      b.Title,
+			Hidden:     b.Hidden,
+			RevealAt:   b.RevealAt,
+			SecretMode: b.SecretMode,
+			SecretText: b.SecretText,
+			Width:      b.Width,
+			Data:       data,
 		})
 	}
 	return out

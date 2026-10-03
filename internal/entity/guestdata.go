@@ -38,13 +38,13 @@ type RSVPResponse struct {
 
 // RSVPSummary — сводка для организатора.
 type RSVPSummary struct {
-	Going     int            `json:"going"`
-	NotGoing  int            `json:"notGoing"`
-	PlusOnes  int            `json:"plusOnes"`
-	Kids      int            `json:"kids"`
-	Transfer  int            `json:"transfer"`
-	TotalPeople int          `json:"totalPeople"`
-	Responses []RSVPResponse `json:"responses"`
+	Going       int            `json:"going"`
+	NotGoing    int            `json:"notGoing"`
+	PlusOnes    int            `json:"plusOnes"`
+	Kids        int            `json:"kids"`
+	Transfer    int            `json:"transfer"`
+	TotalPeople int            `json:"totalPeople"`
+	Responses   []RSVPResponse `json:"responses"`
 }
 
 // PollResults — итоги голосования. Список проголосовавших не отдаём: гостю

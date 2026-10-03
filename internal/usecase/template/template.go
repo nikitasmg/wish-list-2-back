@@ -58,6 +58,7 @@ func (uc *templateUseCase) Create(ctx context.Context, userID uuid.UUID, input u
 		Name:     input.Name,
 		Settings: cloneSettings(wishlist.Settings),
 		Blocks:   cloneBlocks(wishlist.Blocks),
+		Rows:     cloneRows(wishlist.Rows),
 		IsPublic: input.IsPublic,
 	}
 
@@ -179,6 +180,7 @@ func (uc *templateUseCase) CreateWishlistFromTemplate(ctx context.Context, templ
 		Title:         title,
 		Settings:      cloneSettings(t.Settings),
 		Blocks:        blocks,
+		Rows:          cloneRows(t.Rows),
 		BlocksVersion: entity.BlocksVersionCurrent,
 	}
 
@@ -186,6 +188,15 @@ func (uc *templateUseCase) CreateWishlistFromTemplate(ctx context.Context, templ
 		return entity.Wishlist{}, fmt.Errorf("create wishlist from template: %w", err)
 	}
 	return w, nil
+}
+
+// cloneRows — свой массив у каждой копии: правка рядов вишлиста не должна
+// задевать шаблон, из которого он создан.
+func cloneRows(source []entity.RowSettings) []entity.RowSettings {
+	if source == nil {
+		return nil
+	}
+	return append([]entity.RowSettings(nil), source...)
 }
 
 // Copies own their data and identities: guest responses are keyed by block ID.

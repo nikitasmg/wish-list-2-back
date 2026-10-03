@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -153,8 +154,8 @@ func (h *wishlistHandler) updateBlocks(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid wishlist ID"))
 	}
 
-	var blocks []entity.Block
-	if err := c.BodyParser(&blocks); err != nil {
+	blocks, rows, err := parseBlocksBody(c.Body())
+	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid blocks JSON"))
 	}
 
@@ -169,7 +170,7 @@ func (h *wishlistHandler) updateBlocks(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
 	}
 
-	wishlist, err := h.uc.UpdateBlocks(c.Context(), userID, id, blocks, expectedUpdatedAt)
+	wishlist, err := h.uc.UpdateBlocks(c.Context(), userID, id, blocks, rows, expectedUpdatedAt)
 	if errors.Is(err, usecase.ErrVersionConflict) {
 		return conflictResponse(c, err, wishlist)
 	}
@@ -177,6 +178,28 @@ func (h *wishlistHandler) updateBlocks(c *fiber.Ctx) error {
 		return ownerError(c, err, fiber.StatusBadRequest)
 	}
 	return c.JSON(response.Data(wishlist))
+}
+
+// parseBlocksBody разбирает тело PUT /blocks. Формат v3 — объект
+// { blocks, rows }; голый массив блоков остаётся от старых клиентов и
+// означает «рядов с настройками нет».
+func parseBlocksBody(body []byte) ([]entity.Block, []entity.RowSettings, error) {
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		var blocks []entity.Block
+		if err := json.Unmarshal(trimmed, &blocks); err != nil {
+			return nil, nil, err
+		}
+		return blocks, nil, nil
+	}
+	var payload struct {
+		Blocks []entity.Block       `json:"blocks"`
+		Rows   []entity.RowSettings `json:"rows"`
+	}
+	if err := json.Unmarshal(trimmed, &payload); err != nil {
+		return nil, nil, err
+	}
+	return payload.Blocks, payload.Rows, nil
 }
 
 // ifMatchVersion — версия вишлиста, которую держит клиент.
@@ -265,6 +288,13 @@ func (h *wishlistHandler) parseWishlistInput(c *fiber.Ctx) (usecase.CreateWishli
 		LocationName:         c.FormValue("location[name]"),
 		LocationLink:         c.FormValue("location[link]"),
 		Occasion:             c.FormValue("occasion"),
+		Look: entity.Look{
+			HeadingFont:       c.FormValue("settings[headingFont]"),
+			Pattern:           c.FormValue("settings[pattern]"),
+			MainDreamLarge:    stringToBool(c.FormValue("settings[mainDreamLarge]")),
+			ConfettiOnReserve: stringToBool(c.FormValue("settings[confettiOnReserve]")),
+			LiveTimer:         stringToBool(c.FormValue("settings[liveTimer]")),
+		},
 	}
 
 	if timeValue := c.FormValue("location[time]"); timeValue != "" {
@@ -325,7 +355,9 @@ func (h *wishlistHandler) parseConstructorInput(c *fiber.Ctx) (usecase.CreateCon
 		EventDate            string               `json:"event_date"`
 		Occasion             string               `json:"occasion"`
 		CustomScheme         *entity.CustomScheme `json:"custom_scheme"`
+		Look                 entity.Look          `json:"look"`
 		Blocks               []entity.Block       `json:"blocks"`
+		Rows                 []entity.RowSettings `json:"rows"`
 	}
 
 	if err := c.BodyParser(&body); err != nil {
@@ -343,7 +375,9 @@ func (h *wishlistHandler) parseConstructorInput(c *fiber.Ctx) (usecase.CreateCon
 		LocationLink:         body.LocationLink,
 		Occasion:             body.Occasion,
 		CustomScheme:         body.CustomScheme,
+		Look:                 body.Look,
 		Blocks:               body.Blocks,
+		Rows:                 body.Rows,
 	}
 
 	if body.LocationTime != "" {

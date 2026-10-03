@@ -136,3 +136,38 @@ func TestGetByShortID_Success(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "abc-def-ghi", data["shortId"])
 }
+
+// PUT /blocks принимает и объект { blocks, rows } формата v3, и голый массив
+// блоков от старых клиентов.
+func TestUpdateBlocks_BodyFormats(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		wantRows []entity.RowSettings
+	}{
+		{name: "v3", body: `{"blocks":[{"id":"a","type":"text","row":0,"col":0,"colSpan":1}],"rows":[{"columns":3,"ratio":"1:1:1"}]}`,
+			wantRows: []entity.RowSettings{{Columns: 3, Ratio: "1:1:1"}}},
+		{name: "старый массив", body: `[{"id":"a","type":"text","row":0,"col":0,"colSpan":1}]`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			wm := &MockWishlistUC{}
+			app := setupWishlistApp(wm)
+			userID, wid := uuid.New(), uuid.New()
+
+			wm.On("UpdateBlocks", mock.Anything, userID, wid, mock.MatchedBy(func(b []entity.Block) bool {
+				return len(b) == 1 && b[0].ID == "a"
+			}), tc.wantRows, mock.Anything).Return(entity.Wishlist{ID: wid}, nil)
+
+			req := httptest.NewRequest(http.MethodPut, "/api/v1/wishlists/"+wid.String()+"/blocks", bytes.NewBufferString(tc.body))
+			req.Header.Set("Authorization", "Bearer "+makeTestToken(userID))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+			wm.AssertExpectations(t)
+		})
+	}
+}

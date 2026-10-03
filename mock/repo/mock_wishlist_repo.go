@@ -68,8 +68,8 @@ func (m *MockWishlistRepo) RegisterView(ctx context.Context, wishlistID, guestID
 	return args.Error(0)
 }
 
-func (m *MockWishlistRepo) UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, blocksVersion int, expectedUpdatedAt time.Time) (bool, error) {
-	args := m.Called(ctx, id, blocks, blocksVersion, expectedUpdatedAt)
+func (m *MockWishlistRepo) UpdateBlocks(ctx context.Context, id uuid.UUID, blocks []entity.Block, rows []entity.RowSettings, blocksVersion int, expectedUpdatedAt time.Time) (bool, error) {
+	args := m.Called(ctx, id, blocks, rows, blocksVersion, expectedUpdatedAt)
 	return args.Bool(0), args.Error(1)
 }
 

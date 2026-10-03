@@ -94,3 +94,31 @@ func TestTemplateRoundTripPreservesContentAndIsolatesInstances(t *testing.T) {
 	require.Equal(t, saved.Blocks[0].RevealAt, wishlists.created[1].Blocks[0].RevealAt)
 	require.Equal(t, saved.Settings, wishlists.created[1].Settings)
 }
+
+// Шаблон хранит раскладку рядов и оформление: без них вишлист по шаблону
+// разъехался бы обратно в две колонки и потерял шрифт.
+func TestTemplateCopiesRowsAndLook(t *testing.T) {
+	ctx := context.Background()
+	owner := uuid.New()
+	rows := []entity.RowSettings{{Columns: 3, Ratio: "1:1:1"}}
+	wishlists := &wishlistStub{source: entity.Wishlist{
+		ID: uuid.New(), UserID: owner,
+		Settings: entity.Settings{ColorScheme: "space", Look: entity.Look{HeadingFont: "poster", Pattern: "stars"}},
+		Blocks:   []entity.Block{{ID: "a", Type: "text", Row: 0, Col: 0, ColSpan: 1}},
+		Rows:     rows,
+	}}
+	uc := New(&templateStub{}, wishlists)
+
+	saved, err := uc.Create(ctx, owner, usecase.CreateTemplateInput{WishlistID: wishlists.source.ID, Name: "t", IsPublic: true})
+	require.NoError(t, err)
+	require.Equal(t, rows, saved.Rows)
+	require.Equal(t, "poster", saved.Settings.HeadingFont)
+
+	saved.Rows[0].Columns = 1 // копия, а не ссылка на массив вишлиста
+	require.Equal(t, 3, wishlists.source.Rows[0].Columns)
+
+	created, err := uc.CreateWishlistFromTemplate(ctx, saved.ID, uuid.New(), "copy")
+	require.NoError(t, err)
+	require.Len(t, created.Rows, 1)
+	require.Equal(t, "stars", created.Settings.Pattern)
+}

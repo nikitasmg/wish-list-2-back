@@ -14,9 +14,12 @@ type SystemTemplate struct {
 	ColorScheme string `json:"colorScheme"`
 	// SampleTitle — название-пример («Тёме — семь!»), которое подставляется
 	// в превью и в поле «Для кого», пока пользователь не ввёл своё.
-	SampleTitle string  `json:"sampleTitle"`
-	Occasion    string  `json:"occasion"`
-	Blocks      []Block `json:"blocks"`
+	SampleTitle string        `json:"sampleTitle"`
+	Occasion    string        `json:"occasion"`
+	Blocks      []Block       `json:"blocks"`
+	Rows        []RowSettings `json:"rows,omitempty"`
+	// Look — шрифт и узор, с которыми заготовка нарисована в макете.
+	Look Look `json:"look"`
 }
 
 // SystemTemplateCategories — фильтры на экране выбора, в порядке показа.

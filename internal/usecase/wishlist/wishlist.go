@@ -46,6 +46,9 @@ func (uc *wishlistUseCase) Create(ctx context.Context, userID uuid.UUID, input u
 	if err := validateCustomScheme(input.ColorScheme, input.CustomScheme); err != nil {
 		return entity.Wishlist{}, err
 	}
+	if err := validateLook(input.Look); err != nil {
+		return entity.Wishlist{}, err
+	}
 
 	coverURL, err := uc.resolveCover(input.CoverData, input.CoverName, input.CoverURL)
 	if err != nil {
@@ -69,6 +72,7 @@ func (uc *wishlistUseCase) Create(ctx context.Context, userID uuid.UUID, input u
 			ShowGiftAvailability: input.ShowGiftAvailability,
 			PresentsLayout:       input.PresentsLayout,
 			CustomScheme:         input.CustomScheme,
+			Look:                 input.Look,
 		},
 		Location: entity.Location{
 			Name: input.LocationName,
@@ -99,10 +103,13 @@ func (uc *wishlistUseCase) CreateConstructor(ctx context.Context, userID uuid.UU
 	if err := validateWishlistFields(input.Title, input.Description, input.LocationName, input.LocationLink, input.CoverURL); err != nil {
 		return entity.Wishlist{}, err
 	}
-	if err := validateNewBlocks(input.Blocks); err != nil {
+	if err := validateNewBlocks(input.Blocks, input.Rows); err != nil {
 		return entity.Wishlist{}, err
 	}
 	if err := validateCustomScheme(input.ColorScheme, input.CustomScheme); err != nil {
+		return entity.Wishlist{}, err
+	}
+	if err := validateLook(input.Look); err != nil {
 		return entity.Wishlist{}, err
 	}
 
@@ -123,6 +130,7 @@ func (uc *wishlistUseCase) CreateConstructor(ctx context.Context, userID uuid.UU
 			ShowGiftAvailability: input.ShowGiftAvailability,
 			PresentsLayout:       input.PresentsLayout,
 			CustomScheme:         input.CustomScheme,
+			Look:                 input.Look,
 		},
 		Location: entity.Location{
 			Name: input.LocationName,
@@ -132,6 +140,7 @@ func (uc *wishlistUseCase) CreateConstructor(ctx context.Context, userID uuid.UU
 		EventDate:     input.EventDate,
 		Occasion:      input.Occasion,
 		Blocks:        ensureBlockIDs(input.Blocks),
+		Rows:          input.Rows,
 		BlocksVersion: entity.BlocksVersionCurrent,
 		PresentsCount: 0,
 	}
@@ -192,10 +201,12 @@ func (uc *wishlistUseCase) CreateFromSystemTemplate(ctx context.Context, userID 
 			ColorScheme:          tpl.ColorScheme,
 			ShowGiftAvailability: true,
 			PresentsLayout:       "list",
+			Look:                 tpl.Look,
 		},
 		EventDate:     input.EventDate,
 		Occasion:      tpl.Occasion,
 		Blocks:        ensureBlockIDs(blocks),
+		Rows:          append([]entity.RowSettings(nil), tpl.Rows...),
 		BlocksVersion: entity.BlocksVersionCurrent,
 	}
 
@@ -261,16 +272,27 @@ func sanitizeBlocksForGuest(blocks []entity.Block, now time.Time) []entity.Block
 			continue
 		}
 		if b.IsSecret(now) {
+			if b.SecretMode == "hidden" {
+				continue
+			}
+			revealAt := b.RevealAt
+			if b.SecretMode == "lock" {
+				// «Только замок»: дата — тоже подсказка, гость её не видит.
+				revealAt = nil
+			}
 			b = entity.Block{
 				// ID остаётся: он не выдаёт содержимого, а фронту нужен, чтобы
 				// отличить один таймер от другого.
-				ID:       b.ID,
-				Type:     b.Type,
-				Row:      b.Row,
-				Col:      b.Col,
-				ColSpan:  b.ColSpan,
-				RevealAt: b.RevealAt,
-				Data:     json.RawMessage("{}"),
+				ID:         b.ID,
+				Type:       b.Type,
+				Row:        b.Row,
+				Col:        b.Col,
+				ColSpan:    b.ColSpan,
+				Width:      b.Width,
+				RevealAt:   revealAt,
+				SecretMode: b.SecretMode,
+				SecretText: b.SecretText,
+				Data:       json.RawMessage("{}"),
 			}
 		}
 		visible = append(visible, b)
@@ -306,6 +328,9 @@ func (uc *wishlistUseCase) Update(ctx context.Context, userID, id uuid.UUID, inp
 	if err := validateCustomScheme(input.ColorScheme, input.CustomScheme); err != nil {
 		return entity.Wishlist{}, err
 	}
+	if err := validateLook(input.Look); err != nil {
+		return entity.Wishlist{}, err
+	}
 
 	w.Title = input.Title
 	w.Description = input.Description
@@ -314,6 +339,7 @@ func (uc *wishlistUseCase) Update(ctx context.Context, userID, id uuid.UUID, inp
 		ShowGiftAvailability: input.ShowGiftAvailability,
 		PresentsLayout:       input.PresentsLayout,
 		CustomScheme:         input.CustomScheme,
+		Look:                 input.Look,
 	}
 	w.Location = entity.Location{
 		Name: input.LocationName,
@@ -346,7 +372,7 @@ func (uc *wishlistUseCase) Update(ctx context.Context, userID, id uuid.UUID, inp
 	return saved, nil
 }
 
-func (uc *wishlistUseCase) UpdateBlocks(ctx context.Context, userID, id uuid.UUID, blocks []entity.Block, expectedUpdatedAt time.Time) (entity.Wishlist, error) {
+func (uc *wishlistUseCase) UpdateBlocks(ctx context.Context, userID, id uuid.UUID, blocks []entity.Block, rows []entity.RowSettings, expectedUpdatedAt time.Time) (entity.Wishlist, error) {
 	if _, err := uc.assertOwner(ctx, userID, id); err != nil {
 		return entity.Wishlist{}, err
 	}
@@ -354,12 +380,12 @@ func (uc *wishlistUseCase) UpdateBlocks(ctx context.Context, userID, id uuid.UUI
 	// Legacy-типы здесь допускаются намеренно: вишлист формата v1 можно открыть
 	// и сохранить, не пересобирая его целиком. Запрещено только создавать из них
 	// новые — см. CreateConstructor.
-	if err := validateBlocks(blocks); err != nil {
+	if err := validateBlocks(blocks, rows); err != nil {
 		return entity.Wishlist{}, err
 	}
 	blocks = ensureBlockIDs(blocks)
 
-	updated, err := uc.wishlistRepo.UpdateBlocks(ctx, id, blocks, entity.BlocksVersionCurrent, expectedUpdatedAt)
+	updated, err := uc.wishlistRepo.UpdateBlocks(ctx, id, blocks, rows, entity.BlocksVersionCurrent, expectedUpdatedAt)
 	if err != nil {
 		return entity.Wishlist{}, fmt.Errorf("update blocks: %w", err)
 	}
@@ -449,8 +475,8 @@ func validateWishlistFields(title, description, locationName, locationLink, cove
 	return nil
 }
 
-// validateBlocks — проверяет типы блоков
-func validateBlocks(blocks []entity.Block) error {
+// validateBlocks — проверяет типы блоков и раскладку по рядам
+func validateBlocks(blocks []entity.Block, rows []entity.RowSettings) error {
 	if len(blocks) > usecase.MaxBlocksPerWishlist {
 		return fmt.Errorf("too many blocks: max %d", usecase.MaxBlocksPerWishlist)
 	}
@@ -458,14 +484,14 @@ func validateBlocks(blocks []entity.Block) error {
 		if !entity.ValidBlockTypes[b.Type] {
 			return fmt.Errorf("block[%d]: unknown type %q", i, b.Type)
 		}
-		if b.ColSpan > 2 {
-			return fmt.Errorf("block[%d]: colSpan %d exceeds maximum of 2", i, b.ColSpan)
+		if !entity.SecretModes[b.SecretMode] {
+			return fmt.Errorf("block[%d]: неизвестный secretMode %q", i, b.SecretMode)
 		}
-		if b.Row < 0 {
-			return fmt.Errorf("block[%d]: row must be >= 0", i)
+		if len([]rune(b.SecretText)) > usecase.MaxSecretTextLen {
+			return fmt.Errorf("block[%d]: secretText длиннее %d символов", i, usecase.MaxSecretTextLen)
 		}
-		if b.Col < 0 || b.Col > 1 {
-			return fmt.Errorf("block[%d]: col must be 0 or 1", i)
+		if !entity.BlockWidths[b.Width] {
+			return fmt.Errorf("block[%d]: неизвестная width %q", i, b.Width)
 		}
 		if len(b.Data) > usecase.MaxBlockDataSize {
 			return fmt.Errorf("block[%d]: data too large (max %d bytes)", i, usecase.MaxBlockDataSize)
@@ -474,7 +500,7 @@ func validateBlocks(blocks []entity.Block) error {
 			return err
 		}
 	}
-	return nil
+	return validateLayout(blocks, rows)
 }
 
 // validateBlockData checks type-specific content constraints.
@@ -542,8 +568,8 @@ func validateBlockData(idx int, blockType string, data json.RawMessage) error {
 
 // validateNewBlocks — то же плюс запрет на типы формата v1. Применяется только
 // при создании: старый вишлист должен оставаться сохраняемым.
-func validateNewBlocks(blocks []entity.Block) error {
-	if err := validateBlocks(blocks); err != nil {
+func validateNewBlocks(blocks []entity.Block, rows []entity.RowSettings) error {
+	if err := validateBlocks(blocks, rows); err != nil {
 		return err
 	}
 	for i, b := range blocks {
