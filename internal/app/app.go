@@ -38,6 +38,8 @@ func Run(cfg *config.Config) {
 		&persistent.WishlistViewModel{},
 		&persistent.RSVPResponseModel{},
 		&persistent.PollVoteModel{},
+		&persistent.PollChoiceModel{},
+		&persistent.PollGuestOptionModel{},
 		&persistent.PlaylistTrackModel{},
 		&persistent.PlaylistVoteModel{},
 		&persistent.GuestbookEntryModel{},
@@ -55,6 +57,9 @@ func Run(cfg *config.Config) {
 	}
 	if err := persistent.BackfillPresentLinks(db); err != nil {
 		log.Fatalf("backfill present links: %v", err)
+	}
+	if err := persistent.BackfillPollChoices(db); err != nil {
+		log.Fatalf("backfill poll choices: %v", err)
 	}
 
 	// MinIO

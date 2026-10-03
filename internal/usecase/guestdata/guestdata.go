@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -68,6 +69,19 @@ func (uc *guestDataUseCase) SubmitRSVP(ctx context.Context, wishlistID uuid.UUID
 		return entity.RSVPResponse{}, fmt.Errorf("детей можно указать не больше %d", entity.MaxKids)
 	}
 
+	_, block, err := uc.findBlock(ctx, wishlistID, blockID, "rsvp")
+	if err != nil {
+		return entity.RSVPResponse{}, err
+	}
+	settings := parseRSVPSettings(block.Data)
+	if settings.Deadline.t != nil && !time.Now().Before(*settings.Deadline.t) {
+		return entity.RSVPResponse{}, usecase.ErrClosed
+	}
+	answers, err := validateAnswers(settings.Questions, input.Answers)
+	if err != nil {
+		return entity.RSVPResponse{}, err
+	}
+
 	response := entity.RSVPResponse{
 		ID:         uuid.New(),
 		WishlistID: wishlistID,
@@ -80,6 +94,7 @@ func (uc *guestDataUseCase) SubmitRSVP(ctx context.Context, wishlistID uuid.UUID
 		Menu:       strings.TrimSpace(input.Menu),
 		Transfer:   input.Transfer,
 		Comment:    strings.TrimSpace(input.Comment),
+		Answers:    answers,
 		Mine:       true,
 	}
 
@@ -147,41 +162,188 @@ func (uc *guestDataUseCase) OwnerRSVPSummary(ctx context.Context, userID, wishli
 
 // Голосование
 
-func (uc *guestDataUseCase) Vote(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, option int) (entity.PollResults, error) {
+func (uc *guestDataUseCase) Vote(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, optionIDs []string) (entity.PollResults, error) {
 	if err := requireGuest(guestID); err != nil {
 		return entity.PollResults{}, err
 	}
-	if option < 0 {
-		return entity.PollResults{}, fmt.Errorf("не выбран вариант ответа")
-	}
 
-	if err := uc.guestRepo.UpsertPollVote(ctx, wishlistID, blockID, guestID, option); err != nil {
+	_, block, err := uc.findBlock(ctx, wishlistID, blockID, "poll")
+	if err != nil {
 		return entity.PollResults{}, err
 	}
-	return uc.PollResults(ctx, blockID, guestID)
+	settings := parsePollSettings(block.Data)
+	if settings.closed(time.Now()) {
+		return entity.PollResults{}, usecase.ErrClosed
+	}
+
+	choices := dedupe(optionIDs)
+	if len(choices) == 0 {
+		return entity.PollResults{}, fmt.Errorf("не выбран вариант ответа")
+	}
+	if !settings.Multiple && len(choices) > 1 {
+		return entity.PollResults{}, fmt.Errorf("здесь можно выбрать только один вариант")
+	}
+
+	known := make(map[string]bool, len(settings.Options))
+	for _, id := range settings.Options {
+		known[id] = true
+	}
+	if settings.GuestOptions {
+		guestOptions, err := uc.guestRepo.ListPollOptions(ctx, blockID, guestID, false)
+		if err != nil {
+			return entity.PollResults{}, err
+		}
+		for _, o := range guestOptions {
+			known[o.ID] = true
+		}
+	}
+	for _, id := range choices {
+		if !known[id] {
+			return entity.PollResults{}, fmt.Errorf("такого варианта нет")
+		}
+	}
+
+	if err := uc.guestRepo.ReplacePollChoices(ctx, wishlistID, blockID, guestID, choices); err != nil {
+		return entity.PollResults{}, err
+	}
+	return uc.pollResults(ctx, blockID, guestID, settings, false)
 }
 
-func (uc *guestDataUseCase) PollResults(ctx context.Context, blockID string, guestID uuid.UUID) (entity.PollResults, error) {
-	counts, mine, err := uc.guestRepo.CountPollVotes(ctx, blockID, guestID)
+func (uc *guestDataUseCase) PollResults(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID, viewerID uuid.UUID) (entity.PollResults, error) {
+	w, block, err := uc.findBlock(ctx, wishlistID, blockID, "poll")
+	if err != nil {
+		return entity.PollResults{}, err
+	}
+	isOwner := viewerID != uuid.Nil && viewerID == w.UserID
+	return uc.pollResults(ctx, blockID, guestID, parsePollSettings(block.Data), isOwner)
+}
+
+// pollResults собирает итоги с учётом того, кому их можно показать. Скрытые
+// результаты не уходят в ответ вовсе: спрятать их на фронте бесполезно, они
+// видны в сети.
+func (uc *guestDataUseCase) pollResults(ctx context.Context, blockID string, guestID uuid.UUID, settings pollSettings, isOwner bool) (entity.PollResults, error) {
+	counts, mine, err := uc.guestRepo.CountPollChoices(ctx, blockID, guestID)
+	if err != nil {
+		return entity.PollResults{}, err
+	}
+	guestOptions, err := uc.guestRepo.ListPollOptions(ctx, blockID, guestID, isOwner)
 	if err != nil {
 		return entity.PollResults{}, err
 	}
 
-	// Варианты живут в data блока, здесь их нет — отдаём плотный массив по
-	// максимальному индексу, фронт сопоставит его со своим списком.
-	size := 0
-	for index := range counts {
-		if index+1 > size {
-			size = index + 1
-		}
+	closed := settings.closed(time.Now())
+	visible := isOwner
+	switch settings.Results {
+	case "owner":
+	case "after_vote":
+		visible = visible || len(mine) > 0 || closed
+	default:
+		visible = true
 	}
 
-	results := entity.PollResults{Votes: make([]int, size), MyVote: mine}
-	for index, count := range counts {
-		results.Votes[index] = count
-		results.Total += count
+	results := entity.PollResults{MyVotes: mine, Closed: closed, Hidden: !visible, GuestOptions: guestOptions}
+	if results.GuestOptions == nil {
+		results.GuestOptions = []entity.PollOption{}
+	}
+	if visible {
+		results.Votes = counts
+		if results.Votes == nil {
+			results.Votes = map[string]int{}
+		}
+		for _, count := range counts {
+			results.Total += count
+		}
 	}
 	return results, nil
+}
+
+func (uc *guestDataUseCase) AddPollOption(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, text string) (entity.PollResults, error) {
+	if err := requireGuest(guestID); err != nil {
+		return entity.PollResults{}, err
+	}
+	_, block, err := uc.findBlock(ctx, wishlistID, blockID, "poll")
+	if err != nil {
+		return entity.PollResults{}, err
+	}
+	settings := parsePollSettings(block.Data)
+	if !settings.GuestOptions {
+		return entity.PollResults{}, usecase.ErrForbidden
+	}
+	if settings.closed(time.Now()) {
+		return entity.PollResults{}, usecase.ErrClosed
+	}
+
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return entity.PollResults{}, fmt.Errorf("напишите вариант")
+	}
+	if err := checkLen("вариант", text, entity.MaxPollOptionLen); err != nil {
+		return entity.PollResults{}, err
+	}
+	count, err := uc.guestRepo.CountPollOptionsByGuest(ctx, blockID, guestID)
+	if err != nil {
+		return entity.PollResults{}, err
+	}
+	if count >= entity.MaxPollOptionsGuest {
+		return entity.PollResults{}, fmt.Errorf("можно предложить не больше %d вариантов", entity.MaxPollOptionsGuest)
+	}
+
+	option := entity.PollGuestOption{ID: uuid.New(), WishlistID: wishlistID, BlockID: blockID, GuestID: guestID, Text: text}
+	if err := uc.guestRepo.CreatePollOption(ctx, option); err != nil {
+		return entity.PollResults{}, err
+	}
+	return uc.pollResults(ctx, blockID, guestID, settings, false)
+}
+
+func (uc *guestDataUseCase) OwnerSetPollOptionHidden(ctx context.Context, userID, optionID uuid.UUID, hidden bool) error {
+	wishlistID, err := uc.guestRepo.PollOptionWishlist(ctx, optionID)
+	if err != nil {
+		return fmt.Errorf("вариант не найден: %w", err)
+	}
+	if err := uc.assertOwner(ctx, userID, wishlistID); err != nil {
+		return err
+	}
+	return uc.guestRepo.SetPollOptionHidden(ctx, optionID, hidden)
+}
+
+// dedupe — повторный id в запросе не должен считаться двумя голосами.
+func dedupe(ids []string) []string {
+	seen := make(map[string]bool, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
+}
+
+// RSVPGuests — «Кто идёт». Только имена согласившихся: ответы на вопросы,
+// меню и комментарии остаются организатору.
+func (uc *guestDataUseCase) RSVPGuests(ctx context.Context, wishlistID uuid.UUID, blockID string) (entity.RSVPGuests, error) {
+	_, block, err := uc.findBlock(ctx, wishlistID, blockID, "rsvp")
+	if err != nil {
+		return entity.RSVPGuests{}, err
+	}
+	if !parseRSVPSettings(block.Data).ShowGuests {
+		return entity.RSVPGuests{}, usecase.ErrForbidden
+	}
+
+	responses, err := uc.guestRepo.ListRSVP(ctx, blockID)
+	if err != nil {
+		return entity.RSVPGuests{}, err
+	}
+	guests := entity.RSVPGuests{Names: []string{}}
+	for _, r := range responses {
+		if !r.Going {
+			continue
+		}
+		guests.Names = append(guests.Names, r.Name)
+		guests.Total += 1 + r.PlusOne + r.Kids
+	}
+	return guests, nil
 }
 
 // Плейлист
@@ -304,6 +466,8 @@ func requireGuest(guestID uuid.UUID) error {
 	}
 	return nil
 }
+
+func trimSpace(s string) string { return strings.TrimSpace(s) }
 
 // checkLen считает символы, а не байты: тексты пишут по-русски.
 func checkLen(field, value string, max int) error {

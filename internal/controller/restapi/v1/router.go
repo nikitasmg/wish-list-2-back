@@ -61,8 +61,10 @@ func NewRouter(
 	// и защищённым.
 	guest.Get("/wishlists/:wishlistId/blocks/:blockId/rsvp", guestH.myRSVP)
 	guest.Post("/wishlists/:wishlistId/blocks/:blockId/rsvp", guestH.submitRSVP)
-	guest.Get("/wishlists/:wishlistId/blocks/:blockId/poll", guestH.pollResults)
+	guest.Get("/wishlists/:wishlistId/blocks/:blockId/rsvp/guests", guestH.rsvpGuests)
+	guest.Get("/wishlists/:wishlistId/blocks/:blockId/poll", middleware.JWTOptional(jwtSecret), guestH.pollResults)
 	guest.Post("/wishlists/:wishlistId/blocks/:blockId/poll", guestH.vote)
+	guest.Post("/wishlists/:wishlistId/blocks/:blockId/poll/options", guestH.addPollOption)
 	guest.Get("/wishlists/:wishlistId/blocks/:blockId/playlist", guestH.tracks)
 	guest.Post("/wishlists/:wishlistId/blocks/:blockId/playlist", guestH.suggestTrack)
 	guest.Put("/wishlists/:wishlistId/playlist/:trackId/vote", guestH.toggleTrackVote)
@@ -96,6 +98,7 @@ func NewRouter(
 	protected.Get("/wishlists/:wishlistId/blocks/:blockId/rsvp/summary", guestH.rsvpSummary)
 	protected.Get("/wishlists/:wishlistId/blocks/:blockId/guestbook/all", guestH.ownerGuestbook)
 	protected.Put("/wishlists/guestbook/:entryId/hidden", guestH.setGuestbookHidden)
+	protected.Put("/wishlists/poll-options/:optionId/hidden", guestH.setPollOptionHidden)
 
 	// Presents (protected)
 	protected.Post("/wishlists/:wishlistId/presents", presentH.create)

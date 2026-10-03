@@ -67,8 +67,15 @@ type GuestDataRepo interface {
 	UpsertRSVP(ctx context.Context, response entity.RSVPResponse) error
 	ListRSVP(ctx context.Context, blockID string) ([]entity.RSVPResponse, error)
 
-	UpsertPollVote(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, option int) error
-	CountPollVotes(ctx context.Context, blockID string, guestID uuid.UUID) (map[int]int, *int, error)
+	// ReplacePollChoices заменяет выбор гостя целиком: переголосование не
+	// копит старые голоса.
+	ReplacePollChoices(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, optionIDs []string) error
+	CountPollChoices(ctx context.Context, blockID string, guestID uuid.UUID) (map[string]int, []string, error)
+	CreatePollOption(ctx context.Context, option entity.PollGuestOption) error
+	CountPollOptionsByGuest(ctx context.Context, blockID string, guestID uuid.UUID) (int64, error)
+	ListPollOptions(ctx context.Context, blockID string, guestID uuid.UUID, includeHidden bool) ([]entity.PollOption, error)
+	PollOptionWishlist(ctx context.Context, optionID uuid.UUID) (uuid.UUID, error)
+	SetPollOptionHidden(ctx context.Context, optionID uuid.UUID, hidden bool) error
 
 	CountTracksByGuest(ctx context.Context, blockID string, guestID uuid.UUID) (int64, error)
 	CreateTrack(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, title string) (uuid.UUID, error)

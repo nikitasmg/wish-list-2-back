@@ -26,16 +26,40 @@ func (m *MockGuestDataRepo) ListRSVP(ctx context.Context, blockID string) ([]ent
 	return nil, args.Error(1)
 }
 
-func (m *MockGuestDataRepo) UpsertPollVote(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, option int) error {
-	args := m.Called(ctx, wishlistID, blockID, guestID, option)
-	return args.Error(0)
+func (m *MockGuestDataRepo) ReplacePollChoices(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, optionIDs []string) error {
+	return m.Called(ctx, wishlistID, blockID, guestID, optionIDs).Error(0)
 }
 
-func (m *MockGuestDataRepo) CountPollVotes(ctx context.Context, blockID string, guestID uuid.UUID) (map[int]int, *int, error) {
+func (m *MockGuestDataRepo) CountPollChoices(ctx context.Context, blockID string, guestID uuid.UUID) (map[string]int, []string, error) {
 	args := m.Called(ctx, blockID, guestID)
-	counts, _ := args.Get(0).(map[int]int)
-	mine, _ := args.Get(1).(*int)
+	counts, _ := args.Get(0).(map[string]int)
+	mine, _ := args.Get(1).([]string)
 	return counts, mine, args.Error(2)
+}
+
+func (m *MockGuestDataRepo) CreatePollOption(ctx context.Context, option entity.PollGuestOption) error {
+	return m.Called(ctx, option).Error(0)
+}
+
+func (m *MockGuestDataRepo) CountPollOptionsByGuest(ctx context.Context, blockID string, guestID uuid.UUID) (int64, error) {
+	args := m.Called(ctx, blockID, guestID)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockGuestDataRepo) ListPollOptions(ctx context.Context, blockID string, guestID uuid.UUID, includeHidden bool) ([]entity.PollOption, error) {
+	args := m.Called(ctx, blockID, guestID, includeHidden)
+	opts, _ := args.Get(0).([]entity.PollOption)
+	return opts, args.Error(1)
+}
+
+func (m *MockGuestDataRepo) PollOptionWishlist(ctx context.Context, optionID uuid.UUID) (uuid.UUID, error) {
+	args := m.Called(ctx, optionID)
+	id, _ := args.Get(0).(uuid.UUID)
+	return id, args.Error(1)
+}
+
+func (m *MockGuestDataRepo) SetPollOptionHidden(ctx context.Context, optionID uuid.UUID, hidden bool) error {
+	return m.Called(ctx, optionID, hidden).Error(0)
 }
 
 func (m *MockGuestDataRepo) CountTracksByGuest(ctx context.Context, blockID string, guestID uuid.UUID) (int64, error) {

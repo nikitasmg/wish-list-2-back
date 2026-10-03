@@ -55,10 +55,12 @@ func TestSubmitRSVP_RequiresName(t *testing.T) {
 // «Не приду» не должно тащить за собой спутников: иначе организатор считает
 // по сводке людей, которых не будет.
 func TestSubmitRSVP_NotGoingClearsCompanions(t *testing.T) {
-	gr, _, uc := newUC()
+	gr, wr, uc := newUC()
+	wid := uuid.New()
+	withBlock(wr, wid, "rsvp", `{}`)
 	gr.On("UpsertRSVP", mock.Anything, mock.Anything).Return(nil)
 
-	result, err := uc.SubmitRSVP(context.Background(), uuid.New(), "b1", uuid.New(), usecase.RSVPInput{
+	result, err := uc.SubmitRSVP(context.Background(), wid, "b1", uuid.New(), usecase.RSVPInput{
 		Name: "Аня", Going: false, PlusOne: 2, Kids: 1, Transfer: true,
 	})
 
@@ -115,30 +117,13 @@ func TestOwnerRSVPSummary_RejectsStranger(t *testing.T) {
 
 // Голосование
 
-func TestPollResults_BuildsDenseVoteArray(t *testing.T) {
-	gr, _, uc := newUC()
-	guest := uuid.New()
-	mine := 2
-
-	gr.On("CountPollVotes", mock.Anything, "b1", guest).
-		Return(map[int]int{0: 4, 2: 7}, &mine, nil)
-
-	results, err := uc.PollResults(context.Background(), "b1", guest)
-
-	require.NoError(t, err)
-	assert.Equal(t, []int{4, 0, 7}, results.Votes, "вариант без голосов остаётся нулём, а не пропадает")
-	assert.Equal(t, 11, results.Total)
-	require.NotNil(t, results.MyVote)
-	assert.Equal(t, 2, *results.MyVote)
-}
-
 func TestVote_RequiresGuestCookie(t *testing.T) {
 	gr, _, uc := newUC()
 
-	_, err := uc.Vote(context.Background(), uuid.New(), "b1", uuid.Nil, 0)
+	_, err := uc.Vote(context.Background(), uuid.New(), "b1", uuid.Nil, []string{"0"})
 
 	require.Error(t, err)
-	gr.AssertNotCalled(t, "UpsertPollVote", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	gr.AssertNotCalled(t, "ReplacePollChoices", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 // Плейлист

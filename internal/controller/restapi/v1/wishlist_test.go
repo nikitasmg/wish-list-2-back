@@ -171,3 +171,43 @@ func TestUpdateBlocks_BodyFormats(t *testing.T) {
 		})
 	}
 }
+
+// Голос: новый клиент шлёт id вариантов, старый — индекс; индекс и есть id
+// старого варианта.
+func TestVote_BodyFormats(t *testing.T) {
+	cases := []struct {
+		body string
+		want []string
+	}{
+		{`{"options":["a","b"]}`, []string{"a", "b"}},
+		{`{"option":1}`, []string{"1"}},
+	}
+	for _, tc := range cases {
+		gm := &MockGuestDataUC{}
+		app := fiber.New()
+		v1.NewRouter(app, testSecret, "", false, &MockUserUC{}, &MockWishlistUC{}, &MockPresentUC{}, &MockUploadUC{}, gm, &MockTemplateUC{})
+		wid := uuid.New()
+		gm.On("Vote", mock.Anything, wid, "b1", mock.AnythingOfType("uuid.UUID"), tc.want).Return(entity.PollResults{}, nil)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/wishlists/"+wid.String()+"/blocks/b1/poll", bytes.NewBufferString(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		gm.AssertExpectations(t)
+	}
+}
+
+func TestVote_ClosedIsConflict(t *testing.T) {
+	gm := &MockGuestDataUC{}
+	app := fiber.New()
+	v1.NewRouter(app, testSecret, "", false, &MockUserUC{}, &MockWishlistUC{}, &MockPresentUC{}, &MockUploadUC{}, gm, &MockTemplateUC{})
+	wid := uuid.New()
+	gm.On("Vote", mock.Anything, wid, "b1", mock.Anything, mock.Anything).Return(entity.PollResults{}, usecase.ErrClosed)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/wishlists/"+wid.String()+"/blocks/b1/poll", bytes.NewBufferString(`{"options":["a"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, fiber.StatusConflict, resp.StatusCode)
+}

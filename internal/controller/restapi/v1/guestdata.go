@@ -1,6 +1,9 @@
 package v1
 
 import (
+	"errors"
+	"strconv"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
@@ -39,13 +42,14 @@ func (h *guestDataHandler) submitRSVP(c *fiber.Ctx) error {
 	}
 
 	var body struct {
-		Name     string `json:"name"`
-		Going    bool   `json:"going"`
-		PlusOne  int    `json:"plusOne"`
-		Kids     int    `json:"kids"`
-		Menu     string `json:"menu"`
-		Transfer bool   `json:"transfer"`
-		Comment  string `json:"comment"`
+		Name     string            `json:"name"`
+		Going    bool              `json:"going"`
+		PlusOne  int               `json:"plusOne"`
+		Kids     int               `json:"kids"`
+		Menu     string            `json:"menu"`
+		Transfer bool              `json:"transfer"`
+		Comment  string            `json:"comment"`
+		Answers  map[string]string `json:"answers"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid JSON"))
@@ -60,9 +64,10 @@ func (h *guestDataHandler) submitRSVP(c *fiber.Ctx) error {
 		Menu:     body.Menu,
 		Transfer: body.Transfer,
 		Comment:  body.Comment,
+		Answers:  body.Answers,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+		return guestError(c, err)
 	}
 	return c.JSON(response.Data(result))
 }
@@ -101,15 +106,17 @@ func (h *guestDataHandler) rsvpSummary(c *fiber.Ctx) error {
 // Голосование
 
 func (h *guestDataHandler) pollResults(c *fiber.Ctx) error {
-	_, blockID, errResp := h.blockScope(c)
+	wishlistID, blockID, errResp := h.blockScope(c)
 	if errResp != nil {
 		return errResp
 	}
 
 	guestID, _ := middleware.GuestIDFromCtx(c)
-	results, err := h.uc.PollResults(c.Context(), blockID, guestID)
+	// Пользователь необязателен: владельцу результаты видны всегда.
+	viewerID, _ := getUserID(c)
+	results, err := h.uc.PollResults(c.Context(), wishlistID, blockID, guestID, viewerID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(response.Error(err.Error()))
+		return guestError(c, err)
 	}
 	return c.JSON(response.Data(results))
 }
@@ -120,19 +127,91 @@ func (h *guestDataHandler) vote(c *fiber.Ctx) error {
 		return errResp
 	}
 
+	// options — id вариантов (v3). option — индекс от старого клиента: id
+	// старого варианта и есть его индекс.
 	var body struct {
-		Option int `json:"option"`
+		Options []string `json:"options"`
+		Option  *int     `json:"option"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid JSON"))
 	}
+	options := body.Options
+	if len(options) == 0 && body.Option != nil {
+		options = []string{strconv.Itoa(*body.Option)}
+	}
 
 	guestID, _ := middleware.GuestIDFromCtx(c)
-	results, err := h.uc.Vote(c.Context(), wishlistID, blockID, guestID, body.Option)
+	results, err := h.uc.Vote(c.Context(), wishlistID, blockID, guestID, options)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+		return guestError(c, err)
 	}
 	return c.JSON(response.Data(results))
+}
+
+func (h *guestDataHandler) addPollOption(c *fiber.Ctx) error {
+	wishlistID, blockID, errResp := h.blockScope(c)
+	if errResp != nil {
+		return errResp
+	}
+	var body struct {
+		Text string `json:"text"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid JSON"))
+	}
+	guestID, _ := middleware.GuestIDFromCtx(c)
+	results, err := h.uc.AddPollOption(c.Context(), wishlistID, blockID, guestID, body.Text)
+	if err != nil {
+		return guestError(c, err)
+	}
+	return c.JSON(response.Data(results))
+}
+
+func (h *guestDataHandler) setPollOptionHidden(c *fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(response.Error(err.Error()))
+	}
+	optionID, err := uuid.Parse(c.Params("optionId"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid option ID"))
+	}
+	var body struct {
+		Hidden bool `json:"hidden"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid JSON"))
+	}
+	if err := h.uc.OwnerSetPollOptionHidden(c.Context(), userID, optionID, body.Hidden); err != nil {
+		return ownerError(c, err, fiber.StatusBadRequest)
+	}
+	return c.JSON(response.Data(true))
+}
+
+func (h *guestDataHandler) rsvpGuests(c *fiber.Ctx) error {
+	wishlistID, blockID, errResp := h.blockScope(c)
+	if errResp != nil {
+		return errResp
+	}
+	guests, err := h.uc.RSVPGuests(c.Context(), wishlistID, blockID)
+	if err != nil {
+		return guestError(c, err)
+	}
+	return c.JSON(response.Data(guests))
+}
+
+// guestError — закрытый приём ответов (409) и выключенная владельцем функция
+// (403) отличаются от ошибки ввода (400): фронт показывает их по-разному.
+func guestError(c *fiber.Ctx, err error) error {
+	switch {
+	case errors.Is(err, usecase.ErrClosed):
+		return c.Status(fiber.StatusConflict).JSON(response.Error(err.Error()))
+	case errors.Is(err, usecase.ErrForbidden):
+		return c.Status(fiber.StatusForbidden).JSON(response.Error(err.Error()))
+	default:
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+	}
 }
 
 // Плейлист

@@ -199,14 +199,28 @@ func (m *MockGuestDataUC) OwnerRSVPSummary(ctx context.Context, userID, wishlist
 	return args.Get(0).(entity.RSVPSummary), args.Error(1)
 }
 
-func (m *MockGuestDataUC) Vote(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, option int) (entity.PollResults, error) {
-	args := m.Called(ctx, wishlistID, blockID, guestID, option)
+func (m *MockGuestDataUC) Vote(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, optionIDs []string) (entity.PollResults, error) {
+	args := m.Called(ctx, wishlistID, blockID, guestID, optionIDs)
 	return args.Get(0).(entity.PollResults), args.Error(1)
 }
 
-func (m *MockGuestDataUC) PollResults(ctx context.Context, blockID string, guestID uuid.UUID) (entity.PollResults, error) {
-	args := m.Called(ctx, blockID, guestID)
+func (m *MockGuestDataUC) PollResults(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID, viewerID uuid.UUID) (entity.PollResults, error) {
+	args := m.Called(ctx, wishlistID, blockID, guestID, viewerID)
 	return args.Get(0).(entity.PollResults), args.Error(1)
+}
+
+func (m *MockGuestDataUC) AddPollOption(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, text string) (entity.PollResults, error) {
+	args := m.Called(ctx, wishlistID, blockID, guestID, text)
+	return args.Get(0).(entity.PollResults), args.Error(1)
+}
+
+func (m *MockGuestDataUC) OwnerSetPollOptionHidden(ctx context.Context, userID, optionID uuid.UUID, hidden bool) error {
+	return m.Called(ctx, userID, optionID, hidden).Error(0)
+}
+
+func (m *MockGuestDataUC) RSVPGuests(ctx context.Context, wishlistID uuid.UUID, blockID string) (entity.RSVPGuests, error) {
+	args := m.Called(ctx, wishlistID, blockID)
+	return args.Get(0).(entity.RSVPGuests), args.Error(1)
 }
 
 func (m *MockGuestDataUC) SuggestTrack(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, title string) ([]entity.PlaylistTrack, error) {

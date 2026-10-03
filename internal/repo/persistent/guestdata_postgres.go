@@ -38,11 +38,12 @@ func (r *guestDataRepo) UpsertRSVP(ctx context.Context, response entity.RSVPResp
 		Menu:       response.Menu,
 		Transfer:   response.Transfer,
 		Comment:    response.Comment,
+		Answers:    AnswersJSON(response.Answers),
 	}
 
 	err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "block_id"}, {Name: "guest_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"name", "going", "plus_one", "kids", "menu", "transfer", "comment", "updated_at"}),
+		DoUpdates: clause.AssignmentColumns([]string{"name", "going", "plus_one", "kids", "menu", "transfer", "comment", "answers", "updated_at"}),
 	}).Create(&m).Error
 	if err != nil {
 		return fmt.Errorf("guestDataRepo.UpsertRSVP: %w", err)
@@ -64,7 +65,7 @@ func (r *guestDataRepo) ListRSVP(ctx context.Context, blockID string) ([]entity.
 		out[i] = entity.RSVPResponse{
 			ID: m.ID, WishlistID: m.WishlistID, BlockID: m.BlockID, GuestID: m.GuestID,
 			Name: m.Name, Going: m.Going, PlusOne: m.PlusOne, Kids: m.Kids,
-			Menu: m.Menu, Transfer: m.Transfer, Comment: m.Comment,
+			Menu: m.Menu, Transfer: m.Transfer, Comment: m.Comment, Answers: map[string]string(m.Answers),
 			CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 		}
 	}
@@ -73,54 +74,106 @@ func (r *guestDataRepo) ListRSVP(ctx context.Context, blockID string) ([]entity.
 
 // Poll
 
-// UpsertPollVote — переголосование меняет свой голос, а не добавляет второй.
-func (r *guestDataRepo) UpsertPollVote(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, option int) error {
-	m := PollVoteModel{WishlistID: wishlistID, BlockID: blockID, GuestID: guestID, OptionIndex: option}
+// ReplacePollChoices — выбор гостя целиком, одной транзакцией: при
+// переголосовании старые варианты снимаются, а не копятся рядом с новыми.
+func (r *guestDataRepo) ReplacePollChoices(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, optionIDs []string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("block_id = ? AND guest_id = ?", blockID, guestID).
+			Delete(&PollChoiceModel{}).Error; err != nil {
+			return fmt.Errorf("guestDataRepo.ReplacePollChoices: delete: %w", err)
+		}
+		for _, id := range optionIDs {
+			choice := PollChoiceModel{WishlistID: wishlistID, BlockID: blockID, GuestID: guestID, OptionID: id}
+			if err := tx.Create(&choice).Error; err != nil {
+				return fmt.Errorf("guestDataRepo.ReplacePollChoices: insert: %w", err)
+			}
+		}
+		return nil
+	})
+}
 
-	err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "block_id"}, {Name: "guest_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"option_index", "updated_at"}),
-	}).Create(&m).Error
-	if err != nil {
-		return fmt.Errorf("guestDataRepo.UpsertPollVote: %w", err)
+// CountPollChoices — сколько голосов у каждого варианта и что выбрал этот гость.
+func (r *guestDataRepo) CountPollChoices(ctx context.Context, blockID string, guestID uuid.UUID) (map[string]int, []string, error) {
+	var rows []struct {
+		OptionID string
+		Count    int
+	}
+	if err := r.db.WithContext(ctx).Model(&PollChoiceModel{}).
+		Select("option_id, count(*) as count").
+		Where("block_id = ?", blockID).
+		Group("option_id").
+		Scan(&rows).Error; err != nil {
+		return nil, nil, fmt.Errorf("guestDataRepo.CountPollChoices: %w", err)
+	}
+
+	counts := make(map[string]int, len(rows))
+	for _, row := range rows {
+		counts[row.OptionID] = row.Count
+	}
+
+	var mine []string
+	if guestID != uuid.Nil {
+		if err := r.db.WithContext(ctx).Model(&PollChoiceModel{}).
+			Where("block_id = ? AND guest_id = ?", blockID, guestID).
+			Order("created_at").
+			Pluck("option_id", &mine).Error; err != nil {
+			return nil, nil, fmt.Errorf("guestDataRepo.CountPollChoices: own: %w", err)
+		}
+	}
+	return counts, mine, nil
+}
+
+func (r *guestDataRepo) CreatePollOption(ctx context.Context, option entity.PollGuestOption) error {
+	m := PollGuestOptionModel{
+		ID: option.ID, WishlistID: option.WishlistID, BlockID: option.BlockID,
+		GuestID: option.GuestID, Text: option.Text,
+	}
+	if err := r.db.WithContext(ctx).Create(&m).Error; err != nil {
+		return fmt.Errorf("guestDataRepo.CreatePollOption: %w", err)
 	}
 	return nil
 }
 
-// CountPollVotes — сколько голосов у каждого варианта и что выбрал этот гость.
-func (r *guestDataRepo) CountPollVotes(ctx context.Context, blockID string, guestID uuid.UUID) (map[int]int, *int, error) {
-	var rows []struct {
-		OptionIndex int
-		Count       int
+func (r *guestDataRepo) CountPollOptionsByGuest(ctx context.Context, blockID string, guestID uuid.UUID) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&PollGuestOptionModel{}).
+		Where("block_id = ? AND guest_id = ?", blockID, guestID).
+		Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("guestDataRepo.CountPollOptionsByGuest: %w", err)
 	}
-	if err := r.db.WithContext(ctx).Model(&PollVoteModel{}).
-		Select("option_index, count(*) as count").
-		Where("block_id = ?", blockID).
-		Group("option_index").
-		Scan(&rows).Error; err != nil {
-		return nil, nil, fmt.Errorf("guestDataRepo.CountPollVotes: %w", err)
-	}
+	return count, nil
+}
 
-	counts := make(map[int]int, len(rows))
-	for _, row := range rows {
-		counts[row.OptionIndex] = row.Count
+func (r *guestDataRepo) ListPollOptions(ctx context.Context, blockID string, guestID uuid.UUID, includeHidden bool) ([]entity.PollOption, error) {
+	query := r.db.WithContext(ctx).Where("block_id = ?", blockID)
+	if !includeHidden {
+		query = query.Where("hidden = ?", false)
 	}
-
-	var mine *int
-	if guestID != uuid.Nil {
-		var vote PollVoteModel
-		err := r.db.WithContext(ctx).
-			Where("block_id = ? AND guest_id = ?", blockID, guestID).
-			First(&vote).Error
-		if err == nil {
-			option := vote.OptionIndex
-			mine = &option
-		} else if err != gorm.ErrRecordNotFound {
-			return nil, nil, fmt.Errorf("guestDataRepo.CountPollVotes: own vote: %w", err)
-		}
+	var models []PollGuestOptionModel
+	if err := query.Order("created_at").Find(&models).Error; err != nil {
+		return nil, fmt.Errorf("guestDataRepo.ListPollOptions: %w", err)
 	}
+	out := make([]entity.PollOption, len(models))
+	for i, m := range models {
+		out[i] = entity.PollOption{ID: m.ID.String(), Text: m.Text, Mine: m.GuestID == guestID, Hidden: m.Hidden}
+	}
+	return out, nil
+}
 
-	return counts, mine, nil
+func (r *guestDataRepo) PollOptionWishlist(ctx context.Context, optionID uuid.UUID) (uuid.UUID, error) {
+	var m PollGuestOptionModel
+	if err := r.db.WithContext(ctx).First(&m, "id = ?", optionID).Error; err != nil {
+		return uuid.Nil, fmt.Errorf("guestDataRepo.PollOptionWishlist: %w", err)
+	}
+	return m.WishlistID, nil
+}
+
+func (r *guestDataRepo) SetPollOptionHidden(ctx context.Context, optionID uuid.UUID, hidden bool) error {
+	if err := r.db.WithContext(ctx).Model(&PollGuestOptionModel{}).
+		Where("id = ?", optionID).Update("hidden", hidden).Error; err != nil {
+		return fmt.Errorf("guestDataRepo.SetPollOptionHidden: %w", err)
+	}
+	return nil
 }
 
 // Playlist

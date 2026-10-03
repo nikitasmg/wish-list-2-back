@@ -153,6 +153,9 @@ var ErrVersionConflict = errors.New("вишлист изменили в друг
 // страницы, зная только UUID из публичной ссылки.
 var ErrForbidden = errors.New("это чужой вишлист")
 
+// ErrClosed — приём ответов или голосов закрыт датой из настроек блока.
+var ErrClosed = errors.New("приём ответов закрыт")
+
 // PresentUseCase — бизнес-логика подарков
 type PresentUseCase interface {
 	Create(ctx context.Context, userID, wishlistID uuid.UUID, input CreatePresentInput) (entity.Present, error)
@@ -197,6 +200,7 @@ type RSVPInput struct {
 	Menu     string
 	Transfer bool
 	Comment  string
+	Answers  map[string]string
 }
 
 // GuestbookInput — запись в гостевой книге.
@@ -216,8 +220,15 @@ type GuestDataUseCase interface {
 	MyRSVP(ctx context.Context, blockID string, guestID uuid.UUID) (*entity.RSVPResponse, error)
 	OwnerRSVPSummary(ctx context.Context, userID, wishlistID uuid.UUID, blockID string) (entity.RSVPSummary, error)
 
-	Vote(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, option int) (entity.PollResults, error)
-	PollResults(ctx context.Context, blockID string, guestID uuid.UUID) (entity.PollResults, error)
+	// RSVPGuests — «Кто идёт», если организатор включил его в блоке.
+	RSVPGuests(ctx context.Context, wishlistID uuid.UUID, blockID string) (entity.RSVPGuests, error)
+
+	Vote(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, optionIDs []string) (entity.PollResults, error)
+	// PollResults: viewerID — залогиненный пользователь или uuid.Nil; владелец
+	// видит результаты всегда.
+	PollResults(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID, viewerID uuid.UUID) (entity.PollResults, error)
+	AddPollOption(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, text string) (entity.PollResults, error)
+	OwnerSetPollOptionHidden(ctx context.Context, userID, optionID uuid.UUID, hidden bool) error
 
 	SuggestTrack(ctx context.Context, wishlistID uuid.UUID, blockID string, guestID uuid.UUID, title string) ([]entity.PlaylistTrack, error)
 	Tracks(ctx context.Context, blockID string, guestID uuid.UUID) ([]entity.PlaylistTrack, error)

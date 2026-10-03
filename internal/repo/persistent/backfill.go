@@ -33,6 +33,29 @@ func BackfillEventDate(db *gorm.DB) error {
 	return nil
 }
 
+// BackfillPollChoices переносит голоса из poll_votes (один на гостя, вариант
+// по индексу) в poll_choices (вариант по id).
+//
+// Индекс становится id: старые голосования хранят варианты строками, и фронт
+// выдаёт им id по индексу — голоса продолжают указывать на тот же вариант.
+// Перенесённые строки удаляются тем же запросом: иначе следующий запуск вернул
+// бы голос, который гость с тех пор поменял.
+func BackfillPollChoices(db *gorm.DB) error {
+	const query = `
+		WITH moved AS (
+			DELETE FROM poll_votes
+			RETURNING wishlist_id, block_id, guest_id, option_index, created_at
+		)
+		INSERT INTO poll_choices (wishlist_id, block_id, guest_id, option_id, created_at)
+		SELECT wishlist_id, block_id, guest_id, option_index::text, created_at FROM moved
+		ON CONFLICT DO NOTHING
+	`
+	if err := db.Exec(query).Error; err != nil {
+		return fmt.Errorf("backfill poll choices: %w", err)
+	}
+	return nil
+}
+
 // BackfillPresentLinks переносит единственную ссылку подарка в массив links.
 //
 // Идемпотентно: заполняются только строки, где links ещё пуст, а link не пуст.
