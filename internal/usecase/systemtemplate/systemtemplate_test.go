@@ -30,9 +30,10 @@ func TestAll_LoadsAndValidates(t *testing.T) {
 		for i, b := range tpl.Blocks {
 			assert.True(t, entity.ValidBlockTypes[b.Type], "%s: блок %d тип %q", tpl.ID, i, b.Type)
 			assert.False(t, entity.LegacyBlockTypes[b.Type], "%s: блок %d устаревший тип %q", tpl.ID, i, b.Type)
-			assert.Equal(t, i, b.Row, "%s: строки должны идти по порядку", tpl.ID)
-			assert.Equal(t, 0, b.Col)
-			assert.Equal(t, 2, b.ColSpan)
+			// Раскладка v3: ряды до трёх колонок, блок в одной колонке. Остальное
+			// (наезды, пропорции) проверяет тест валидации в пакете wishlist.
+			assert.Less(t, b.Row, len(tpl.Rows), "%s: блок %d в ряду без настроек", tpl.ID, i)
+			assert.Equal(t, 1, b.ColSpan)
 			assert.NotNil(t, b.Data, "%s: блок %d без data", tpl.ID, i)
 		}
 	}

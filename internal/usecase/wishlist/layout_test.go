@@ -213,3 +213,29 @@ func TestUpdateBlocks_SecretModeValidation(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "secretText")
 }
+
+// Гендер-пати: фото-ответ спрятан до праздника. Дату шаблон знать не может —
+// её берёт секрет из даты праздника при создании.
+func TestCreateFromSystemTemplate_SecretOpensOnEventDate(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	uc := newWishlistUC(wr, &mockminio.MockFileStorage{})
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil)
+	wr.On("GetByShortID", mock.Anything, mock.Anything).Return(entity.Wishlist{}, assert.AnError)
+	wr.On("Create", mock.Anything, mock.Anything).Return(nil)
+
+	party := time.Date(2026, 10, 12, 13, 0, 0, 0, time.UTC)
+	w, err := uc.CreateFromSystemTemplate(context.Background(), owner, usecase.CreateFromSystemTemplateInput{TemplateID: "gender", EventDate: &party})
+	require.NoError(t, err)
+
+	var secret *entity.Block
+	for i := range w.Blocks {
+		if w.Blocks[i].SecretMode != "" {
+			secret = &w.Blocks[i]
+		}
+	}
+	require.NotNil(t, secret, "в шаблоне есть секрет")
+	require.NotNil(t, secret.RevealAt)
+	assert.True(t, secret.RevealAt.Equal(party))
+	assert.NotEmpty(t, w.Settings.HeadingFont, "оформление из шаблона доходит до вишлиста")
+	assert.NotEmpty(t, w.Rows, "ряды из шаблона доходят до вишлиста")
+}

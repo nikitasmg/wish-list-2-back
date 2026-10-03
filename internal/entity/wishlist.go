@@ -22,7 +22,7 @@ type Settings struct {
 
 // Look — шрифт заголовков, узор фона и «живость» страницы.
 type Look struct {
-	HeadingFont       string `json:"headingFont"`       // accent | strict | soft | poster | elegant | classic; пусто — accent
+	HeadingFont       string `json:"headingFont"`       // accent | strict | soft | poster | elegant | classic; пусто — strict
 	Pattern           string `json:"pattern"`           // none | stars | confetti | lines; пусто — none
 	MainDreamLarge    bool   `json:"mainDreamLarge"`    // главная мечта крупно
 	ConfettiOnReserve bool   `json:"confettiOnReserve"` // конфетти при брони

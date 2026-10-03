@@ -6,15 +6,166 @@
     "colorScheme": "midnight",
     "sampleTitle": "Тёме — семь!",
     "occasion": "День рождения",
+    "look": {
+      "mainDreamLarge": true,
+      "headingFont": "accent",
+      "pattern": "stars",
+      "liveTimer": true
+    },
     "blocks": [
-      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "number", "title": "Тёме — семь!", "data": { "number": "7", "subtitle": "суббота, 18 октября · 12:00" } },
-      { "type": "list", "row": 1, "col": 0, "colSpan": 2, "view": "tags", "caption": "Интересы", "title": "Что Тёма любит", "data": { "items": [{ "v": "Динозавры" }, { "v": "Конструкторы" }, { "v": "Космос" }, { "v": "Футбол" }] } },
-      { "type": "list", "row": 2, "col": 0, "colSpan": 2, "view": "tiles", "caption": "Размеры", "data": { "items": [{ "k": "рост", "v": "128" }, { "k": "обувь", "v": "30" }, { "k": "одежда", "v": "7–8 лет" }] } },
-      { "type": "list", "row": 3, "col": 0, "colSpan": 2, "view": "tags", "caption": "Стоп-лист", "title": "Уже есть — не дарите", "data": { "strike": true, "items": [{ "v": "самокат" }, { "v": "набор фломастеров" }, { "v": "сладкое" }] } },
-      { "type": "location", "row": 4, "col": 0, "colSpan": 2, "caption": "Место", "data": { "name": "Детский центр «Орбита»", "address": "ул. Ленина, 24, 2 этаж" } },
-      { "type": "wishlist", "row": 5, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} },
-      { "type": "rsvp", "row": 6, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": ["kids"] } },
-      { "type": "contact", "row": 7, "col": 0, "colSpan": 2, "caption": "Вопросы", "data": { "name": "Мама Тёмы", "role": "Организатор" } }
+      {
+        "type": "cover",
+        "view": "number",
+        "title": "Тёме — семь!",
+        "data": {
+          "number": "7",
+          "subtitle": "Зовём друзей Тёмы на праздник с квестом, пиццей и тортом-вулканом."
+        },
+        "row": 0,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "list",
+        "view": "tags",
+        "caption": "Интересы",
+        "title": "Что Тёма любит",
+        "data": {
+          "items": [
+            {
+              "v": "Динозавры"
+            },
+            {
+              "v": "Конструкторы"
+            },
+            {
+              "v": "Космос"
+            },
+            {
+              "v": "Футбол"
+            },
+            {
+              "v": "Рисовать"
+            }
+          ]
+        },
+        "row": 1,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "list",
+        "view": "tiles",
+        "caption": "Размеры",
+        "title": "Если дарите одежду",
+        "data": {
+          "items": [
+            {
+              "k": "рост",
+              "v": "128"
+            },
+            {
+              "k": "обувь",
+              "v": "30"
+            },
+            {
+              "k": "одежда",
+              "v": "7–8 лет"
+            }
+          ]
+        },
+        "row": 1,
+        "col": 1,
+        "colSpan": 1
+      },
+      {
+        "type": "list",
+        "view": "tags",
+        "caption": "Стоп-лист",
+        "title": "Уже есть — не дарите",
+        "data": {
+          "strike": true,
+          "items": [
+            {
+              "v": "Самокат"
+            },
+            {
+              "v": "Набор фломастеров"
+            },
+            {
+              "v": "Детский планшет"
+            }
+          ]
+        },
+        "row": 2,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "location",
+        "caption": "Место",
+        "data": {
+          "name": "Детский центр «Орбита»",
+          "address": "ул. Ленина, 24, 2 этаж",
+          "note": "Родители могут остаться — для вас кофе в лаунже."
+        },
+        "row": 2,
+        "col": 1,
+        "colSpan": 1
+      },
+      {
+        "type": "wishlist",
+        "view": "cards",
+        "caption": "Вишлист",
+        "title": "Подарки",
+        "data": {},
+        "row": 3,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "rsvp",
+        "caption": "Ответ гостя",
+        "title": "Придёте?",
+        "data": {
+          "fields": [
+            "kids"
+          ]
+        },
+        "row": 4,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "contact",
+        "caption": "Контакты",
+        "title": "Остались вопросы?",
+        "data": {
+          "name": "Катя",
+          "role": "мама Тёмы, по всем вопросам"
+        },
+        "row": 4,
+        "col": 1,
+        "colSpan": 1
+      }
+    ],
+    "rows": [
+      {
+        "columns": 1
+      },
+      {
+        "columns": 2
+      },
+      {
+        "columns": 2,
+        "ratio": "2:1"
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 2
+      }
     ]
   },
   {
@@ -24,14 +175,175 @@
     "colorScheme": "powder",
     "sampleTitle": "Соне 5 лет",
     "occasion": "День рождения",
+    "look": {
+      "mainDreamLarge": true,
+      "headingFont": "soft",
+      "pattern": "confetti"
+    },
     "blocks": [
-      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "circle", "title": "Соне 5 лет", "data": { "subtitle": "воскресенье, 12 апреля · 14:00" } },
-      { "type": "list", "row": 1, "col": 0, "colSpan": 2, "view": "pairs", "caption": "Любимое", "data": { "items": [{ "k": "Цветы", "v": "ромашки" }, { "k": "Цвет", "v": "лавандовый" }, { "k": "Мультик", "v": "про фей" }, { "k": "Сладкое", "v": "зефир" }] } },
-      { "type": "list", "row": 2, "col": 0, "colSpan": 2, "view": "schedule", "caption": "Программа", "data": { "items": [{ "t": "14:00", "v": "Сбор гостей" }, { "t": "14:30", "v": "Шоу мыльных пузырей" }, { "t": "15:30", "v": "Торт" }] } },
-      { "type": "color_scheme", "row": 3, "col": 0, "colSpan": 2, "caption": "Дресс-код", "title": "Цвета праздника", "data": { "colors": ["#FBF3F5", "#F0DDE3", "#C93A6E", "#FFFFFF"] } },
-      { "type": "list", "row": 4, "col": 0, "colSpan": 2, "view": "tiles", "caption": "Размеры", "data": { "items": [{ "k": "рост", "v": "110" }, { "k": "обувь", "v": "28" }] } },
-      { "type": "wishlist", "row": 5, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} },
-      { "type": "rsvp", "row": 6, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": [] } }
+      {
+        "type": "cover",
+        "view": "circle",
+        "title": "Соне 5 лет",
+        "data": {
+          "subtitle": "Будет фея-аниматор, мыльные пузыри и самый розовый торт на свете."
+        },
+        "row": 0,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "list",
+        "view": "pairs",
+        "caption": "Любимое",
+        "title": "Что радует Соню",
+        "data": {
+          "items": [
+            {
+              "k": "Цвет",
+              "v": "розовый и сиреневый"
+            },
+            {
+              "k": "Мультик",
+              "v": "про пони и фей"
+            },
+            {
+              "k": "Занятие",
+              "v": "лепить и танцевать"
+            },
+            {
+              "k": "Животное",
+              "v": "котики"
+            }
+          ]
+        },
+        "row": 1,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "list",
+        "view": "schedule",
+        "caption": "Программа",
+        "title": "Как пройдёт праздник",
+        "data": {
+          "items": [
+            {
+              "t": "14:00",
+              "v": "Встречаем гостей"
+            },
+            {
+              "t": "14:30",
+              "v": "Фея и игры"
+            },
+            {
+              "t": "15:30",
+              "v": "Мастер-класс по слаймам"
+            },
+            {
+              "t": "16:30",
+              "v": "Торт и свечи"
+            }
+          ]
+        },
+        "row": 1,
+        "col": 1,
+        "colSpan": 1
+      },
+      {
+        "type": "color_scheme",
+        "view": "circles",
+        "caption": "Дресс-код",
+        "title": "Приходите феями и принцессами",
+        "data": {
+          "colors": [
+            {
+              "hex": "#F4A9C0",
+              "name": "Розовый"
+            },
+            {
+              "hex": "#C9B6F2",
+              "name": "Сиреневый"
+            },
+            {
+              "hex": "#FFFFFF",
+              "name": "Белый"
+            },
+            {
+              "hex": "#F9D98B",
+              "name": "Золотой"
+            }
+          ],
+          "showNames": true,
+          "note": "Мальчикам — рыцари или любой яркий костюм."
+        },
+        "row": 2,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "list",
+        "view": "tiles",
+        "caption": "Размеры",
+        "title": "Если дарите одежду",
+        "data": {
+          "items": [
+            {
+              "k": "рост",
+              "v": "110"
+            },
+            {
+              "k": "обувь",
+              "v": "27"
+            },
+            {
+              "k": "одежда",
+              "v": "5–6 лет"
+            }
+          ]
+        },
+        "row": 2,
+        "col": 1,
+        "colSpan": 1
+      },
+      {
+        "type": "wishlist",
+        "view": "cards",
+        "caption": "Вишлист",
+        "title": "Вишлист",
+        "data": {},
+        "row": 3,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "rsvp",
+        "caption": "Ответ гостя",
+        "title": "Придёте?",
+        "data": {
+          "fields": []
+        },
+        "row": 4,
+        "col": 0,
+        "colSpan": 1
+      }
+    ],
+    "rows": [
+      {
+        "columns": 1
+      },
+      {
+        "columns": 2
+      },
+      {
+        "columns": 2
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 1
+      }
     ]
   },
   {
@@ -41,12 +353,99 @@
     "colorScheme": "graphite",
     "sampleTitle": "Диме 35",
     "occasion": "День рождения",
+    "look": {
+      "mainDreamLarge": true,
+      "headingFont": "poster",
+      "pattern": "lines"
+    },
     "blocks": [
-      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "left", "title": "Диме 35", "data": { "subtitle": "пятница, 3 июля · 19:00" } },
-      { "type": "wishlist", "row": 1, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} },
-      { "type": "list", "row": 2, "col": 0, "colSpan": 2, "view": "tags", "caption": "Стоп-лист", "title": "Не дарите, пожалуйста", "data": { "strike": true, "items": [{ "v": "носки" }, { "v": "парфюм" }, { "v": "кружки" }] } },
-      { "type": "location", "row": 3, "col": 0, "colSpan": 2, "caption": "Место", "data": { "name": "Бар «Гараж»", "address": "ул. Мира, 7" } },
-      { "type": "rsvp", "row": 4, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": ["who"] } }
+      {
+        "type": "cover",
+        "view": "left",
+        "title": "Диме 35",
+        "data": {
+          "subtitle": "Без пафоса: бар, друзья, настолки до закрытия. Буду рад видеть."
+        },
+        "row": 0,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "list",
+        "view": "tags",
+        "caption": "Стоп-лист",
+        "title": "Пожалуйста, не дарите",
+        "data": {
+          "strike": true,
+          "items": [
+            {
+              "v": "носки"
+            },
+            {
+              "v": "парфюм"
+            },
+            {
+              "v": "алкоголь"
+            },
+            {
+              "v": "кружки с надписями"
+            }
+          ]
+        },
+        "row": 1,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "location",
+        "caption": "Место",
+        "data": {
+          "name": "Бар «Подвал»",
+          "address": "ул. Вайнера, 15",
+          "note": "Стол забронирован на имя Дима."
+        },
+        "row": 1,
+        "col": 1,
+        "colSpan": 1
+      },
+      {
+        "type": "wishlist",
+        "view": "cards",
+        "caption": "Вишлист",
+        "title": "Вишлист",
+        "data": {},
+        "row": 2,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "rsvp",
+        "caption": "Ответ гостя",
+        "title": "Будешь?",
+        "data": {
+          "fields": [
+            "plusOne"
+          ],
+          "showGuests": true
+        },
+        "row": 3,
+        "col": 0,
+        "colSpan": 1
+      }
+    ],
+    "rows": [
+      {
+        "columns": 1
+      },
+      {
+        "columns": 2
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 1
+      }
     ]
   },
   {
@@ -56,16 +455,177 @@
     "colorScheme": "lavender",
     "sampleTitle": "Ане — 28",
     "occasion": "День рождения",
+    "look": {
+      "mainDreamLarge": true,
+      "headingFont": "classic",
+      "pattern": "stars"
+    },
     "blocks": [
-      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "photo", "title": "Ане — 28", "data": { "subtitle": "суббота, 14 ноября · 19:00" } },
-      { "type": "quote", "row": 1, "col": 0, "colSpan": 2, "data": { "text": "Лучший подарок — это вы. Но если очень хочется что-то подарить, ниже есть подсказки" } },
-      { "type": "list", "row": 2, "col": 0, "colSpan": 2, "view": "tiles", "caption": "Размеры", "data": { "items": [{ "k": "одежда", "v": "S · 42" }, { "k": "обувь", "v": "37" }, { "k": "кольцо", "v": "16,5" }] } },
-      { "type": "list", "row": 3, "col": 0, "colSpan": 2, "view": "pairs", "caption": "Любимое", "data": { "items": [{ "k": "Цветы", "v": "пионы" }, { "k": "Кофе", "v": "флэт уайт" }, { "k": "Сладкое", "v": "тёмный шоколад" }] } },
-      { "type": "wishlist", "row": 4, "col": 0, "colSpan": 2, "view": "cards", "caption": "Подарки", "title": "Вишлист", "data": {} },
-      { "type": "playlist", "row": 5, "col": 0, "colSpan": 2, "caption": "Музыка", "title": "Предложите трек", "data": { "votes": true } },
-      { "type": "location", "row": 6, "col": 0, "colSpan": 2, "caption": "Место", "data": { "name": "Лофт «Веранда»", "address": "ул. Малышева, 51, 5 этаж" } },
-      { "type": "color_scheme", "row": 7, "col": 0, "colSpan": 2, "caption": "Дресс-код", "title": "Цвета вечера", "data": { "colors": ["#0F172A", "#475569", "#67E8F9", "#A78BFA", "#F8FAFC"] } },
-      { "type": "rsvp", "row": 8, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": ["plusOne"] } }
+      {
+        "type": "cover",
+        "view": "photo",
+        "title": "Ане — 28",
+        "data": {},
+        "row": 0,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "quote",
+        "data": {
+          "text": "Главное — чтобы все, кого я люблю, были в одной комнате"
+        },
+        "row": 1,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "list",
+        "view": "tiles",
+        "caption": "Мои размеры",
+        "title": "Чтобы точно подошло",
+        "data": {
+          "items": [
+            {
+              "k": "одежда",
+              "v": "S · 42"
+            },
+            {
+              "k": "обувь",
+              "v": "37"
+            },
+            {
+              "k": "кольцо",
+              "v": "16,5"
+            }
+          ]
+        },
+        "row": 2,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "list",
+        "view": "pairs",
+        "caption": "Любимое",
+        "title": "Если хочется угадать",
+        "data": {
+          "items": [
+            {
+              "k": "Цветы",
+              "v": "пионы, эвкалипт"
+            },
+            {
+              "k": "Ароматы",
+              "v": "древесные, без сладкого"
+            },
+            {
+              "k": "Украшения",
+              "v": "серебро, минимализм"
+            },
+            {
+              "k": "Сладкое",
+              "v": "тёмный шоколад"
+            }
+          ]
+        },
+        "row": 2,
+        "col": 1,
+        "colSpan": 1
+      },
+      {
+        "type": "wishlist",
+        "view": "cards",
+        "caption": "Вишлист",
+        "title": "Вишлист",
+        "data": {},
+        "row": 3,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "playlist",
+        "caption": "Плейлист",
+        "title": "Закажите песню на вечер",
+        "data": {
+          "votes": true
+        },
+        "row": 4,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "location",
+        "caption": "Место",
+        "data": {
+          "name": "Ресторан «Облака», 31 этаж",
+          "address": "ул. Малышева, 51",
+          "note": "Лифт до 31 этажа."
+        },
+        "row": 4,
+        "col": 1,
+        "colSpan": 1
+      },
+      {
+        "type": "color_scheme",
+        "view": "circles",
+        "caption": "Дресс-код",
+        "title": "Коктейльный",
+        "data": {
+          "colors": [
+            {
+              "hex": "#B9AEFF",
+              "name": "Лаванда"
+            },
+            {
+              "hex": "#C8CCD6",
+              "name": "Серебро"
+            },
+            {
+              "hex": "#0C0C1E",
+              "name": "Ночь"
+            }
+          ],
+          "showNames": true,
+          "note": "Приветствуются оттенки лаванды и серебра."
+        },
+        "row": 5,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "rsvp",
+        "caption": "Ответ гостя",
+        "title": "Придёте?",
+        "data": {
+          "fields": [
+            "plusOne"
+          ]
+        },
+        "row": 5,
+        "col": 1,
+        "colSpan": 1
+      }
+    ],
+    "rows": [
+      {
+        "columns": 1
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 2
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 2
+      },
+      {
+        "columns": 2
+      }
     ]
   },
   {
@@ -75,14 +635,183 @@
     "colorScheme": "linen",
     "sampleTitle": "Аня и Лев",
     "occasion": "Свадьба",
+    "look": {
+      "mainDreamLarge": true,
+      "headingFont": "elegant",
+      "pattern": "none"
+    },
     "blocks": [
-      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "arch", "title": "Аня и Лев", "data": { "subtitle": "6 июня 2027" } },
-      { "type": "list", "row": 1, "col": 0, "colSpan": 2, "view": "timeline", "caption": "Наша история", "data": { "items": [{ "t": "2019", "v": "Познакомились в походе" }, { "t": "2022", "v": "Переехали вместе" }, { "t": "2026", "v": "Предложение" }] } },
-      { "type": "list", "row": 2, "col": 0, "colSpan": 2, "view": "schedule", "caption": "Программа", "data": { "items": [{ "t": "15:00", "v": "Церемония" }, { "t": "16:00", "v": "Фуршет" }, { "t": "18:00", "v": "Ужин" }, { "t": "21:00", "v": "Танцы" }] } },
-      { "type": "color_scheme", "row": 3, "col": 0, "colSpan": 2, "caption": "Дресс-код", "title": "Палитра дня", "data": { "colors": ["#F6F4EF", "#E6E1D6", "#85693A", "#24211C"] } },
-      { "type": "wishlist", "row": 4, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} },
-      { "type": "rsvp", "row": 5, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": ["plusOne", "menu", "transfer"] } },
-      { "type": "contact", "row": 6, "col": 0, "colSpan": 2, "caption": "Вопросы", "data": { "name": "Лена", "role": "Организатор" } }
+      {
+        "type": "cover",
+        "view": "arch",
+        "title": "Аня и Лев",
+        "data": {
+          "subtitle": "Будем счастливы разделить этот день с вами. Ниже — всё, что нужно знать."
+        },
+        "row": 0,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "list",
+        "view": "timeline",
+        "caption": "Наша история",
+        "title": "Как всё началось",
+        "data": {
+          "items": [
+            {
+              "t": "2019",
+              "v": "Познакомились в походе на Таганай"
+            },
+            {
+              "t": "2022",
+              "v": "Переехали в квартиру с огромным окном"
+            },
+            {
+              "t": "2026",
+              "v": "Лев сделал предложение на том же месте"
+            }
+          ]
+        },
+        "row": 1,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "list",
+        "view": "schedule",
+        "caption": "День свадьбы",
+        "title": "Программа",
+        "data": {
+          "items": [
+            {
+              "t": "14:00",
+              "v": "Регистрация"
+            },
+            {
+              "t": "15:30",
+              "v": "Фотопрогулка, для гостей — фуршет"
+            },
+            {
+              "t": "17:00",
+              "v": "Банкет, трансфер в 16:15"
+            }
+          ]
+        },
+        "row": 2,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "location",
+        "caption": "Место",
+        "title": "Где нас искать",
+        "data": {
+          "name": "Дворец бракосочетания",
+          "address": "ул. Малышева, 44",
+          "points": [
+            {
+              "name": "Загородный клуб «Сосны»",
+              "address": "Сысертский тракт, 12"
+            }
+          ]
+        },
+        "row": 2,
+        "col": 1,
+        "colSpan": 1
+      },
+      {
+        "type": "color_scheme",
+        "view": "circles",
+        "caption": "Дресс-код",
+        "title": "Пастель и натуральные ткани",
+        "data": {
+          "colors": [
+            {
+              "hex": "#E8DCC8",
+              "name": "Беж"
+            },
+            {
+              "hex": "#C9D6C3",
+              "name": "Шалфей"
+            },
+            {
+              "hex": "#E9C9C4",
+              "name": "Пудра"
+            },
+            {
+              "hex": "#B8C4D6",
+              "name": "Голубой"
+            }
+          ],
+          "showNames": true,
+          "note": "Пожалуйста, без белого — это цвет невесты."
+        },
+        "row": 3,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "wishlist",
+        "view": "cards",
+        "caption": "Вишлист",
+        "title": "Подарки",
+        "data": {},
+        "row": 4,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "rsvp",
+        "caption": "Ответ гостя",
+        "title": "Вы будете с нами?",
+        "data": {
+          "fields": [
+            "plusOne",
+            "transfer",
+            "menu"
+          ],
+          "deadline": ""
+        },
+        "row": 5,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "contact",
+        "caption": "Контакты",
+        "title": "Остались вопросы?",
+        "data": {
+          "name": "Ольга",
+          "role": "организатор свадьбы: рассадка, трансфер и сюрпризы для пары"
+        },
+        "row": 6,
+        "col": 0,
+        "colSpan": 1
+      }
+    ],
+    "rows": [
+      {
+        "columns": 1
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 2
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 1
+      }
     ]
   },
   {
@@ -92,13 +821,107 @@
     "colorScheme": "malachite",
     "sampleTitle": "Сергей Петрович",
     "occasion": "Юбилей",
+    "look": {
+      "mainDreamLarge": true,
+      "headingFont": "classic",
+      "pattern": "lines"
+    },
     "blocks": [
-      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "number", "title": "Сергей Петрович", "data": { "number": "60", "subtitle": "суббота, 8 февраля · 17:00" } },
-      { "type": "media", "row": 1, "col": 0, "colSpan": 2, "view": "row", "caption": "Галерея", "data": { "images": [], "captions": ["1965", "1990", "2020"] } },
-      { "type": "guestbook", "row": 2, "col": 0, "colSpan": 2, "caption": "Стена поздравлений", "title": "Скажите пару слов", "data": { "photos": true } },
-      { "type": "location", "row": 3, "col": 0, "colSpan": 2, "caption": "Место", "data": { "name": "Ресторан «Дубрава»", "address": "пр. Победы, 12" } },
-      { "type": "wishlist", "row": 4, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} },
-      { "type": "rsvp", "row": 5, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": [] } }
+      {
+        "type": "cover",
+        "view": "number",
+        "title": "Сергей Петрович",
+        "data": {
+          "number": "60",
+          "subtitle": "Соберёмся всей семьёй и старыми друзьями."
+        },
+        "row": 0,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "media",
+        "view": "row",
+        "caption": "Лента жизни",
+        "title": "60 лет в фотографиях",
+        "data": {
+          "images": [
+            "",
+            "",
+            ""
+          ],
+          "captions": [
+            "1985 · свадьба",
+            "1990-е · дача",
+            "сейчас · с внуками"
+          ],
+          "aspect": "3:4"
+        },
+        "row": 1,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "guestbook",
+        "caption": "Стена поздравлений",
+        "title": "Пара тёплых слов",
+        "data": {},
+        "row": 2,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "location",
+        "caption": "Место",
+        "data": {
+          "name": "Ресторан «Усадьба»",
+          "address": "пр. Ленина, 69",
+          "note": "Есть парковка и пандус у входа."
+        },
+        "row": 2,
+        "col": 1,
+        "colSpan": 1
+      },
+      {
+        "type": "wishlist",
+        "view": "cards",
+        "caption": "Вишлист",
+        "title": "Подарки",
+        "data": {},
+        "row": 3,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "rsvp",
+        "caption": "Ответ гостя",
+        "title": "Придёте?",
+        "data": {
+          "fields": [
+            "plusOne"
+          ]
+        },
+        "row": 4,
+        "col": 0,
+        "colSpan": 1
+      }
+    ],
+    "rows": [
+      {
+        "columns": 1
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 2
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 1
+      }
     ]
   },
   {
@@ -106,15 +929,107 @@
     "category": "party",
     "name": "Гендер-пати",
     "colorScheme": "pastel",
-    "sampleTitle": "Он или она?",
+    "sampleTitle": "Мальчик или девочка?",
     "occasion": "Гендер-пати",
+    "look": {
+      "mainDreamLarge": true,
+      "headingFont": "soft",
+      "pattern": "confetti"
+    },
     "blocks": [
-      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "center", "title": "Он или она?", "data": { "subtitle": "12 октября · 15:00" } },
-      { "type": "poll", "row": 1, "col": 0, "colSpan": 2, "caption": "Как думаете?", "data": { "question": "Мальчик или девочка?", "options": ["Мальчик", "Девочка"] } },
-      { "type": "media", "row": 2, "col": 0, "colSpan": 2, "view": "single", "caption": "Ответ", "title": "Откроется на празднике", "data": { "images": [] } },
-      { "type": "wishlist", "row": 3, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} },
-      { "type": "location", "row": 4, "col": 0, "colSpan": 2, "caption": "Место", "data": { "name": "Студия «Белая»", "address": "ул. Садовая, 3" } },
-      { "type": "rsvp", "row": 5, "col": 0, "colSpan": 2, "caption": "Вы придёте?", "data": { "fields": [] } }
+      {
+        "type": "cover",
+        "view": "center",
+        "title": "Мальчик или девочка?",
+        "data": {
+          "subtitle": "Скоро станем родителями. Узнаем вместе!"
+        },
+        "row": 0,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "media",
+        "view": "single",
+        "caption": "Ответ",
+        "title": "Мальчик или девочка",
+        "secretMode": "timer",
+        "secretText": "Секрет откроется на празднике",
+        "data": {
+          "images": []
+        },
+        "row": 1,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "poll",
+        "caption": "Голосование",
+        "data": {
+          "question": "А как думаете вы?",
+          "options": [
+            {
+              "id": "boy",
+              "text": "Мальчик"
+            },
+            {
+              "id": "girl",
+              "text": "Девочка"
+            }
+          ],
+          "results": "after_vote"
+        },
+        "row": 1,
+        "col": 1,
+        "colSpan": 1
+      },
+      {
+        "type": "wishlist",
+        "view": "cards",
+        "caption": "Вишлист",
+        "title": "Для малыша",
+        "data": {},
+        "row": 2,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "location",
+        "caption": "Место",
+        "data": {
+          "name": "Дом Иры и Макса",
+          "address": "пос. Горный, ул. Садовая, 8",
+          "note": "Будет барбекю во дворе — возьмите тёплую кофту."
+        },
+        "row": 3,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "rsvp",
+        "caption": "Ответ гостя",
+        "title": "Придёте?",
+        "data": {
+          "fields": []
+        },
+        "row": 3,
+        "col": 1,
+        "colSpan": 1
+      }
+    ],
+    "rows": [
+      {
+        "columns": 1
+      },
+      {
+        "columns": 2
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 2
+      }
     ]
   },
   {
@@ -124,14 +1039,134 @@
     "colorScheme": "lagoon",
     "sampleTitle": "Тусим до утра",
     "occasion": "Вечеринка",
+    "look": {
+      "mainDreamLarge": true,
+      "headingFont": "poster",
+      "pattern": "confetti",
+      "confettiOnReserve": true
+    },
     "blocks": [
-      { "type": "cover", "row": 0, "col": 0, "colSpan": 2, "view": "left", "title": "Тусим до утра", "data": { "subtitle": "суббота, 20:00" } },
-      { "type": "video", "row": 1, "col": 0, "colSpan": 2, "caption": "Приглашение", "data": { "url": "" } },
-      { "type": "rsvp", "row": 2, "col": 0, "colSpan": 2, "caption": "Кто идёт?", "data": { "fields": ["who", "plusOne"] } },
-      { "type": "list", "row": 3, "col": 0, "colSpan": 2, "view": "schedule", "caption": "Лайн-ап", "data": { "items": [{ "t": "20:00", "v": "Сбор" }, { "t": "22:00", "v": "Диджей-сет" }, { "t": "02:00", "v": "Афтепати" }] } },
-      { "type": "playlist", "row": 4, "col": 0, "colSpan": 2, "caption": "Плейлист", "title": "Предложите трек", "data": { "votes": true } },
-      { "type": "color_scheme", "row": 5, "col": 0, "colSpan": 2, "caption": "Дресс-код", "data": { "colors": ["#07161A", "#1A3A40", "#5EEAD4"] } },
-      { "type": "wishlist", "row": 6, "col": 0, "colSpan": 2, "view": "list", "caption": "Подарки", "title": "Вишлист", "data": {} }
+      {
+        "type": "cover",
+        "view": "left",
+        "title": "Тусим до утра",
+        "data": {
+          "subtitle": "Повод — новоселье и мой день рождения в одном. Громко, весело, соседи предупреждены."
+        },
+        "row": 0,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "video",
+        "caption": "Приглашение",
+        "title": "Видео-приглашение",
+        "data": {
+          "url": ""
+        },
+        "row": 1,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "rsvp",
+        "caption": "Ответ гостя",
+        "title": "Кто уже идёт",
+        "data": {
+          "fields": [
+            "plusOne"
+          ],
+          "showGuests": true
+        },
+        "row": 2,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "list",
+        "view": "schedule",
+        "caption": "Лайн-ап",
+        "title": "Что будет",
+        "data": {
+          "items": [
+            {
+              "t": "22:00",
+              "v": "Сбор, коктейли"
+            },
+            {
+              "t": "23:30",
+              "v": "Караоке-баттл"
+            },
+            {
+              "t": "01:00",
+              "v": "DJ-сет от Кирилла"
+            },
+            {
+              "t": "04:00",
+              "v": "Завтрак для выживших"
+            }
+          ]
+        },
+        "row": 3,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "playlist",
+        "caption": "Плейлист",
+        "title": "Голосуйте за треки",
+        "data": {
+          "votes": true
+        },
+        "row": 3,
+        "col": 1,
+        "colSpan": 1
+      },
+      {
+        "type": "color_scheme",
+        "view": "circles",
+        "caption": "Дресс-код",
+        "title": "Всё, что блестит",
+        "data": {
+          "colors": [],
+          "showNames": true,
+          "fromScheme": true,
+          "note": "Пайетки, металлик, неон. Скучные образы на входе получат блёстки."
+        },
+        "row": 4,
+        "col": 0,
+        "colSpan": 1
+      },
+      {
+        "type": "wishlist",
+        "view": "cards",
+        "caption": "Вишлист",
+        "title": "Для новой квартиры",
+        "data": {},
+        "row": 5,
+        "col": 0,
+        "colSpan": 1
+      }
+    ],
+    "rows": [
+      {
+        "columns": 1
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 2
+      },
+      {
+        "columns": 1
+      },
+      {
+        "columns": 1
+      }
     ]
   }
 ]

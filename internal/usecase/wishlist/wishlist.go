@@ -185,6 +185,11 @@ func (uc *wishlistUseCase) CreateFromSystemTemplate(ctx context.Context, userID 
 		if blocks[i].Type == "cover" {
 			blocks[i].Title = title
 		}
+		// Секрет в шаблоне не знает даты — открывается в день праздника.
+		if blocks[i].SecretMode != "" && blocks[i].RevealAt == nil && input.EventDate != nil {
+			reveal := *input.EventDate
+			blocks[i].RevealAt = &reveal
+		}
 	}
 
 	sid, err := uc.generateUniqueShortID(ctx)
