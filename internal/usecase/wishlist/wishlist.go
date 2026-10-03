@@ -205,6 +205,7 @@ func (uc *wishlistUseCase) CreateFromSystemTemplate(ctx context.Context, userID 
 		},
 		EventDate:     input.EventDate,
 		Occasion:      tpl.Occasion,
+		TemplateName:  tpl.Name,
 		Blocks:        ensureBlockIDs(blocks),
 		Rows:          append([]entity.RowSettings(nil), tpl.Rows...),
 		BlocksVersion: entity.BlocksVersionCurrent,

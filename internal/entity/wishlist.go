@@ -182,6 +182,10 @@ type Wishlist struct {
 	// место не указано.
 	EventDate *time.Time `json:"eventDate"`
 	Occasion  string     `json:"occasion"`
+	// TemplateName — имя шаблона, из которого создан вишлист («ДР мальчика»).
+	// Только для подписи в конструкторе: связи с шаблоном нет, он мог
+	// измениться или исчезнуть.
+	TemplateName string `json:"templateName"`
 
 	// ReservedCount считается на выдаче списка, в таблице вишлистов не хранится.
 	ReservedCount uint `json:"reservedCount"`

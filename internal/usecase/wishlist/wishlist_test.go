@@ -361,6 +361,7 @@ func TestCreateFromSystemTemplate_CopiesBlocksAndScheme(t *testing.T) {
 	assert.Equal(t, "Маша и Петя", w.Title)
 	assert.Equal(t, "linen", w.Settings.ColorScheme)
 	assert.Equal(t, "Свадьба", w.Occasion)
+	assert.Equal(t, "Свадьба", w.TemplateName, "в шапке конструктора — «по шаблону «Свадьба»»")
 	assert.Equal(t, entity.BlocksVersionCurrent, w.BlocksVersion)
 	assert.NotEmpty(t, w.Blocks)
 	require.NotNil(t, w.EventDate)

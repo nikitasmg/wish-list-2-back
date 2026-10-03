@@ -41,6 +41,7 @@ type WishlistModel struct {
 	BlocksVersion int        `gorm:"default:1"`
 	EventDate     *time.Time `gorm:"column:event_date;index"`
 	Occasion      string
+	TemplateName  string    `gorm:"column:template_name;not null;default:''"`
 	ViewsCount    uint      `gorm:"column:views_count;default:0"`
 	CreatedAt     time.Time `gorm:"autoCreateTime"`
 	UpdatedAt     time.Time `gorm:"autoUpdateTime"`

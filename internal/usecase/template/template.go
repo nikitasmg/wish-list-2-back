@@ -179,6 +179,7 @@ func (uc *templateUseCase) CreateWishlistFromTemplate(ctx context.Context, templ
 		ShortID:       sid,
 		Title:         title,
 		Settings:      cloneSettings(t.Settings),
+		TemplateName:  t.Name,
 		Blocks:        blocks,
 		Rows:          cloneRows(t.Rows),
 		BlocksVersion: entity.BlocksVersionCurrent,
