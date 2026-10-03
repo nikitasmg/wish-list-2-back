@@ -1,8 +1,14 @@
 version: '3.8'
 
+# Один файл и для прода, и для тестового окружения в Dokploy. Имена контейнеров
+# не задаём — Docker сам добавит префикс проекта, и два стека не столкнутся.
+# Домены и имена роутеров Traefik берутся из .env (по умолчанию — прод):
+#   ROUTER_PREFIX=wishlist-test
+#   API_HOST=api.test.prosto-namekni.ru
+#   FILES_HOST=files.test.prosto-namekni.ru
+
 services:
   minio:
-    container_name: minio
     image: minio/minio:latest
     command: server --console-address ":9001" /data/
     environment:
@@ -16,19 +22,22 @@ services:
       timeout: 20s
       retries: 3
     networks:
-      - internal
-      - dokploy-network
+      # dokploy-network общая для всех стеков, и имя «minio» там есть у каждого.
+      # Бэкенд ходит по уникальному имени из своей внутренней сети.
+      internal:
+        aliases:
+          - minio-internal
+      dokploy-network:
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.wishlist-files.rule=Host(`files.prosto-namekni.ru`)"
-      - "traefik.http.routers.wishlist-files.entrypoints=websecure"
-      - "traefik.http.routers.wishlist-files.tls.certResolver=letsencrypt"
-      - "traefik.http.services.wishlist-files.loadbalancer.server.port=9000"
+      - "traefik.http.routers.${ROUTER_PREFIX:-wishlist}-files.rule=Host(`${FILES_HOST:-files.prosto-namekni.ru}`)"
+      - "traefik.http.routers.${ROUTER_PREFIX:-wishlist}-files.entrypoints=websecure"
+      - "traefik.http.routers.${ROUTER_PREFIX:-wishlist}-files.tls.certResolver=letsencrypt"
+      - "traefik.http.services.${ROUTER_PREFIX:-wishlist}-files.loadbalancer.server.port=9000"
     restart: unless-stopped
 
   postgres:
     image: postgres:17-alpine
-    container_name: postgres_container
     environment:
       POSTGRES_USER: "${DB_USER}"
       POSTGRES_PASSWORD: "${DB_PASSWORD}"
@@ -62,7 +71,6 @@ services:
     restart: unless-stopped
 
   server:
-    container_name: server
     restart: unless-stopped
     build:
       context: .
@@ -78,10 +86,10 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.wishlist-api.rule=Host(`api.prosto-namekni.ru`)"
-      - "traefik.http.routers.wishlist-api.entrypoints=websecure"
-      - "traefik.http.routers.wishlist-api.tls.certResolver=letsencrypt"
-      - "traefik.http.services.wishlist-api.loadbalancer.server.port=8080"
+      - "traefik.http.routers.${ROUTER_PREFIX:-wishlist}-api.rule=Host(`${API_HOST:-api.prosto-namekni.ru}`)"
+      - "traefik.http.routers.${ROUTER_PREFIX:-wishlist}-api.entrypoints=websecure"
+      - "traefik.http.routers.${ROUTER_PREFIX:-wishlist}-api.tls.certResolver=letsencrypt"
+      - "traefik.http.services.${ROUTER_PREFIX:-wishlist}-api.loadbalancer.server.port=8080"
 
 networks:
   internal:

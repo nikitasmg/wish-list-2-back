@@ -69,7 +69,7 @@ func LoadConfig() (*Config, error) {
 			CookieDomain: getEnv("COOKIE_DOMAIN", "prosto-namekni.ru"),
 		},
 		Minio: MinioConfig{
-			Endpoint:     getEnv("MINIO_ENDPOINT", "minio:9000"),
+			Endpoint:     getEnv("MINIO_ENDPOINT", "minio-internal:9000"),
 			BucketName:   getEnv("MINIO_BUCKET_NAME", "wish-list-bucket"),
 			RootUser:     getEnv("MINIO_ROOT_USER", "root"),
 			RootPassword: getEnv("MINIO_ROOT_PASSWORD", "minio_password"),
