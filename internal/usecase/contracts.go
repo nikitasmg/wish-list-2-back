@@ -63,10 +63,61 @@ type CreateFromSystemTemplateInput struct {
 	EventDate *time.Time
 	// Age — крупная цифра на обложке «цифрой»; 0 — оставить из шаблона.
 	Age int
-	// PlaceName и PlaceAddress заменяют место-пример. Если в шаблоне места
-	// нет, а человек его указал, блок добавляется над вишлистом.
-	PlaceName    string
-	PlaceAddress string
+	// Page — ответы опросника с телефона. Есть — страница собирается из
+	// ответов, а тексты-примеры шаблона в вишлист не попадают. Нет — блоки
+	// шаблона копируются как есть (экран создания на компьютере).
+	Page *TemplatePage
+}
+
+// TemplatePage — что человек выбрал и написал в опроснике. JSON-теги здесь,
+// а не в контроллере: структура приходит из запроса без преобразований.
+type TemplatePage struct {
+	// Blocks — отмеченные ключи каталога: about, place, program, dress,
+	// contact, likes, stop, sizes, rsvp, playlist, guestbook. Обложка и
+	// подарки есть всегда.
+	Blocks  []string            `json:"blocks"`
+	About   string              `json:"about"`
+	Place   TemplatePlace       `json:"place"`
+	Program []TemplateTimeEntry `json:"program"`
+	Dress   TemplateDress       `json:"dress"`
+	Contact TemplateContact     `json:"contact"`
+	Likes   []string            `json:"likes"`
+	Stop    []string            `json:"stop"`
+	Sizes   TemplateSizes       `json:"sizes"`
+}
+
+type TemplatePlace struct {
+	Name    string `json:"name"`
+	Address string `json:"address"`
+	Note    string `json:"note"`
+}
+
+type TemplateTimeEntry struct {
+	T string `json:"t"`
+	V string `json:"v"`
+}
+
+type TemplateDress struct {
+	Colors []TemplateColor `json:"colors"`
+	Note   string          `json:"note"`
+}
+
+type TemplateColor struct {
+	Hex  string `json:"hex"`
+	Name string `json:"name"`
+}
+
+type TemplateContact struct {
+	Name string `json:"name"`
+	// Way — телеграм (@ник или t.me/…) или телефон: в опроснике это одно поле.
+	Way string `json:"way"`
+}
+
+type TemplateSizes struct {
+	Clothes string `json:"clothes"`
+	Shoes   string `json:"shoes"`
+	Height  string `json:"height"`
+	Ring    string `json:"ring"`
 }
 
 // CreatePresentInput — входные данные для создания/обновления подарка

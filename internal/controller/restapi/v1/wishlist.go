@@ -118,10 +118,10 @@ func (h *wishlistHandler) createFromSystemTemplate(c *fiber.Ctx) error {
 		Title      string `json:"title"`
 		Name       string `json:"name"`
 		EventDate  string `json:"event_date"`
-		// Ответы опросника: возраст на обложку и место вместо примера.
-		Age          int    `json:"age"`
-		PlaceName    string `json:"place_name"`
-		PlaceAddress string `json:"place_address"`
+		// Ответы опросника с телефона: возраст на обложку и страница из
+		// ответов. Без page блоки шаблона копируются как есть.
+		Age  int                   `json:"age"`
+		Page *usecase.TemplatePage `json:"page"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid JSON"))
@@ -131,12 +131,11 @@ func (h *wishlistHandler) createFromSystemTemplate(c *fiber.Ctx) error {
 	}
 
 	input := usecase.CreateFromSystemTemplateInput{
-		TemplateID:   body.TemplateID,
-		Title:        body.Title,
-		Name:         body.Name,
-		Age:          body.Age,
-		PlaceName:    body.PlaceName,
-		PlaceAddress: body.PlaceAddress,
+		TemplateID: body.TemplateID,
+		Title:      body.Title,
+		Name:       body.Name,
+		Age:        body.Age,
+		Page:       body.Page,
 	}
 	if body.EventDate != "" {
 		t, err := time.Parse(time.RFC3339, body.EventDate)
