@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 
 	"main/internal/entity"
 	"main/internal/usecase"
+	"main/internal/usecase/systemtemplate"
 	wishlistUC "main/internal/usecase/wishlist"
 	mockminio "main/mock/minio"
 	mockrepo "main/mock/repo"
@@ -834,4 +836,108 @@ func TestValidateBlocks_VideoURLTooLong(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "url")
+}
+
+func blockData(t *testing.T, b entity.Block) map[string]any {
+	t.Helper()
+	var data map[string]any
+	require.NoError(t, json.Unmarshal(b.Data, &data))
+	return data
+}
+
+func findBlock(w entity.Wishlist, typ string) (entity.Block, bool) {
+	for _, b := range w.Blocks {
+		if b.Type == typ {
+			return b, true
+		}
+	}
+	return entity.Block{}, false
+}
+
+// Возраст из опросника — та самая крупная цифра на обложке, иначе у
+// девятилетнего Пети на странице осталась бы «7» из шаблона.
+func TestCreateFromSystemTemplate_AgeFillsCoverNumber(t *testing.T) {
+	w := createFromTemplateForTest(t, usecase.CreateFromSystemTemplateInput{TemplateID: "boy", Age: 9})
+	cover, ok := findBlock(w, "cover")
+	require.True(t, ok)
+	assert.Equal(t, "9", blockData(t, cover)["number"])
+}
+
+// У обложки без цифры возраст просто некуда поставить — это не ошибка.
+func TestCreateFromSystemTemplate_AgeWithoutNumberCover(t *testing.T) {
+	w := createFromTemplateForTest(t, usecase.CreateFromSystemTemplateInput{TemplateID: "woman", Age: 28})
+	cover, ok := findBlock(w, "cover")
+	require.True(t, ok)
+	_, has := blockData(t, cover)["number"]
+	assert.False(t, has)
+}
+
+func TestCreateFromSystemTemplate_AgeOutOfRange(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
+	uc := newWishlistUC(wr, &mockminio.MockFileStorage{})
+	_, err := uc.CreateFromSystemTemplate(context.Background(), uuid.New(), usecase.CreateFromSystemTemplateInput{TemplateID: "boy", Age: 151})
+	require.Error(t, err)
+}
+
+// Место из опросника заменяет пример целиком: заметка «Стол забронирован
+// на имя…» относилась к бару из шаблона, а не к месту человека.
+func TestCreateFromSystemTemplate_PlaceFillsLocation(t *testing.T) {
+	w := createFromTemplateForTest(t, usecase.CreateFromSystemTemplateInput{
+		TemplateID: "man", PlaceName: " Кафе «Ромашка» ", PlaceAddress: "ул. Мира, 1",
+	})
+	loc, ok := findBlock(w, "location")
+	require.True(t, ok)
+	data := blockData(t, loc)
+	assert.Equal(t, "Кафе «Ромашка»", data["name"])
+	assert.Equal(t, "ул. Мира, 1", data["address"])
+	assert.NotContains(t, blocksJSON(t, w), "Стол забронирован")
+}
+
+// У свадьбы в примере вторая точка — загородный клуб. Человек ввёл одно
+// место, чужой клуб на его странице не нужен.
+func TestCreateFromSystemTemplate_PlaceDropsSamplePoints(t *testing.T) {
+	w := createFromTemplateForTest(t, usecase.CreateFromSystemTemplateInput{TemplateID: "wedding", PlaceName: "Ресторан «Берег»"})
+	loc, ok := findBlock(w, "location")
+	require.True(t, ok)
+	_, has := blockData(t, loc)["points"]
+	assert.False(t, has)
+	assert.NotContains(t, blocksJSON(t, w), "Сосны")
+}
+
+// В шаблоне девочки места нет — блок добавляется отдельным рядом перед
+// вишлистом, а ряды ниже сдвигаются вместе со своими настройками.
+func TestCreateFromSystemTemplate_PlaceAddsLocationBlock(t *testing.T) {
+	tpl, err := systemtemplate.Get("girl")
+	require.NoError(t, err)
+
+	w := createFromTemplateForTest(t, usecase.CreateFromSystemTemplateInput{TemplateID: "girl", PlaceName: "Дом", PlaceAddress: "ул. Садовая, 8"})
+
+	loc, ok := findBlock(w, "location")
+	require.True(t, ok)
+	gifts, ok := findBlock(w, "wishlist")
+	require.True(t, ok)
+	assert.Equal(t, gifts.Row-1, loc.Row, "место — прямо над вишлистом")
+	assert.Equal(t, 0, loc.Col)
+	assert.Equal(t, 1, loc.ColSpan)
+	assert.NotEmpty(t, loc.ID)
+	assert.Equal(t, "Дом", blockData(t, loc)["name"])
+
+	require.Len(t, w.Rows, len(tpl.Rows)+1)
+	assert.Equal(t, 1, w.Rows[loc.Row].Columns)
+	assert.Equal(t, tpl.Rows[len(tpl.Rows)-1], w.Rows[len(w.Rows)-1], "настройки рядов ниже уехали вместе с рядами")
+	assert.Len(t, tpl.Rows, len(tpl.Rows), "шаблон не меняется")
+	for _, b := range tpl.Blocks {
+		assert.NotEqual(t, "location", b.Type, "в общий шаблон блок не попал")
+	}
+}
+
+func TestCreateFromSystemTemplate_PlaceTooLong(t *testing.T) {
+	wr := &mockrepo.MockWishlistRepo{}
+	wr.On("CountByUserID", mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
+	uc := newWishlistUC(wr, &mockminio.MockFileStorage{})
+	_, err := uc.CreateFromSystemTemplate(context.Background(), uuid.New(), usecase.CreateFromSystemTemplateInput{
+		TemplateID: "man", PlaceName: strings.Repeat("я", 121),
+	})
+	require.Error(t, err)
 }

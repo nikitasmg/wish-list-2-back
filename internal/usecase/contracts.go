@@ -61,6 +61,12 @@ type CreateFromSystemTemplateInput struct {
 	// Name — имя виновника праздника, подставляется вместо {name} в текстах.
 	Name      string
 	EventDate *time.Time
+	// Age — крупная цифра на обложке «цифрой»; 0 — оставить из шаблона.
+	Age int
+	// PlaceName и PlaceAddress заменяют место-пример. Если в шаблоне места
+	// нет, а человек его указал, блок добавляется над вишлистом.
+	PlaceName    string
+	PlaceAddress string
 }
 
 // CreatePresentInput — входные данные для создания/обновления подарка

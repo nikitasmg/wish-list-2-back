@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -179,6 +180,97 @@ func fillTemplateName(src []entity.Block, name string) ([]entity.Block, error) {
 	return blocks, nil
 }
 
+// Ограничения ответов опросника, которые попадают в блоки шаблона.
+const (
+	maxTemplateAge          = 150
+	maxTemplatePlaceLen     = 120
+	maxTemplatePlaceAddrLen = 200
+)
+
+// patchBlockData меняет поля data блока: nil в patch удаляет поле.
+func patchBlockData(b *entity.Block, patch map[string]any) error {
+	data := map[string]any{}
+	if len(b.Data) > 0 {
+		if err := json.Unmarshal(b.Data, &data); err != nil {
+			return fmt.Errorf("decode %s data: %w", b.Type, err)
+		}
+	}
+	for k, v := range patch {
+		if v == nil {
+			delete(data, k)
+		} else {
+			data[k] = v
+		}
+	}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("encode %s data: %w", b.Type, err)
+	}
+	b.Data = raw
+	return nil
+}
+
+// fillTemplatePlace ставит место из опросника вместо примера. Заметка и
+// дополнительные точки примера относились к чужому месту — их убираем. Если
+// блока места в шаблоне нет, он встаёт отдельным рядом над вишлистом (или в
+// конец страницы, если вишлиста нет).
+func fillTemplatePlace(blocks []entity.Block, rows []entity.RowSettings, name, address string) ([]entity.Block, []entity.RowSettings, error) {
+	patch := map[string]any{"name": name, "address": address, "note": nil, "points": nil, "link": nil}
+	if address == "" {
+		patch["address"] = nil
+	}
+
+	found := false
+	for i := range blocks {
+		if blocks[i].Type == "location" {
+			if err := patchBlockData(&blocks[i], patch); err != nil {
+				return nil, nil, err
+			}
+			found = true
+		}
+	}
+	if found {
+		return blocks, rows, nil
+	}
+
+	at := 0
+	for _, b := range blocks {
+		if b.Row+1 > at {
+			at = b.Row + 1
+		}
+	}
+	for _, b := range blocks {
+		if b.Type == "wishlist" {
+			at = b.Row
+			break
+		}
+	}
+	for i := range blocks {
+		if blocks[i].Row >= at {
+			blocks[i].Row++
+		}
+	}
+	if len(rows) >= at {
+		rows = append(rows[:at:at], append([]entity.RowSettings{{Columns: 1}}, rows[at:]...)...)
+	}
+
+	loc := entity.Block{Type: "location", Row: at, Col: 0, ColSpan: 1, Caption: "Место"}
+	if err := patchBlockData(&loc, patch); err != nil {
+		return nil, nil, err
+	}
+	// Порядок в срезе — тот же, что на странице: вставляем перед первым
+	// блоком следующего ряда.
+	pos := len(blocks)
+	for i, b := range blocks {
+		if b.Row > at {
+			pos = i
+			break
+		}
+	}
+	blocks = append(blocks[:pos:pos], append([]entity.Block{loc}, blocks[pos:]...)...)
+	return blocks, rows, nil
+}
+
 func (uc *wishlistUseCase) CreateFromSystemTemplate(ctx context.Context, userID uuid.UUID, input usecase.CreateFromSystemTemplateInput) (entity.Wishlist, error) {
 	tpl, err := systemtemplate.Get(input.TemplateID)
 	if err != nil {
@@ -209,6 +301,23 @@ func (uc *wishlistUseCase) CreateFromSystemTemplate(ctx context.Context, userID 
 		name = tpl.SampleName
 	}
 
+	if input.Age < 0 || input.Age > maxTemplateAge {
+		return entity.Wishlist{}, fmt.Errorf("возраст — от 1 до %d", maxTemplateAge)
+	}
+	placeName := strings.TrimSpace(input.PlaceName)
+	placeAddress := strings.TrimSpace(input.PlaceAddress)
+	if utf8.RuneCountInString(placeName) > maxTemplatePlaceLen {
+		return entity.Wishlist{}, fmt.Errorf("название места не длиннее %d символов", maxTemplatePlaceLen)
+	}
+	if utf8.RuneCountInString(placeAddress) > maxTemplatePlaceAddrLen {
+		return entity.Wishlist{}, fmt.Errorf("адрес не длиннее %d символов", maxTemplatePlaceAddrLen)
+	}
+	// Адрес без названия — всё равно место: название тогда и есть адрес.
+	if placeName == "" {
+		placeName = placeAddress
+		placeAddress = ""
+	}
+
 	// Копия: блоки шаблона общие для всех пользователей, и правка одного
 	// вишлиста не должна задеть тех, кто создаётся следом. Заодно
 	// подставляем имя — копия через JSON и так глубокая.
@@ -227,6 +336,20 @@ func (uc *wishlistUseCase) CreateFromSystemTemplate(ctx context.Context, userID 
 		if blocks[i].SecretMode != "" && blocks[i].RevealAt == nil && input.EventDate != nil {
 			reveal := *input.EventDate
 			blocks[i].RevealAt = &reveal
+		}
+		// Возраст — только у обложки «цифрой»: у остальных видов его некуда ставить.
+		if blocks[i].Type == "cover" && input.Age > 0 && strings.Contains(string(blocks[i].Data), "\"number\"") {
+			if err := patchBlockData(&blocks[i], map[string]any{"number": strconv.Itoa(input.Age)}); err != nil {
+				return entity.Wishlist{}, err
+			}
+		}
+	}
+
+	rows := append([]entity.RowSettings(nil), tpl.Rows...)
+	if placeName != "" {
+		blocks, rows, err = fillTemplatePlace(blocks, rows, placeName, placeAddress)
+		if err != nil {
+			return entity.Wishlist{}, err
 		}
 	}
 
@@ -250,7 +373,7 @@ func (uc *wishlistUseCase) CreateFromSystemTemplate(ctx context.Context, userID 
 		Occasion:      tpl.Occasion,
 		TemplateName:  tpl.Name,
 		Blocks:        ensureBlockIDs(blocks),
-		Rows:          append([]entity.RowSettings(nil), tpl.Rows...),
+		Rows:          rows,
 		BlocksVersion: entity.BlocksVersionCurrent,
 	}
 
