@@ -252,7 +252,7 @@ func (h *santaHandler) join(c *fiber.Ctx) error {
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid input"))
 	}
-	res, err := h.uc.Join(c.Context(), c.Params("slug"), getOptionalUserID(c), body.input())
+	res, err := h.uc.Join(c.Context(), c.Params("slug"), santaAuth(c), body.input())
 	if err != nil {
 		return santaError(c, err)
 	}
@@ -285,4 +285,3 @@ func (h *santaHandler) leave(c *fiber.Ctx) error {
 	}
 	return c.JSON(response.Data(true))
 }
-

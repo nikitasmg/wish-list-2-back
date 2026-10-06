@@ -338,7 +338,7 @@ var (
 	// ErrSantaDrawn — действие возможно только до жеребьёвки.
 	ErrSantaDrawn = errors.New("жеребьёвка уже прошла")
 	// ErrSantaNotDrawn — действие возможно только после жеребьёвки.
-	ErrSantaNotDrawn = errors.New("жеребьёвки ещё не было")
+	ErrSantaNotDrawn      = errors.New("жеребьёвки ещё не было")
 	ErrSantaAlreadyJoined = errors.New("вы уже в этой комнате")
 	ErrSantaTooFew        = errors.New("для жеребьёвки нужно минимум 3 участника")
 	// ErrSantaInvalid оборачивается с подробностью: «неверные данные: …».
@@ -405,6 +405,8 @@ type SantaInvite struct {
 	Message           string                 `json:"message"`
 	ParticipantsCount int                    `json:"participantsCount"`
 	Status            entity.SantaRoomStatus `json:"status"`
+	// DrawnAt — когда прошла последняя жеребьёвка; по нему фронт замечает перезапуск.
+	DrawnAt *time.Time `json:"drawnAt"`
 }
 
 type SantaReceiver struct {
@@ -445,7 +447,7 @@ type SantaUseCase interface {
 
 	// Участник. Комната по slug; нет комнаты или участника — ErrSantaNotFound.
 	GetInvite(ctx context.Context, slug string) (SantaInvite, error)
-	Join(ctx context.Context, slug string, userID *uuid.UUID, in SantaProfileInput) (SantaJoinResult, error)
+	Join(ctx context.Context, slug string, auth SantaAuth, in SantaProfileInput) (SantaJoinResult, error)
 	GetMe(ctx context.Context, slug string, auth SantaAuth) (SantaMe, error)
 	// UpdateMe: после жеребьёвки имя менять нельзя (его уже знает Санта),
 	// пожелания и вишлист — можно.

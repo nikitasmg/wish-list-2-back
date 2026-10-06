@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -187,10 +186,7 @@ func TestSantaRepo_UserJoinsRoomOnce(t *testing.T) {
 	second := entity.SantaParticipant{ID: uuid.New(), RoomID: room.ID, UserID: &user, Name: "Б", TokenHash: uuid.NewString()}
 	require.NoError(t, r.CreateParticipant(ctx, first))
 	err := r.CreateParticipant(ctx, second)
-	require.Error(t, err)
-	var pgErr *pgconn.PgError
-	require.ErrorAs(t, err, &pgErr)
-	assert.Equal(t, "23505", pgErr.Code, "unique violation")
+	require.ErrorIs(t, err, repo.ErrDuplicate)
 	_, err = r.GetParticipant(ctx, second.ID)
 	assert.ErrorIs(t, err, repo.ErrNotFound)
 }

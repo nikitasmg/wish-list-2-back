@@ -111,6 +111,9 @@ type TemplateRepo interface {
 // не зная про gorm. Пока его возвращает только SantaRepo.
 var ErrNotFound = errors.New("not found")
 
+// ErrDuplicate — нарушена уникальность (участник уже в комнате).
+var ErrDuplicate = errors.New("duplicate")
+
 // ErrStatusMismatch — комната не в том статусе, которого ждал вызов.
 var ErrStatusMismatch = errors.New("status mismatch")
 

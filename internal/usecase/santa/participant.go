@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -56,7 +57,7 @@ func (uc *santaUseCase) invite(ctx context.Context, room entity.SantaRoom) (usec
 	return usecase.SantaInvite{
 		Slug: room.Slug, Title: room.Title, OrganizerName: organizer, Budget: room.Budget,
 		ExchangeDate: room.ExchangeDate, DrawAt: room.DrawAt, Message: room.Message,
-		ParticipantsCount: counts[room.ID], Status: room.Status,
+		ParticipantsCount: counts[room.ID], Status: room.Status, DrawnAt: room.DrawnAt,
 	}, nil
 }
 
@@ -116,7 +117,7 @@ func (uc *santaUseCase) GetInvite(ctx context.Context, slug string) (usecase.San
 	return uc.invite(ctx, room)
 }
 
-func (uc *santaUseCase) Join(ctx context.Context, slug string, userID *uuid.UUID, in usecase.SantaProfileInput) (usecase.SantaJoinResult, error) {
+func (uc *santaUseCase) Join(ctx context.Context, slug string, auth usecase.SantaAuth, in usecase.SantaProfileInput) (usecase.SantaJoinResult, error) {
 	room, err := uc.roomBySlug(ctx, slug)
 	if err != nil {
 		return usecase.SantaJoinResult{}, err
@@ -128,6 +129,18 @@ func (uc *santaUseCase) Join(ctx context.Context, slug string, userID *uuid.UUID
 	if err := validateProfile(in); err != nil {
 		return usecase.SantaJoinResult{}, err
 	}
+	// Токен этого браузера уже ведёт к участнику комнаты: второй раз не пускаем,
+	// иначе один человек попадёт в жеребьёвку дважды.
+	if auth.Token != "" {
+		_, err := uc.santa.GetParticipantByToken(ctx, room.ID, hashToken(auth.Token))
+		if err == nil {
+			return usecase.SantaJoinResult{}, usecase.ErrSantaAlreadyJoined
+		}
+		if !errors.Is(err, repo.ErrNotFound) {
+			return usecase.SantaJoinResult{}, err
+		}
+	}
+	userID := auth.UserID
 	if userID != nil {
 		_, err := uc.santa.GetParticipantByUser(ctx, room.ID, *userID)
 		if err == nil {
@@ -156,6 +169,9 @@ func (uc *santaUseCase) Join(ctx context.Context, slug string, userID *uuid.UUID
 	}
 	if err := uc.santa.CreateParticipant(ctx, p); err != nil {
 		// Жеребьёвка могла пройти между проверкой и вставкой.
+		if errors.Is(err, repo.ErrDuplicate) {
+			return usecase.SantaJoinResult{}, usecase.ErrSantaAlreadyJoined
+		}
 		if mapped := mapRoomWriteErr(err); mapped != err {
 			return usecase.SantaJoinResult{}, mapped
 		}
@@ -163,7 +179,17 @@ func (uc *santaUseCase) Join(ctx context.Context, slug string, userID *uuid.UUID
 	}
 	me, err := uc.me(ctx, room, p)
 	if err != nil {
-		return usecase.SantaJoinResult{}, err
+		// Участник уже записан, а токен отдаётся один раз: потерять его из-за
+		// сбоя при сборке карточки нельзя. Отдаём минимальную карточку из
+		// того, что есть под рукой; полную фронт получит запросом /me.
+		log.Printf("santa: join: me: %v", err)
+		me = usecase.SantaMe{
+			ParticipantID: p.ID, Name: p.Name, Wishes: p.Wishes, WishlistURL: p.WishlistURL,
+			Room: usecase.SantaInvite{
+				Slug: room.Slug, Title: room.Title, Budget: room.Budget, ExchangeDate: room.ExchangeDate,
+				DrawAt: room.DrawAt, Message: room.Message, Status: room.Status, DrawnAt: room.DrawnAt,
+			},
+		}
 	}
 	return usecase.SantaJoinResult{Token: raw, Me: me}, nil
 }

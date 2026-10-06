@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -126,6 +127,11 @@ func (r *santaRepo) CreateParticipant(ctx context.Context, p entity.SantaPartici
 			return err
 		}
 		if err := tx.Create(&m).Error; err != nil {
+			// Параллельное вступление того же аккаунта в ту же комнату.
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "idx_santa_participant_user" {
+				return fmt.Errorf("santaRepo.CreateParticipant: %w", repo.ErrDuplicate)
+			}
 			return santaErr("santaRepo.CreateParticipant", err)
 		}
 		return nil

@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"main/internal/entity"
 	v1 "main/internal/controller/restapi/v1"
+	"main/internal/entity"
 	"main/internal/usecase"
 )
 
@@ -49,8 +49,8 @@ func (m *MockSantaUC) GetInvite(ctx context.Context, slug string) (usecase.Santa
 	args := m.Called(ctx, slug)
 	return args.Get(0).(usecase.SantaInvite), args.Error(1)
 }
-func (m *MockSantaUC) Join(ctx context.Context, slug string, userID *uuid.UUID, in usecase.SantaProfileInput) (usecase.SantaJoinResult, error) {
-	args := m.Called(ctx, slug, userID, in)
+func (m *MockSantaUC) Join(ctx context.Context, slug string, auth usecase.SantaAuth, in usecase.SantaProfileInput) (usecase.SantaJoinResult, error) {
+	args := m.Called(ctx, slug, auth, in)
 	return args.Get(0).(usecase.SantaJoinResult), args.Error(1)
 }
 func (m *MockSantaUC) GetMe(ctx context.Context, slug string, auth usecase.SantaAuth) (usecase.SantaMe, error) {
@@ -175,7 +175,7 @@ func TestSantaMe_PassesTokenHeader(t *testing.T) {
 func TestSantaJoin_LoggedInUserIsPassed(t *testing.T) {
 	m := &MockSantaUC{}
 	user := uuid.New()
-	m.On("Join", mock.Anything, "AbCd2345", mock.MatchedBy(func(id *uuid.UUID) bool { return id != nil && *id == user }),
+	m.On("Join", mock.Anything, "AbCd2345", mock.MatchedBy(func(a usecase.SantaAuth) bool { return a.UserID != nil && *a.UserID == user }),
 		usecase.SantaProfileInput{Name: "Маша", Wishes: "чай", WishlistURL: ""}).
 		Return(usecase.SantaJoinResult{Token: "tok"}, nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/santa/r/AbCd2345/join", strings.NewReader(`{"name":"Маша","wishes":"чай"}`))
@@ -210,4 +210,18 @@ func TestSantaError_WrappedNotFoundHidesPrefix(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, status)
 	assert.JSONEq(t, `{"error":"`+usecase.ErrSantaNotFound.Error()+`"}`, body)
+}
+
+func TestSantaJoin_PassesTokenHeader(t *testing.T) {
+	m := &MockSantaUC{}
+	m.On("Join", mock.Anything, "AbCd2345", usecase.SantaAuth{Token: "tok"}, usecase.SantaProfileInput{Name: "Маша"}).
+		Return(usecase.SantaJoinResult{}, usecase.ErrSantaAlreadyJoined)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/santa/r/AbCd2345/join", strings.NewReader(`{"name":"Маша"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(v1.SantaTokenHeader, "tok")
+
+	status, _ := doReq(t, newSantaApp(m), req)
+
+	assert.Equal(t, http.StatusConflict, status)
+	m.AssertExpectations(t)
 }
