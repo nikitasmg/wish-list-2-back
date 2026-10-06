@@ -1,12 +1,17 @@
 package santa_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"main/internal/entity"
 	"main/internal/repo"
@@ -98,6 +103,7 @@ func TestJoin_ReturnsTokenAndStoresOnlyHash(t *testing.T) {
 	assert.NotEmpty(t, res.Token)
 	assert.NotEqual(t, res.Token, stored.TokenHash)
 	assert.Len(t, stored.TokenHash, 64)
+	assert.Equal(t, tokenHash(res.Token), stored.TokenHash)
 	assert.Nil(t, stored.UserID)
 	assert.Equal(t, "Маша", res.Me.Name)
 	assert.Nil(t, res.Me.Receiver)
@@ -237,4 +243,83 @@ func TestLeaveMe_DrawnConcurrentlyIsConflict(t *testing.T) {
 	err := uc.LeaveMe(ctx, room.Slug, usecase.SantaAuth{Token: "tok"})
 
 	assert.ErrorIs(t, err, usecase.ErrSantaDrawn)
+}
+
+func tokenHash(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
+
+func TestGetMe_LooksUpByTokenHash(t *testing.T) {
+	sr, ur, uc := newUC()
+	room := openRoom(uuid.New())
+	p := entity.SantaParticipant{ID: uuid.New(), RoomID: room.ID, Name: "Маша"}
+	sr.On("GetRoomBySlug", mock.Anything, room.Slug).Return(room, nil)
+	sr.On("GetParticipantByToken", mock.Anything, room.ID, tokenHash("raw-secret")).Return(p, nil).Once()
+	sr.On("CountParticipants", mock.Anything, []uuid.UUID{room.ID}).Return(map[uuid.UUID]int{room.ID: 1}, nil)
+	ur.On("GetByID", mock.Anything, room.OwnerID).Return(entity.User{}, nil)
+
+	me, err := uc.GetMe(ctx, room.Slug, usecase.SantaAuth{Token: "raw-secret"})
+
+	require.NoError(t, err)
+	assert.Equal(t, p.ID, me.ParticipantID)
+	sr.AssertExpectations(t)
+}
+
+func TestJoin_StoresUserID(t *testing.T) {
+	sr, ur, uc := newUC()
+	room := openRoom(uuid.New())
+	user := uuid.New()
+	var stored entity.SantaParticipant
+	sr.On("GetRoomBySlug", mock.Anything, room.Slug).Return(room, nil)
+	sr.On("GetParticipantByUser", mock.Anything, room.ID, user).Return(entity.SantaParticipant{}, repo.ErrNotFound)
+	sr.On("CountParticipants", mock.Anything, []uuid.UUID{room.ID}).Return(map[uuid.UUID]int{room.ID: 1}, nil)
+	sr.On("CreateParticipant", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		stored = args.Get(1).(entity.SantaParticipant)
+	}).Return(nil)
+	ur.On("GetByID", mock.Anything, room.OwnerID).Return(entity.User{}, nil)
+
+	_, err := uc.Join(ctx, room.Slug, &user, usecase.SantaProfileInput{Name: "Маша"})
+
+	require.NoError(t, err)
+	require.NotNil(t, stored.UserID)
+	assert.Equal(t, user, *stored.UserID)
+}
+
+func TestUpdateMe_VanishedParticipantIsNotFound(t *testing.T) {
+	sr, _, uc := newUC()
+	room := openRoom(uuid.New())
+	p := entity.SantaParticipant{ID: uuid.New(), RoomID: room.ID, Name: "Маша"}
+	sr.On("GetRoomBySlug", mock.Anything, room.Slug).Return(room, nil)
+	sr.On("GetParticipantByToken", mock.Anything, room.ID, mock.Anything).Return(p, nil)
+	sr.On("UpdateParticipant", mock.Anything, mock.Anything).Return(repo.ErrNotFound)
+
+	_, err := uc.UpdateMe(ctx, room.Slug, usecase.SantaAuth{Token: "tok"}, usecase.SantaProfileInput{Name: "Маша", Wishes: "чай"})
+
+	assert.ErrorIs(t, err, usecase.ErrSantaNotFound)
+}
+
+func TestInvite_OrganizerLookupFailureIsReturned(t *testing.T) {
+	sr, ur, uc := newUC()
+	room := openRoom(uuid.New())
+	sr.On("GetRoomBySlug", mock.Anything, room.Slug).Return(room, nil)
+	sr.On("CountParticipants", mock.Anything, []uuid.UUID{room.ID}).Return(map[uuid.UUID]int{room.ID: 1}, nil)
+	ur.On("GetByID", mock.Anything, room.OwnerID).Return(entity.User{}, errors.New("db down"))
+
+	_, err := uc.GetInvite(ctx, room.Slug)
+
+	assert.Error(t, err)
+}
+
+func TestInvite_MissingOrganizerKeepsCardOpen(t *testing.T) {
+	sr, ur, uc := newUC()
+	room := openRoom(uuid.New())
+	sr.On("GetRoomBySlug", mock.Anything, room.Slug).Return(room, nil)
+	sr.On("CountParticipants", mock.Anything, []uuid.UUID{room.ID}).Return(map[uuid.UUID]int{room.ID: 1}, nil)
+	ur.On("GetByID", mock.Anything, room.OwnerID).Return(entity.User{}, fmt.Errorf("userRepo.GetByID: %w", gorm.ErrRecordNotFound))
+
+	inv, err := uc.GetInvite(ctx, room.Slug)
+
+	require.NoError(t, err)
+	assert.Equal(t, "", inv.OrganizerName)
 }

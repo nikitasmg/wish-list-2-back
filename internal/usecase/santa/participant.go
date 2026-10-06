@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"main/internal/entity"
 	"main/internal/repo"
@@ -38,13 +39,19 @@ func (uc *santaUseCase) invite(ctx context.Context, room entity.SantaRoom) (usec
 		return usecase.SantaInvite{}, err
 	}
 	// Имя организатора — украшение приглашения: если пользователь не
-	// нашёлся, карточка всё равно открывается.
+	// нашёлся, карточка всё равно открывается; остальные сбои не глотаем.
+	// userRepo.GetByID отдаёт gorm.ErrRecordNotFound, а не repo.ErrNotFound.
 	organizer := ""
-	if owner, err := uc.users.GetByID(ctx, room.OwnerID); err == nil {
+	owner, err := uc.users.GetByID(ctx, room.OwnerID)
+	switch {
+	case err == nil:
 		organizer = owner.DisplayName
 		if organizer == "" {
 			organizer = owner.Username
 		}
+	case errors.Is(err, repo.ErrNotFound), errors.Is(err, gorm.ErrRecordNotFound):
+	default:
+		return usecase.SantaInvite{}, fmt.Errorf("organizer: %w", err)
 	}
 	return usecase.SantaInvite{
 		Slug: room.Slug, Title: room.Title, OrganizerName: organizer, Budget: room.Budget,
