@@ -71,26 +71,38 @@ func (r *santaRepo) ListRoomsByUser(ctx context.Context, userID uuid.UUID) ([]en
 }
 
 func (r *santaRepo) UpdateRoom(ctx context.Context, room entity.SantaRoom) error {
-	m := toSantaRoomModel(room)
-	if err := r.db.WithContext(ctx).Save(&m).Error; err != nil {
-		return santaErr("santaRepo.UpdateRoom", err)
+	res := r.db.WithContext(ctx).Model(&SantaRoomModel{}).
+		Where("id = ? AND status = ?", room.ID, string(entity.SantaRoomOpen)).
+		Updates(map[string]any{
+			"title":         room.Title,
+			"budget":        room.Budget,
+			"exchange_date": room.ExchangeDate,
+			"draw_at":       room.DrawAt,
+			"message":       room.Message,
+			"updated_at":    time.Now(),
+		})
+	if res.Error != nil {
+		return santaErr("santaRepo.UpdateRoom", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		var n int64
+		if err := r.db.WithContext(ctx).Model(&SantaRoomModel{}).Where("id = ?", room.ID).Count(&n).Error; err != nil {
+			return santaErr("santaRepo.UpdateRoom", err)
+		}
+		if n == 0 {
+			return fmt.Errorf("santaRepo.UpdateRoom: %w", repo.ErrNotFound)
+		}
+		return repo.ErrStatusMismatch
 	}
 	return nil
 }
 
 func (r *santaRepo) DeleteRoom(ctx context.Context, id uuid.UUID) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("room_id = ?", id).Delete(&SantaAssignmentModel{}).Error; err != nil {
-			return santaErr("santaRepo.DeleteRoom assignments", err)
-		}
-		if err := tx.Where("room_id = ?", id).Delete(&SantaParticipantModel{}).Error; err != nil {
-			return santaErr("santaRepo.DeleteRoom participants", err)
-		}
-		if err := tx.Delete(&SantaRoomModel{}, "id = ?", id).Error; err != nil {
-			return santaErr("santaRepo.DeleteRoom", err)
-		}
-		return nil
-	})
+	// Участники и пары удаляются каскадом внешних ключей.
+	if err := r.db.WithContext(ctx).Delete(&SantaRoomModel{}, "id = ?", id).Error; err != nil {
+		return santaErr("santaRepo.DeleteRoom", err)
+	}
+	return nil
 }
 
 func (r *santaRepo) CreateParticipant(ctx context.Context, p entity.SantaParticipant) error {
@@ -160,9 +172,19 @@ func (r *santaRepo) CountParticipants(ctx context.Context, roomIDs []uuid.UUID) 
 }
 
 func (r *santaRepo) UpdateParticipant(ctx context.Context, p entity.SantaParticipant) error {
-	m := toSantaParticipantModel(p)
-	if err := r.db.WithContext(ctx).Save(&m).Error; err != nil {
-		return santaErr("santaRepo.UpdateParticipant", err)
+	res := r.db.WithContext(ctx).Model(&SantaParticipantModel{}).
+		Where("id = ?", p.ID).
+		Updates(map[string]any{
+			"name":         p.Name,
+			"wishes":       p.Wishes,
+			"wishlist_url": p.WishlistURL,
+			"updated_at":   time.Now(),
+		})
+	if res.Error != nil {
+		return santaErr("santaRepo.UpdateParticipant", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("santaRepo.UpdateParticipant: %w", repo.ErrNotFound)
 	}
 	return nil
 }

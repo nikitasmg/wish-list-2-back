@@ -21,6 +21,10 @@ type SantaRoomModel struct {
 	DrawnAt      *time.Time
 	CreatedAt    time.Time `gorm:"autoCreateTime"`
 	UpdatedAt    time.Time `gorm:"autoUpdateTime"`
+
+	// Связи нужны ради внешних ключей с каскадом при AutoMigrate; в запросах не используются.
+	Participants []SantaParticipantModel `gorm:"foreignKey:RoomID;constraint:OnDelete:CASCADE"`
+	Assignments  []SantaAssignmentModel  `gorm:"foreignKey:RoomID;constraint:OnDelete:CASCADE"`
 }
 
 func (SantaRoomModel) TableName() string { return "santa_rooms" }
@@ -37,6 +41,9 @@ type SantaParticipantModel struct {
 	GiftReady   bool       `gorm:"not null;default:false"`
 	CreatedAt   time.Time  `gorm:"autoCreateTime"`
 	UpdatedAt   time.Time  `gorm:"autoUpdateTime"`
+
+	Given    []SantaAssignmentModel `gorm:"foreignKey:GiverID;constraint:OnDelete:CASCADE"`
+	Received []SantaAssignmentModel `gorm:"foreignKey:ReceiverID;constraint:OnDelete:CASCADE"`
 }
 
 func (SantaParticipantModel) TableName() string { return "santa_participants" }
