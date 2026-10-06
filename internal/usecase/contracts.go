@@ -438,4 +438,13 @@ type SantaUseCase interface {
 	UpdateRoom(ctx context.Context, ownerID, roomID uuid.UUID, in SantaRoomInput) (entity.SantaRoom, error)
 	DeleteRoom(ctx context.Context, ownerID, roomID uuid.UUID) error
 	RemoveParticipant(ctx context.Context, ownerID, roomID, participantID uuid.UUID) error
+
+	// Участник. Комната по slug; нет комнаты или участника — ErrSantaNotFound.
+	GetInvite(ctx context.Context, slug string) (SantaInvite, error)
+	Join(ctx context.Context, slug string, userID *uuid.UUID, in SantaProfileInput) (SantaJoinResult, error)
+	GetMe(ctx context.Context, slug string, auth SantaAuth) (SantaMe, error)
+	// UpdateMe: после жеребьёвки имя менять нельзя (его уже знает Санта),
+	// пожелания и вишлист — можно.
+	UpdateMe(ctx context.Context, slug string, auth SantaAuth, in SantaProfileInput) (SantaMe, error)
+	LeaveMe(ctx context.Context, slug string, auth SantaAuth) error
 }
