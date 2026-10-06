@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"main/internal/entity"
@@ -104,4 +105,41 @@ type TemplateRepo interface {
 	CountByUserID(ctx context.Context, userID uuid.UUID) (int64, error)
 	Like(ctx context.Context, userID, templateID uuid.UUID) (int, error)
 	Unlike(ctx context.Context, userID, templateID uuid.UUID) (int, error)
+}
+
+// ErrNotFound — записи нет. Использование отличает по нему 404 от сбоя базы,
+// не зная про gorm. Пока его возвращает только SantaRepo.
+var ErrNotFound = errors.New("not found")
+
+// ErrStatusMismatch — комната не в том статусе, которого ждал вызов.
+var ErrStatusMismatch = errors.New("status mismatch")
+
+type SantaRepo interface {
+	CreateRoom(ctx context.Context, room entity.SantaRoom) error
+	GetRoomByID(ctx context.Context, id uuid.UUID) (entity.SantaRoom, error)
+	GetRoomBySlug(ctx context.Context, slug string) (entity.SantaRoom, error)
+	// ListRoomsByUser — комнаты, где пользователь владелец или участник, новые сверху.
+	ListRoomsByUser(ctx context.Context, userID uuid.UUID) ([]entity.SantaRoom, error)
+	UpdateRoom(ctx context.Context, room entity.SantaRoom) error
+	// DeleteRoom удаляет комнату вместе с участниками и парами.
+	DeleteRoom(ctx context.Context, id uuid.UUID) error
+
+	CreateParticipant(ctx context.Context, p entity.SantaParticipant) error
+	GetParticipant(ctx context.Context, id uuid.UUID) (entity.SantaParticipant, error)
+	// GetParticipantByToken ищет только внутри комнаты: токен из другой
+	// комнаты здесь «не найден».
+	GetParticipantByToken(ctx context.Context, roomID uuid.UUID, tokenHash string) (entity.SantaParticipant, error)
+	GetParticipantByUser(ctx context.Context, roomID, userID uuid.UUID) (entity.SantaParticipant, error)
+	// ListParticipants — в порядке вступления.
+	ListParticipants(ctx context.Context, roomID uuid.UUID) ([]entity.SantaParticipant, error)
+	CountParticipants(ctx context.Context, roomIDs []uuid.UUID) (map[uuid.UUID]int, error)
+	UpdateParticipant(ctx context.Context, p entity.SantaParticipant) error
+	DeleteParticipant(ctx context.Context, id uuid.UUID) error
+
+	GetAssignment(ctx context.Context, roomID, giverID uuid.UUID) (entity.SantaAssignment, error)
+	// Draw в одной транзакции: блокирует комнату, проверяет статус expected
+	// (иначе ErrStatusMismatch), стирает старые пары, отдаёт build id
+	// участников в порядке вступления, пишет пары и ставит status=drawn.
+	// Ошибка build откатывает всё и возвращается как есть.
+	Draw(ctx context.Context, roomID uuid.UUID, expected entity.SantaRoomStatus, build func(ids []uuid.UUID) ([]entity.SantaAssignment, error)) error
 }
