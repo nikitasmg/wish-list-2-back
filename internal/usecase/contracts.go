@@ -344,3 +344,98 @@ var (
 	// ErrSantaInvalid оборачивается с подробностью: «неверные данные: …».
 	ErrSantaInvalid = errors.New("неверные данные")
 )
+
+// SantaRoomInput — создание и правка комнаты.
+type SantaRoomInput struct {
+	Title        string
+	Budget       *int
+	ExchangeDate *time.Time
+	DrawAt       *time.Time
+	Message      string
+	// Только при создании: организатор сразу становится участником.
+	OrganizerJoins  bool
+	OrganizerName   string
+	OrganizerWishes string
+}
+
+// SantaProfileInput — что участник пишет о себе.
+type SantaProfileInput struct {
+	Name        string
+	Wishes      string
+	WishlistURL string
+}
+
+// SantaAuth — кто пришёл в комнату: секрет из личной ссылки и/или вошедший
+// пользователь. Токен проверяется первым.
+type SantaAuth struct {
+	Token  string
+	UserID *uuid.UUID
+}
+
+type SantaRoomSummary struct {
+	entity.SantaRoom
+	IsOwner           bool `json:"isOwner"`
+	ParticipantsCount int  `json:"participantsCount"`
+}
+
+// SantaParticipantView — участник глазами организатора: без текста
+// пожеланий и без пар.
+type SantaParticipantView struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	HasWishes   bool      `json:"hasWishes"`
+	HasWishlist bool      `json:"hasWishlist"`
+	IsOwner     bool      `json:"isOwner"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+type SantaRoomDetails struct {
+	Room         entity.SantaRoom       `json:"room"`
+	Participants []SantaParticipantView `json:"participants"`
+}
+
+// SantaInvite — публичная карточка приглашения.
+type SantaInvite struct {
+	Slug              string                 `json:"slug"`
+	Title             string                 `json:"title"`
+	OrganizerName     string                 `json:"organizerName"`
+	Budget            *int                   `json:"budget"`
+	ExchangeDate      *time.Time             `json:"exchangeDate"`
+	DrawAt            *time.Time             `json:"drawAt"`
+	Message           string                 `json:"message"`
+	ParticipantsCount int                    `json:"participantsCount"`
+	Status            entity.SantaRoomStatus `json:"status"`
+}
+
+type SantaReceiver struct {
+	Name        string `json:"name"`
+	Wishes      string `json:"wishes"`
+	WishlistURL string `json:"wishlistUrl"`
+}
+
+type SantaMe struct {
+	ParticipantID uuid.UUID   `json:"participantId"`
+	Name          string      `json:"name"`
+	Wishes        string      `json:"wishes"`
+	WishlistURL   string      `json:"wishlistUrl"`
+	Room          SantaInvite `json:"room"`
+	// Receiver — подопечный; nil до жеребьёвки.
+	Receiver *SantaReceiver `json:"receiver"`
+}
+
+type SantaJoinResult struct {
+	// Token — секрет личной ссылки. Отдаётся один раз, в базе только хэш.
+	Token string  `json:"token"`
+	Me    SantaMe `json:"me"`
+}
+
+// SantaUseCase — Тайный Санта.
+type SantaUseCase interface {
+	// Организатор. Чужая комната — ErrSantaNotFound.
+	CreateRoom(ctx context.Context, ownerID uuid.UUID, in SantaRoomInput) (entity.SantaRoom, error)
+	ListRooms(ctx context.Context, userID uuid.UUID) ([]SantaRoomSummary, error)
+	GetRoom(ctx context.Context, ownerID, roomID uuid.UUID) (SantaRoomDetails, error)
+	UpdateRoom(ctx context.Context, ownerID, roomID uuid.UUID, in SantaRoomInput) (entity.SantaRoom, error)
+	DeleteRoom(ctx context.Context, ownerID, roomID uuid.UUID) error
+	RemoveParticipant(ctx context.Context, ownerID, roomID, participantID uuid.UUID) error
+}
