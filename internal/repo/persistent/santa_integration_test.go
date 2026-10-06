@@ -282,3 +282,19 @@ func TestSantaRepo_DeleteRoomCascadesAssignments(t *testing.T) {
 	require.NoError(t, db.Model(&persistent.SantaParticipantModel{}).Where("room_id = ?", room.ID).Count(&n).Error)
 	assert.Zero(t, n)
 }
+
+func TestSantaRepo_ParticipantsFrozenAfterDraw(t *testing.T) {
+	ctx := context.Background()
+	r := persistent.NewSantaRepo(setupSantaDB(t))
+	room := seedRoom(t, r, uuid.New())
+	ids := seedParticipants(t, r, room.ID, 3)
+	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID)))
+
+	late := entity.SantaParticipant{ID: uuid.New(), RoomID: room.ID, Name: "Поздно", TokenHash: uuid.NewString()}
+	assert.ErrorIs(t, r.CreateParticipant(ctx, late), repo.ErrStatusMismatch)
+	assert.ErrorIs(t, r.DeleteParticipant(ctx, ids[0]), repo.ErrStatusMismatch)
+
+	list, err := r.ListParticipants(ctx, room.ID)
+	require.NoError(t, err)
+	assert.Len(t, list, 3)
+}

@@ -3,6 +3,7 @@ package santa_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -251,4 +252,92 @@ func TestRemoveParticipant_Deletes(t *testing.T) {
 
 	require.NoError(t, uc.RemoveParticipant(ctx, owner, room.ID, p.ID))
 	sr.AssertExpectations(t)
+}
+
+func TestRemoveParticipant_DrawnConcurrentlyIsConflict(t *testing.T) {
+	sr, _, uc := newUC()
+	owner := uuid.New()
+	room := openRoom(owner)
+	p := entity.SantaParticipant{ID: uuid.New(), RoomID: room.ID}
+	sr.On("GetRoomByID", mock.Anything, room.ID).Return(room, nil)
+	sr.On("GetParticipant", mock.Anything, p.ID).Return(p, nil)
+	sr.On("DeleteParticipant", mock.Anything, p.ID).Return(repo.ErrStatusMismatch)
+
+	err := uc.RemoveParticipant(ctx, owner, room.ID, p.ID)
+
+	assert.ErrorIs(t, err, usecase.ErrSantaDrawn)
+}
+
+func TestCreateRoom_RollsBackRoomWhenOrganizerFails(t *testing.T) {
+	sr, _, uc := newUC()
+	boom := errors.New("boom")
+	sr.On("GetRoomBySlug", mock.Anything, mock.Anything).Return(entity.SantaRoom{}, repo.ErrNotFound)
+	sr.On("CreateRoom", mock.Anything, mock.Anything).Return(nil)
+	sr.On("CreateParticipant", mock.Anything, mock.Anything).Return(boom)
+	sr.On("DeleteRoom", mock.Anything, mock.Anything).Return(nil)
+
+	_, err := uc.CreateRoom(ctx, uuid.New(), usecase.SantaRoomInput{Title: "Офис", OrganizerJoins: true, OrganizerName: "Никита"})
+
+	assert.ErrorIs(t, err, boom)
+	sr.AssertCalled(t, "DeleteRoom", mock.Anything, mock.Anything)
+}
+
+func TestCreateRoom_RollbackFailureWrapsBoth(t *testing.T) {
+	sr, _, uc := newUC()
+	boom, delBoom := errors.New("boom"), errors.New("del")
+	sr.On("GetRoomBySlug", mock.Anything, mock.Anything).Return(entity.SantaRoom{}, repo.ErrNotFound)
+	sr.On("CreateRoom", mock.Anything, mock.Anything).Return(nil)
+	sr.On("CreateParticipant", mock.Anything, mock.Anything).Return(boom)
+	sr.On("DeleteRoom", mock.Anything, mock.Anything).Return(delBoom)
+
+	_, err := uc.CreateRoom(ctx, uuid.New(), usecase.SantaRoomInput{Title: "Офис", OrganizerJoins: true, OrganizerName: "Никита"})
+
+	assert.ErrorIs(t, err, boom)
+	assert.ErrorIs(t, err, delBoom)
+}
+
+func TestCreateRoom_RetriesWhenSlugTakenAtInsert(t *testing.T) {
+	sr, _, uc := newUC()
+	// Предпроверка slug: свободен; после сбоя вставки: уже занят; новая предпроверка: свободен.
+	sr.On("GetRoomBySlug", mock.Anything, mock.Anything).Return(entity.SantaRoom{}, repo.ErrNotFound).Once()
+	sr.On("CreateRoom", mock.Anything, mock.Anything).Return(errors.New("duplicate key")).Once()
+	sr.On("GetRoomBySlug", mock.Anything, mock.Anything).Return(openRoom(uuid.New()), nil).Once()
+	sr.On("GetRoomBySlug", mock.Anything, mock.Anything).Return(entity.SantaRoom{}, repo.ErrNotFound).Once()
+	sr.On("CreateRoom", mock.Anything, mock.Anything).Return(nil).Once()
+
+	room, err := uc.CreateRoom(ctx, uuid.New(), usecase.SantaRoomInput{Title: "Офис"})
+
+	require.NoError(t, err)
+	assert.Len(t, room.Slug, 8)
+	sr.AssertNumberOfCalls(t, "CreateRoom", 2)
+}
+
+func TestCreateRoom_InsertErrorWithoutSlugConflictIsReturned(t *testing.T) {
+	sr, _, uc := newUC()
+	boom := errors.New("db down")
+	sr.On("GetRoomBySlug", mock.Anything, mock.Anything).Return(entity.SantaRoom{}, repo.ErrNotFound)
+	sr.On("CreateRoom", mock.Anything, mock.Anything).Return(boom)
+
+	_, err := uc.CreateRoom(ctx, uuid.New(), usecase.SantaRoomInput{Title: "Офис"})
+
+	assert.ErrorIs(t, err, boom)
+	sr.AssertNumberOfCalls(t, "CreateRoom", 1)
+}
+
+func TestUpdateRoom_PastDrawAtUnchangedIsAllowed(t *testing.T) {
+	sr, _, uc := newUC()
+	owner := uuid.New()
+	past := time.Now().Add(-time.Hour)
+	room := openRoom(owner)
+	room.DrawAt = &past
+	same := past
+	sr.On("GetRoomByID", mock.Anything, room.ID).Return(room, nil)
+	sr.On("UpdateRoom", mock.Anything, mock.Anything).Return(nil)
+
+	_, err := uc.UpdateRoom(ctx, owner, room.ID, usecase.SantaRoomInput{Title: "Новое", DrawAt: &same})
+	require.NoError(t, err)
+
+	other := past.Add(-time.Minute)
+	_, err = uc.UpdateRoom(ctx, owner, room.ID, usecase.SantaRoomInput{Title: "Новое", DrawAt: &other})
+	assert.ErrorIs(t, err, usecase.ErrSantaInvalid)
 }

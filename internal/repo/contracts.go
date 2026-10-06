@@ -124,6 +124,8 @@ type SantaRepo interface {
 	// DeleteRoom удаляет комнату вместе с участниками и парами.
 	DeleteRoom(ctx context.Context, id uuid.UUID) error
 
+	// CreateParticipant под блокировкой комнаты: не open — ErrStatusMismatch,
+	// комнаты нет — ErrNotFound.
 	CreateParticipant(ctx context.Context, p entity.SantaParticipant) error
 	GetParticipant(ctx context.Context, id uuid.UUID) (entity.SantaParticipant, error)
 	// GetParticipantByToken ищет только внутри комнаты: токен из другой
@@ -134,6 +136,8 @@ type SantaRepo interface {
 	ListParticipants(ctx context.Context, roomID uuid.UUID) ([]entity.SantaParticipant, error)
 	CountParticipants(ctx context.Context, roomIDs []uuid.UUID) (map[uuid.UUID]int, error)
 	UpdateParticipant(ctx context.Context, p entity.SantaParticipant) error
+	// DeleteParticipant под блокировкой комнаты: не open — ErrStatusMismatch,
+	// участника нет — ErrNotFound.
 	DeleteParticipant(ctx context.Context, id uuid.UUID) error
 
 	GetAssignment(ctx context.Context, roomID, giverID uuid.UUID) (entity.SantaAssignment, error)

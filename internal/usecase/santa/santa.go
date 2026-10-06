@@ -30,8 +30,9 @@ func New(santaRepo repo.SantaRepo, userRepo repo.UserRepo) usecase.SantaUseCase 
 }
 
 func (uc *santaUseCase) CreateRoom(ctx context.Context, ownerID uuid.UUID, in usecase.SantaRoomInput) (entity.SantaRoom, error) {
+	now := uc.now()
 	in = normalizeRoom(in)
-	if err := validateRoom(in, uc.now()); err != nil {
+	if err := validateRoom(in, now); err != nil {
 		return entity.SantaRoom{}, err
 	}
 	organizer := normalizeProfile(usecase.SantaProfileInput{Name: in.OrganizerName, Wishes: in.OrganizerWishes})
@@ -41,37 +42,61 @@ func (uc *santaUseCase) CreateRoom(ctx context.Context, ownerID uuid.UUID, in us
 		}
 	}
 
-	slug, err := uc.freeSlug(ctx)
-	if err != nil {
-		return entity.SantaRoom{}, err
-	}
-	now := uc.now()
-	room := entity.SantaRoom{
-		ID: uuid.New(), OwnerID: ownerID, Slug: slug, Title: in.Title, Budget: in.Budget,
-		ExchangeDate: in.ExchangeDate, DrawAt: in.DrawAt, Message: in.Message,
-		Status: entity.SantaRoomOpen, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := uc.santa.CreateRoom(ctx, room); err != nil {
-		return entity.SantaRoom{}, fmt.Errorf("create room: %w", err)
-	}
-
-	if in.OrganizerJoins {
-		// Организатор входит по аккаунту, личная ссылка ему не нужна —
-		// токен генерируется только ради непустого уникального хэша.
-		_, hash, err := newToken()
+	var room entity.SantaRoom
+	created := false
+	for attempt := 0; attempt < slugAttempts && !created; attempt++ {
+		slug, err := uc.freeSlug(ctx)
 		if err != nil {
 			return entity.SantaRoom{}, err
 		}
-		owner := ownerID
-		p := entity.SantaParticipant{
-			ID: uuid.New(), RoomID: room.ID, UserID: &owner, Name: organizer.Name,
-			Wishes: organizer.Wishes, TokenHash: hash, CreatedAt: now, UpdatedAt: now,
+		room = entity.SantaRoom{
+			ID: uuid.New(), OwnerID: ownerID, Slug: slug, Title: in.Title, Budget: in.Budget,
+			ExchangeDate: in.ExchangeDate, DrawAt: in.DrawAt, Message: in.Message,
+			Status: entity.SantaRoomOpen, CreatedAt: now, UpdatedAt: now,
 		}
-		if err := uc.santa.CreateParticipant(ctx, p); err != nil {
-			return entity.SantaRoom{}, fmt.Errorf("create organizer: %w", err)
+		err = uc.santa.CreateRoom(ctx, room)
+		if err == nil {
+			created = true
+			break
+		}
+		// Адрес могли занять между проверкой и записью — тогда берём другой.
+		if _, lookupErr := uc.santa.GetRoomBySlug(ctx, slug); lookupErr != nil {
+			return entity.SantaRoom{}, fmt.Errorf("create room: %w", err)
+		}
+	}
+	if !created {
+		return entity.SantaRoom{}, errors.New("не удалось подобрать адрес комнаты")
+	}
+
+	if in.OrganizerJoins {
+		if err := uc.addOrganizer(ctx, room, organizer, now); err != nil {
+			// Комната без организатора-участника не нужна: откатываем вручную,
+			// участники и пары уйдут каскадом.
+			if delErr := uc.santa.DeleteRoom(ctx, room.ID); delErr != nil {
+				return entity.SantaRoom{}, errors.Join(err, fmt.Errorf("rollback room: %w", delErr))
+			}
+			return entity.SantaRoom{}, err
 		}
 	}
 	return room, nil
+}
+
+func (uc *santaUseCase) addOrganizer(ctx context.Context, room entity.SantaRoom, organizer usecase.SantaProfileInput, now time.Time) error {
+	// Организатор входит по аккаунту, личная ссылка ему не нужна —
+	// токен генерируется только ради непустого уникального хэша.
+	_, hash, err := newToken()
+	if err != nil {
+		return err
+	}
+	owner := room.OwnerID
+	p := entity.SantaParticipant{
+		ID: uuid.New(), RoomID: room.ID, UserID: &owner, Name: organizer.Name,
+		Wishes: organizer.Wishes, TokenHash: hash, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := uc.santa.CreateParticipant(ctx, p); err != nil {
+		return fmt.Errorf("create organizer: %w", err)
+	}
+	return nil
 }
 
 func (uc *santaUseCase) freeSlug(ctx context.Context) (string, error) {
@@ -155,7 +180,13 @@ func (uc *santaUseCase) UpdateRoom(ctx context.Context, ownerID, roomID uuid.UUI
 		return entity.SantaRoom{}, usecase.ErrSantaDrawn
 	}
 	in = normalizeRoom(in)
-	if err := validateRoom(in, uc.now()); err != nil {
+	// Время жеребьёвки проверяем на «будущее», только если его меняют:
+	// название комнаты с уже прошедшим draw_at должно править.
+	check := in
+	if sameTime(in.DrawAt, room.DrawAt) {
+		check.DrawAt = nil
+	}
+	if err := validateRoom(check, uc.now()); err != nil {
 		return entity.SantaRoom{}, err
 	}
 	room.Title = in.Title
@@ -175,6 +206,13 @@ func (uc *santaUseCase) UpdateRoom(ctx context.Context, ownerID, roomID uuid.UUI
 		return entity.SantaRoom{}, err
 	}
 	return room, nil
+}
+
+func sameTime(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(*b)
 }
 
 func (uc *santaUseCase) DeleteRoom(ctx context.Context, ownerID, roomID uuid.UUID) error {
@@ -199,5 +237,13 @@ func (uc *santaUseCase) RemoveParticipant(ctx context.Context, ownerID, roomID, 
 	if err != nil {
 		return err
 	}
-	return uc.santa.DeleteParticipant(ctx, p.ID)
+	// Жеребьёвка могла пройти между проверкой и удалением.
+	err = uc.santa.DeleteParticipant(ctx, p.ID)
+	if errors.Is(err, repo.ErrStatusMismatch) {
+		return usecase.ErrSantaDrawn
+	}
+	if errors.Is(err, repo.ErrNotFound) {
+		return usecase.ErrSantaNotFound
+	}
+	return err
 }

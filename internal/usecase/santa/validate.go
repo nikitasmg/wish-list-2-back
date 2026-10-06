@@ -64,7 +64,7 @@ func validateProfile(in usecase.SantaProfileInput) error {
 	if in.WishlistURL != "" {
 		// Ссылку увидит Санта и нажмёт её: javascript: и прочее сюда не пускаем.
 		u, err := url.Parse(in.WishlistURL)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || len(in.WishlistURL) > maxURL {
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || utf8.RuneCountInString(in.WishlistURL) > maxURL {
 			return invalid("ссылка на вишлист должна начинаться с http:// или https://")
 		}
 	}

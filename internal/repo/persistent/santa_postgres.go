@@ -105,12 +105,31 @@ func (r *santaRepo) DeleteRoom(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (r *santaRepo) CreateParticipant(ctx context.Context, p entity.SantaParticipant) error {
-	m := toSantaParticipantModel(p)
-	if err := r.db.WithContext(ctx).Create(&m).Error; err != nil {
-		return santaErr("santaRepo.CreateParticipant", err)
+// lockOpenRoom берёт комнату под FOR SHARE и проверяет, что она открыта.
+// Жеребьёвка берёт FOR UPDATE, поэтому вступление и выход не проскочат
+// между её проверкой статуса и коммитом.
+func lockOpenRoom(tx *gorm.DB, op string, roomID uuid.UUID) error {
+	var room SantaRoomModel
+	if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).First(&room, "id = ?", roomID).Error; err != nil {
+		return santaErr(op, err)
+	}
+	if room.Status != string(entity.SantaRoomOpen) {
+		return repo.ErrStatusMismatch
 	}
 	return nil
+}
+
+func (r *santaRepo) CreateParticipant(ctx context.Context, p entity.SantaParticipant) error {
+	m := toSantaParticipantModel(p)
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockOpenRoom(tx, "santaRepo.CreateParticipant lock", p.RoomID); err != nil {
+			return err
+		}
+		if err := tx.Create(&m).Error; err != nil {
+			return santaErr("santaRepo.CreateParticipant", err)
+		}
+		return nil
+	})
 }
 
 func (r *santaRepo) getParticipant(ctx context.Context, op string, query string, args ...any) (entity.SantaParticipant, error) {
@@ -190,10 +209,23 @@ func (r *santaRepo) UpdateParticipant(ctx context.Context, p entity.SantaPartici
 }
 
 func (r *santaRepo) DeleteParticipant(ctx context.Context, id uuid.UUID) error {
-	if err := r.db.WithContext(ctx).Delete(&SantaParticipantModel{}, "id = ?", id).Error; err != nil {
-		return santaErr("santaRepo.DeleteParticipant", err)
-	}
-	return nil
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var m SantaParticipantModel
+		if err := tx.First(&m, "id = ?", id).Error; err != nil {
+			return santaErr("santaRepo.DeleteParticipant find", err)
+		}
+		if err := lockOpenRoom(tx, "santaRepo.DeleteParticipant lock", m.RoomID); err != nil {
+			return err
+		}
+		res := tx.Delete(&SantaParticipantModel{}, "id = ?", id)
+		if res.Error != nil {
+			return santaErr("santaRepo.DeleteParticipant", res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return fmt.Errorf("santaRepo.DeleteParticipant: %w", repo.ErrNotFound)
+		}
+		return nil
+	})
 }
 
 func (r *santaRepo) GetAssignment(ctx context.Context, roomID, giverID uuid.UUID) (entity.SantaAssignment, error) {
