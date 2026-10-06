@@ -438,6 +438,10 @@ type SantaUseCase interface {
 	UpdateRoom(ctx context.Context, ownerID, roomID uuid.UUID, in SantaRoomInput) (entity.SantaRoom, error)
 	DeleteRoom(ctx context.Context, ownerID, roomID uuid.UUID) error
 	RemoveParticipant(ctx context.Context, ownerID, roomID, participantID uuid.UUID) error
+	// Draw тянет пары; уже прошла — ErrSantaDrawn, меньше 3 — ErrSantaTooFew.
+	Draw(ctx context.Context, ownerID, roomID uuid.UUID) error
+	// Redraw стирает пары и тянет заново; не было жеребьёвки — ErrSantaNotDrawn.
+	Redraw(ctx context.Context, ownerID, roomID uuid.UUID) error
 
 	// Участник. Комната по slug; нет комнаты или участника — ErrSantaNotFound.
 	GetInvite(ctx context.Context, slug string) (SantaInvite, error)
