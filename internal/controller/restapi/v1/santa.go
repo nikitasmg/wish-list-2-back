@@ -2,11 +2,11 @@ package v1
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	jwtware "github.com/gofiber/jwt/v2"
 	"github.com/google/uuid"
 
 	"main/internal/controller/restapi/middleware"
@@ -36,7 +36,7 @@ func NewSantaRouter(router fiber.Router, jwtSecret string, uc usecase.SantaUseCa
 	api.Patch("/r/:slug/me", optional, h.updateMe)
 	api.Delete("/r/:slug/me", optional, h.leave)
 
-	rooms := api.Group("/rooms", santaProtected(jwtSecret))
+	rooms := api.Group("/rooms", middleware.JWTRequired401(jwtSecret))
 	rooms.Get("", h.listRooms)
 	rooms.Post("", h.createRoom)
 	rooms.Get("/:id", h.getRoom)
@@ -50,9 +50,13 @@ func NewSantaRouter(router fiber.Router, jwtSecret string, uc usecase.SantaUseCa
 func santaError(c *fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, usecase.ErrSantaNotFound):
-		return c.Status(fiber.StatusNotFound).JSON(response.Error(err.Error()))
-	case errors.Is(err, usecase.ErrSantaDrawn), errors.Is(err, usecase.ErrSantaNotDrawn), errors.Is(err, usecase.ErrSantaAlreadyJoined):
-		return c.Status(fiber.StatusConflict).JSON(response.Error(err.Error()))
+		return c.Status(fiber.StatusNotFound).JSON(response.Error(usecase.ErrSantaNotFound.Error()))
+	case errors.Is(err, usecase.ErrSantaDrawn):
+		return c.Status(fiber.StatusConflict).JSON(response.Error(usecase.ErrSantaDrawn.Error()))
+	case errors.Is(err, usecase.ErrSantaNotDrawn):
+		return c.Status(fiber.StatusConflict).JSON(response.Error(usecase.ErrSantaNotDrawn.Error()))
+	case errors.Is(err, usecase.ErrSantaAlreadyJoined):
+		return c.Status(fiber.StatusConflict).JSON(response.Error(usecase.ErrSantaAlreadyJoined.Error()))
 	case errors.Is(err, usecase.ErrSantaTooFew), errors.Is(err, usecase.ErrSantaInvalid):
 		return c.Status(fiber.StatusUnprocessableEntity).JSON(response.Error(err.Error()))
 	}
@@ -79,14 +83,14 @@ func (b santaRoomBody) input() (usecase.SantaRoomInput, error) {
 	if b.ExchangeDate != "" {
 		d, err := time.Parse(time.DateOnly, b.ExchangeDate)
 		if err != nil {
-			return in, errors.New("exchangeDate: нужен формат ГГГГ-ММ-ДД")
+			return in, fmt.Errorf("%w: exchangeDate: неверный формат даты (нужен ГГГГ-ММ-ДД)", usecase.ErrSantaInvalid)
 		}
 		in.ExchangeDate = &d
 	}
 	if b.DrawAt != "" {
 		t, err := time.Parse(time.RFC3339, b.DrawAt)
 		if err != nil {
-			return in, errors.New("drawAt: нужен формат RFC 3339")
+			return in, fmt.Errorf("%w: drawAt: неверный формат даты (нужен RFC 3339)", usecase.ErrSantaInvalid)
 		}
 		in.DrawAt = &t
 	}
@@ -131,7 +135,7 @@ func (h *santaHandler) createRoom(c *fiber.Ctx) error {
 	}
 	in, err := body.input()
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+		return santaError(c, err)
 	}
 	room, err := h.uc.CreateRoom(c.Context(), userID, in)
 	if err != nil {
@@ -178,7 +182,7 @@ func (h *santaHandler) updateRoom(c *fiber.Ctx) error {
 	}
 	in, err := body.input()
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(response.Error(err.Error()))
+		return santaError(c, err)
 	}
 	room, err := h.uc.UpdateRoom(c.Context(), userID, roomID, in)
 	if err != nil {
@@ -282,14 +286,3 @@ func (h *santaHandler) leave(c *fiber.Ctx) error {
 	return c.JSON(response.Data(true))
 }
 
-// santaProtected — как middleware.JWTProtected, но без токена отвечает 401,
-// а не 400 по умолчанию у jwtware: фронту Санты нужно отличать «войдите».
-func santaProtected(secret string) fiber.Handler {
-	return jwtware.New(jwtware.Config{
-		SigningKey: []byte(secret),
-		ContextKey: "user",
-		ErrorHandler: func(c *fiber.Ctx, err error) error {
-			return c.Status(fiber.StatusUnauthorized).JSON(response.Error("требуется вход"))
-		},
-	})
-}

@@ -35,3 +35,16 @@ func JWTOptional(secret string) fiber.Handler {
 		},
 	})
 }
+
+// JWTRequired401 — тот же JWT, что JWTProtected, но без токена отвечает 401,
+// а не 400 по умолчанию у jwtware. JWTProtected не меняем: на 400 завязаны
+// остальные маршруты и их тесты.
+func JWTRequired401(secret string) fiber.Handler {
+	return jwtware.New(jwtware.Config{
+		SigningKey: []byte(secret),
+		ContextKey: "user",
+		ErrorHandler: func(c *fiber.Ctx, _ error) error {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "требуется вход"})
+		},
+	})
+}

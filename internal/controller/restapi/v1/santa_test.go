@@ -2,6 +2,7 @@ package v1_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -122,7 +123,7 @@ func TestSantaCreateRoom_ParsesDates(t *testing.T) {
 	m.AssertExpectations(t)
 }
 
-func TestSantaCreateRoom_BadDateIs400(t *testing.T) {
+func TestSantaCreateRoom_BadDateIs422(t *testing.T) {
 	m := &MockSantaUC{}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/santa/rooms", strings.NewReader(`{"title":"Офис","exchangeDate":"27.12.2026"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -130,7 +131,7 @@ func TestSantaCreateRoom_BadDateIs400(t *testing.T) {
 
 	status, _ := doReq(t, newSantaApp(m), req)
 
-	assert.Equal(t, http.StatusBadRequest, status)
+	assert.Equal(t, http.StatusUnprocessableEntity, status)
 }
 
 func TestSantaDraw_TooFewIs422(t *testing.T) {
@@ -199,4 +200,14 @@ func TestSantaRoutes_PublicBeforeProtectedGroup(t *testing.T) {
 	status, _ := doReq(t, app, httptest.NewRequest(http.MethodGet, "/api/v1/santa/r/AbCd2345", nil))
 
 	assert.Equal(t, http.StatusOK, status)
+}
+
+func TestSantaError_WrappedNotFoundHidesPrefix(t *testing.T) {
+	m := &MockSantaUC{}
+	m.On("GetInvite", mock.Anything, "x").Return(usecase.SantaInvite{}, fmt.Errorf("receiver: %w", usecase.ErrSantaNotFound))
+
+	status, body := doReq(t, newSantaApp(m), httptest.NewRequest(http.MethodGet, "/api/v1/santa/r/x", nil))
+
+	assert.Equal(t, http.StatusNotFound, status)
+	assert.JSONEq(t, `{"error":"`+usecase.ErrSantaNotFound.Error()+`"}`, body)
 }
