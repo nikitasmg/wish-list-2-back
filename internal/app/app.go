@@ -14,6 +14,7 @@ import (
 	"main/internal/repo/persistent"
 	guestDataUC "main/internal/usecase/guestdata"
 	presentUC "main/internal/usecase/present"
+	santaUC "main/internal/usecase/santa"
 	templateUC "main/internal/usecase/template"
 	uploadUC "main/internal/usecase/upload"
 	userUC "main/internal/usecase/user"
@@ -46,6 +47,7 @@ func Run(cfg *config.Config) {
 		&persistent.PresentMetaModel{},
 		&persistent.TemplateModel{},
 		&persistent.TemplateLikeModel{},
+		&persistent.SantaRoomModel{}, &persistent.SantaParticipantModel{}, &persistent.SantaAssignmentModel{},
 	); err != nil {
 		log.Fatalf("automigrate: %v", err)
 	}
@@ -76,6 +78,7 @@ func Run(cfg *config.Config) {
 	guestDataRepo := persistent.NewGuestDataRepo(db)
 	presentMetaRepo := persistent.NewPresentMetaRepo(db)
 	templateRepo := persistent.NewTemplateRepo(db)
+	santaRepo := persistent.NewSantaRepo(db)
 
 	// Hasher
 	pwHasher := hasher.New()
@@ -87,12 +90,13 @@ func Run(cfg *config.Config) {
 	uploadUseCase := uploadUC.New(fileStorage)
 	guestDataUseCase := guestDataUC.New(guestDataRepo, wishlistRepo)
 	templateUseCase := templateUC.New(templateRepo, wishlistRepo)
+	santaUseCase := santaUC.New(santaRepo, userRepo)
 
 	// HTTP server
 	app := fiber.New(fiber.Config{
 		BodyLimit: 15 * 1024 * 1024, // 15MB — headroom for multipart overhead
 	})
-	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase, guestDataUseCase, templateUseCase)
+	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase, guestDataUseCase, templateUseCase, santaUseCase)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)

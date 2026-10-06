@@ -25,6 +25,7 @@ func NewRouter(
 	uploadUC usecase.UploadUseCase,
 	guestDataUC usecase.GuestDataUseCase,
 	templateUC usecase.TemplateUseCase,
+	santaUC usecase.SantaUseCase,
 ) {
 	app.Use(logger.New())
 	app.Use(compress.New())
@@ -34,7 +35,8 @@ func NewRouter(
 		// Без него браузер отрезает заголовок на preflight, и проверка версии
 		// перестаёт работать именно там, где она нужна: фронт живёт на другом
 		// поддомене, а падает это молча — запрос проходит, конфликт не ловится.
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Custom-Header, If-Match",
+		// X-Santa-Token — секрет участника Тайного Санты без аккаунта.
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Custom-Header, If-Match, X-Santa-Token",
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS, PATCH",
 		AllowCredentials: true,
 		ExposeHeaders:    "Content-Length, X-Knowledge-Base",
@@ -51,5 +53,7 @@ func NewRouter(
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
+	// До основного роутера: см. комментарий у NewSantaRouter.
+	v1.NewSantaRouter(app, cfg.Auth.JWTSecret, santaUC)
 	v1.NewRouter(app, cfg.Auth.JWTSecret, cfg.Auth.CookieDomain, cfg.App.Env == "production", userUC, wishlistUC, presentUC, uploadUC, guestDataUC, templateUC)
 }
