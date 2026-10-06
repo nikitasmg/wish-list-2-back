@@ -329,3 +329,18 @@ type TemplateUseCase interface {
 	Like(ctx context.Context, userID, templateID uuid.UUID) (LikeResult, error)
 	Unlike(ctx context.Context, userID, templateID uuid.UUID) (LikeResult, error)
 }
+
+// Ошибки Тайного Санты. Обработчик переводит их в 404 / 409 / 422.
+var (
+	// ErrSantaNotFound — нет комнаты, комната чужая или токен не подошёл.
+	// Один ответ на все три случая: по нему нельзя перебрать чужие комнаты.
+	ErrSantaNotFound = errors.New("комната не найдена")
+	// ErrSantaDrawn — действие возможно только до жеребьёвки.
+	ErrSantaDrawn = errors.New("жеребьёвка уже прошла")
+	// ErrSantaNotDrawn — действие возможно только после жеребьёвки.
+	ErrSantaNotDrawn = errors.New("жеребьёвки ещё не было")
+	ErrSantaAlreadyJoined = errors.New("вы уже в этой комнате")
+	ErrSantaTooFew        = errors.New("для жеребьёвки нужно минимум 3 участника")
+	// ErrSantaInvalid оборачивается с подробностью: «неверные данные: …».
+	ErrSantaInvalid = errors.New("неверные данные")
+)
