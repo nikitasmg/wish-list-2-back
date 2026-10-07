@@ -1,17 +1,20 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
 	"main/config"
 	"main/internal/controller/restapi"
 	"main/internal/repo/persistent"
+	"main/internal/usecase"
 	guestDataUC "main/internal/usecase/guestdata"
 	presentUC "main/internal/usecase/present"
 	santaUC "main/internal/usecase/santa"
@@ -20,8 +23,10 @@ import (
 	userUC "main/internal/usecase/user"
 	wishlistUC "main/internal/usecase/wishlist"
 	"main/pkg/hasher"
+	"main/pkg/mailer"
 	minioPkg "main/pkg/minio"
 	"main/pkg/postgres"
+	"main/pkg/telegram"
 )
 
 func Run(cfg *config.Config) {
@@ -91,7 +96,31 @@ func Run(cfg *config.Config) {
 	uploadUseCase := uploadUC.New(fileStorage)
 	guestDataUseCase := guestDataUC.New(guestDataRepo, wishlistRepo)
 	templateUseCase := templateUC.New(templateRepo, wishlistRepo)
-	santaUseCase := santaUC.New(santaRepo, userRepo)
+	// Уведомления Санты: без SMTP и токена бота — в лог (разработка).
+	var mail usecase.Mailer = mailer.NewLog()
+	if cfg.Notify.SMTPHost != "" {
+		smtpMailer, err := mailer.NewSMTP(mailer.Config{
+			Host: cfg.Notify.SMTPHost, Port: cfg.Notify.SMTPPort,
+			User: cfg.Notify.SMTPUser, Password: cfg.Notify.SMTPPassword, From: cfg.Notify.MailFrom,
+		})
+		if err != nil {
+			log.Fatalf("mailer: %v", err)
+		}
+		mail = smtpMailer
+	} else {
+		log.Println("WARNING: SMTP_HOST не задан — письма Санты уходят в лог")
+	}
+	var bot usecase.TelegramSender = telegram.NewLog()
+	if cfg.Notify.TelegramBotToken != "" {
+		bot = telegram.New(cfg.Notify.TelegramBotToken)
+	} else {
+		log.Println("WARNING: токен бота не задан — сообщения Санты уходят в лог")
+	}
+	santaUseCase := santaUC.New(santaRepo, userRepo,
+		santaUC.WithMailer(mail), santaUC.WithTelegram(bot, cfg.Notify.TelegramBotUsername))
+	notifyCtx, stopNotify := context.WithCancel(context.Background())
+	defer stopNotify()
+	go santaUC.NewNotifier(santaRepo, mail, bot, cfg.Notify.SantaPublicURL).Run(notifyCtx, 5*time.Second)
 
 	// HTTP server
 	app := fiber.New(fiber.Config{
@@ -112,6 +141,7 @@ func Run(cfg *config.Config) {
 	log.Printf("Server started on :%s", cfg.App.Port)
 	<-quit
 	log.Println("Shutting down server...")
+	stopNotify()
 	if err := app.Shutdown(); err != nil {
 		log.Printf("server shutdown error: %v", err)
 	}

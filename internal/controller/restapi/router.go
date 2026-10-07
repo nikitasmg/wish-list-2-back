@@ -46,6 +46,8 @@ func NewRouter(
 	app.Use(limiter.New(limiter.Config{
 		Max:        10,
 		Expiration: 1 * time.Second,
+		// Вебхук бота защищён секретом; апдейты Telegram идут с немногих IP.
+		Next: func(c *fiber.Ctx) bool { return c.Path() == "/api/v1/telegram/webhook" },
 	}))
 	app.Use(middleware.CookieToHeader())
 
@@ -54,6 +56,6 @@ func NewRouter(
 	})
 
 	// До основного роутера: см. комментарий у NewSantaRouter.
-	v1.NewSantaRouter(app, cfg.Auth.JWTSecret, santaUC)
+	v1.NewSantaRouter(app, cfg.Auth.JWTSecret, cfg.Notify.TelegramWebhookSecret, santaUC)
 	v1.NewRouter(app, cfg.Auth.JWTSecret, cfg.Auth.CookieDomain, cfg.App.Env == "production", userUC, wishlistUC, presentUC, uploadUC, guestDataUC, templateUC)
 }
