@@ -149,6 +149,12 @@ func Run(cfg *config.Config) {
 	// HTTP server
 	app := fiber.New(fiber.Config{
 		BodyLimit: 15 * 1024 * 1024, // 15MB — headroom for multipart overhead
+		// За Traefik адрес соединения — адрес прокси; реальный IP клиента он
+		// кладёт в X-Real-Ip. Заголовку верим только от прокси из частных
+		// сетей (dokploy-network), иначе лимитеры стали бы общими на весь сайт.
+		ProxyHeader:             "X-Real-Ip",
+		EnableTrustedProxyCheck: true,
+		TrustedProxies:          []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"},
 	})
 	restapi.NewRouter(app, cfg, userUseCase, wishlistUseCase, presentUseCase, uploadUseCase, guestDataUseCase, templateUseCase, santaUseCase)
 
