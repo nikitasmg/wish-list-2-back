@@ -19,14 +19,43 @@ const (
 )
 
 type santaUseCase struct {
-	santa   repo.SantaRepo
-	users   repo.UserRepo
-	shuffle shuffleFunc
-	now     func() time.Time
+	santa       repo.SantaRepo
+	users       repo.UserRepo
+	shuffle     shuffleFunc
+	now         func() time.Time
+	mailer      usecase.Mailer
+	tg          usecase.TelegramSender
+	botUsername string
+	emailQuota  *emailQuota
 }
 
-func New(santaRepo repo.SantaRepo, userRepo repo.UserRepo) usecase.SantaUseCase {
-	return &santaUseCase{santa: santaRepo, users: userRepo, shuffle: cryptoShuffle, now: time.Now}
+// Option подключает каналы уведомлений; без них use case работает как на этапе 1.
+type Option func(*santaUseCase)
+
+// WithMailer — почта для кодов. Без него RequestEmailCode отвечает
+// ErrSantaUnavailable: в продакшене без SMTP мейлер не передают, чтобы код
+// не «уходил» в лог с ответом «отправлено».
+func WithMailer(m usecase.Mailer) Option { return func(uc *santaUseCase) { uc.mailer = m } }
+
+// WithTelegram — бот для ответов на /start и ссылок. Пустой botUsername —
+// ссылки не выдаются (ErrSantaUnavailable): его передают пустым и тогда,
+// когда вебхук не зарегистрирован и по ссылке никто не ответит.
+func WithTelegram(tg usecase.TelegramSender, botUsername string) Option {
+	return func(uc *santaUseCase) {
+		uc.tg = tg
+		uc.botUsername = botUsername
+	}
+}
+
+func New(santaRepo repo.SantaRepo, userRepo repo.UserRepo, opts ...Option) usecase.SantaUseCase {
+	uc := &santaUseCase{
+		santa: santaRepo, users: userRepo, shuffle: cryptoShuffle, now: time.Now,
+		emailQuota: newEmailQuota(emailCodesPerHour, emailQuotaWindow),
+	}
+	for _, opt := range opts {
+		opt(uc)
+	}
+	return uc
 }
 
 func (uc *santaUseCase) CreateRoom(ctx context.Context, ownerID uuid.UUID, in usecase.SantaRoomInput) (entity.SantaRoom, error) {
@@ -164,7 +193,7 @@ func (uc *santaUseCase) GetRoom(ctx context.Context, ownerID, roomID uuid.UUID) 
 	views := make([]usecase.SantaParticipantView, len(ps))
 	for i, p := range ps {
 		views[i] = usecase.SantaParticipantView{
-			ID: p.ID, Name: p.Name, HasWishes: p.Wishes != "", HasWishlist: p.WishlistURL != "",
+			ID: p.ID, Name: p.Name, HasWishes: p.Wishes != "", HasWishlist: p.WishlistURL != "", Ready: p.Ready(),
 			IsOwner: p.UserID != nil && *p.UserID == room.OwnerID, CreatedAt: p.CreatedAt,
 		}
 	}

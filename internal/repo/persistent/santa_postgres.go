@@ -31,6 +31,12 @@ func santaErr(op string, err error) error {
 	return fmt.Errorf("%s: %w", op, err)
 }
 
+// isUniqueViolation — нарушен именно этот уникальный индекс.
+func isUniqueViolation(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == constraint
+}
+
 func (r *santaRepo) CreateRoom(ctx context.Context, room entity.SantaRoom) error {
 	m := toSantaRoomModel(room)
 	if err := r.db.WithContext(ctx).Create(&m).Error; err != nil {
@@ -128,8 +134,7 @@ func (r *santaRepo) CreateParticipant(ctx context.Context, p entity.SantaPartici
 		}
 		if err := tx.Create(&m).Error; err != nil {
 			// Параллельное вступление того же аккаунта в ту же комнату.
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "idx_santa_participant_user" {
+			if isUniqueViolation(err, "idx_santa_participant_user") {
 				return fmt.Errorf("santaRepo.CreateParticipant: %w", repo.ErrDuplicate)
 			}
 			return santaErr("santaRepo.CreateParticipant", err)
@@ -196,22 +201,38 @@ func (r *santaRepo) CountParticipants(ctx context.Context, roomIDs []uuid.UUID) 
 	return counts, nil
 }
 
-func (r *santaRepo) UpdateParticipant(ctx context.Context, p entity.SantaParticipant) error {
-	res := r.db.WithContext(ctx).Model(&SantaParticipantModel{}).
-		Where("id = ?", p.ID).
-		Updates(map[string]any{
-			"name":         p.Name,
-			"wishes":       p.Wishes,
-			"wishlist_url": p.WishlistURL,
-			"updated_at":   time.Now(),
-		})
-	if res.Error != nil {
-		return santaErr("santaRepo.UpdateParticipant", res.Error)
-	}
-	if res.RowsAffected == 0 {
-		return fmt.Errorf("santaRepo.UpdateParticipant: %w", repo.ErrNotFound)
-	}
-	return nil
+func (r *santaRepo) UpdateParticipant(ctx context.Context, p entity.SantaParticipant, notes ...entity.SantaNotification) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&SantaParticipantModel{}).
+			Where("id = ?", p.ID).
+			Updates(map[string]any{
+				"name":         p.Name,
+				"wishes":       p.Wishes,
+				"wishlist_url": p.WishlistURL,
+				"updated_at":   time.Now(),
+			})
+		if res.Error != nil {
+			return santaErr("santaRepo.UpdateParticipant", res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return fmt.Errorf("santaRepo.UpdateParticipant: %w", repo.ErrNotFound)
+		}
+		// «Пожелания обновились» схлопываются: несданное старое стираем, кладём
+		// одно новое. Стираем любое pending этого вида — и ждущее повтора, и
+		// взятое обработчиком в работу: тот при отметке увидит 0 строк, а Санта
+		// всё равно получит свежее сообщение о последней правке.
+		for _, n := range notes {
+			if n.Kind != entity.SantaNotifyWishesUpdated {
+				continue
+			}
+			if err := tx.Where("participant_id = ? AND kind = ? AND status = ?",
+				n.ParticipantID, string(n.Kind), string(entity.SantaNotificationPending)).
+				Delete(&SantaNotificationModel{}).Error; err != nil {
+				return santaErr("santaRepo.UpdateParticipant collapse", err)
+			}
+		}
+		return insertNotifications(tx, notes...)
+	})
 }
 
 func (r *santaRepo) DeleteParticipant(ctx context.Context, id uuid.UUID) error {
@@ -242,7 +263,18 @@ func (r *santaRepo) GetAssignment(ctx context.Context, roomID, giverID uuid.UUID
 	return entity.SantaAssignment{RoomID: m.RoomID, GiverID: m.GiverID, ReceiverID: m.ReceiverID}, nil
 }
 
-func (r *santaRepo) Draw(ctx context.Context, roomID uuid.UUID, expected entity.SantaRoomStatus, build func([]uuid.UUID) ([]entity.SantaAssignment, error)) error {
+// santaReadySQL — тот же «готов», что entity.SantaParticipant.Ready(); меняются вместе.
+const santaReadySQL = "((channel = 'email' AND email IS NOT NULL AND email_verified_at IS NOT NULL) OR (channel = 'telegram' AND tg_chat_id IS NOT NULL))"
+
+func (r *santaRepo) GetGiver(ctx context.Context, roomID, receiverID uuid.UUID) (entity.SantaAssignment, error) {
+	var m SantaAssignmentModel
+	if err := r.db.WithContext(ctx).First(&m, "room_id = ? AND receiver_id = ?", roomID, receiverID).Error; err != nil {
+		return entity.SantaAssignment{}, santaErr("santaRepo.GetGiver", err)
+	}
+	return entity.SantaAssignment{RoomID: m.RoomID, GiverID: m.GiverID, ReceiverID: m.ReceiverID}, nil
+}
+
+func (r *santaRepo) Draw(ctx context.Context, roomID uuid.UUID, expected entity.SantaRoomStatus, build func([]uuid.UUID) ([]entity.SantaAssignment, error), note func(giverID uuid.UUID) entity.SantaNotification) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// FOR UPDATE: два одновременных нажатия «Жеребьёвка» выстраиваются в
 		// очередь, и второе видит уже drawn.
@@ -256,9 +288,17 @@ func (r *santaRepo) Draw(ctx context.Context, roomID uuid.UUID, expected entity.
 		if err := tx.Where("room_id = ?", roomID).Delete(&SantaAssignmentModel{}).Error; err != nil {
 			return santaErr("santaRepo.Draw clear", err)
 		}
+		// Несданные «кому дарить» от прошлой жеребьёвки больше не правда.
+		members := tx.Model(&SantaParticipantModel{}).Select("id").Where("room_id = ?", roomID)
+		if err := tx.Where("status = ? AND kind = ? AND participant_id IN (?)",
+			string(entity.SantaNotificationPending), string(entity.SantaNotifyDrawn), members).
+			Delete(&SantaNotificationModel{}).Error; err != nil {
+			return santaErr("santaRepo.Draw clear notes", err)
+		}
 		var ids []uuid.UUID
 		if err := tx.Model(&SantaParticipantModel{}).
 			Where("room_id = ?", roomID).
+			Where(santaReadySQL).
 			Order("created_at, id").
 			Pluck("id", &ids).Error; err != nil {
 			return santaErr("santaRepo.Draw participants", err)
@@ -268,13 +308,18 @@ func (r *santaRepo) Draw(ctx context.Context, roomID uuid.UUID, expected entity.
 			return err
 		}
 		models := make([]SantaAssignmentModel, len(pairs))
+		notes := make([]entity.SantaNotification, len(pairs))
 		for i, p := range pairs {
 			models[i] = SantaAssignmentModel{RoomID: p.RoomID, GiverID: p.GiverID, ReceiverID: p.ReceiverID}
+			notes[i] = note(p.GiverID)
 		}
 		if len(models) > 0 {
 			if err := tx.Create(&models).Error; err != nil {
 				return santaErr("santaRepo.Draw insert", err)
 			}
+		}
+		if err := insertNotifications(tx, notes...); err != nil {
+			return err
 		}
 		now := time.Now()
 		if err := tx.Model(&SantaRoomModel{}).Where("id = ?", roomID).Updates(map[string]any{

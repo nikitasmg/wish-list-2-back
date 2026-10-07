@@ -9,10 +9,26 @@ import (
 )
 
 type Config struct {
-	App   AppConfig
-	DB    DBConfig
-	Auth  AuthConfig
-	Minio MinioConfig
+	App    AppConfig
+	DB     DBConfig
+	Auth   AuthConfig
+	Minio  MinioConfig
+	Notify NotifyConfig
+}
+
+// NotifyConfig — уведомления Тайного Санты.
+type NotifyConfig struct {
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUser     string
+	SMTPPassword string
+	MailFrom     string
+	// TelegramBotToken — SANTA_BOT_TOKEN, по умолчанию бот входа BOT_TOKEN.
+	TelegramBotToken      string
+	TelegramBotUsername   string
+	TelegramWebhookSecret string
+	// SantaPublicURL — адрес поддомена для ссылок в письмах и сообщениях.
+	SantaPublicURL string
 }
 
 type AppConfig struct {
@@ -75,6 +91,17 @@ func LoadConfig() (*Config, error) {
 			RootPassword: getEnv("MINIO_ROOT_PASSWORD", "minio_password"),
 			UseSSL:       getEnvAsBool("MINIO_USE_SSL", false),
 		},
+		Notify: NotifyConfig{
+			SMTPHost:              getEnv("SMTP_HOST", ""),
+			SMTPPort:              getEnvAsInt("SMTP_PORT", 587),
+			SMTPUser:              getEnv("SMTP_USER", ""),
+			SMTPPassword:          getEnv("SMTP_PASSWORD", ""),
+			MailFrom:              getEnv("MAIL_FROM", "Тайный Санта <santa@prosto-namekni.ru>"),
+			TelegramBotToken:      getEnvNonEmpty("SANTA_BOT_TOKEN", getEnv("BOT_TOKEN", "")),
+			TelegramBotUsername:   getEnv("BOT_USERNAME", ""),
+			TelegramWebhookSecret: getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
+			SantaPublicURL:        getEnv("SANTA_PUBLIC_URL", "https://santa.prosto-namekni.ru"),
+		},
 	}
 
 	if cfg.Auth.JWTSecret == "" {
@@ -91,11 +118,29 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
+func getEnvAsInt(key string, defaultValue int) int {
+	if valueStr := getEnv(key, ""); valueStr != "" {
+		if value, err := strconv.Atoi(valueStr); err == nil {
+			return value
+		}
+	}
+	return defaultValue
+}
+
 func getEnvAsBool(key string, defaultValue bool) bool {
 	if valueStr := getEnv(key, ""); valueStr != "" {
 		if value, err := strconv.ParseBool(valueStr); err == nil {
 			return value
 		}
+	}
+	return defaultValue
+}
+
+// getEnvNonEmpty — как getEnv, но пустое значение тоже считается незаданным
+// (env_file и .env.example оставляют переменные пустыми).
+func getEnvNonEmpty(key, defaultValue string) string {
+	if value := getEnv(key, ""); value != "" {
+		return value
 	}
 	return defaultValue
 }

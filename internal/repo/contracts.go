@@ -117,6 +117,9 @@ var ErrDuplicate = errors.New("duplicate")
 // ErrStatusMismatch — комната не в том статусе, которого ждал вызов.
 var ErrStatusMismatch = errors.New("status mismatch")
 
+// ErrTooSoon — повтор раньше разрешённого (напоминание организатора).
+var ErrTooSoon = errors.New("too soon")
+
 type SantaRepo interface {
 	CreateRoom(ctx context.Context, room entity.SantaRoom) error
 	GetRoomByID(ctx context.Context, id uuid.UUID) (entity.SantaRoom, error)
@@ -138,15 +141,57 @@ type SantaRepo interface {
 	// ListParticipants — в порядке вступления.
 	ListParticipants(ctx context.Context, roomID uuid.UUID) ([]entity.SantaParticipant, error)
 	CountParticipants(ctx context.Context, roomIDs []uuid.UUID) (map[uuid.UUID]int, error)
-	UpdateParticipant(ctx context.Context, p entity.SantaParticipant) error
+	// UpdateParticipant пишет имя/пожелания/вишлист и кладёт notes в очередь —
+	// одной транзакцией. Несданные (pending) wishes_updated того же получателя
+	// стираются: Санта получит одно сообщение о последней правке.
+	UpdateParticipant(ctx context.Context, p entity.SantaParticipant, notes ...entity.SantaNotification) error
 	// DeleteParticipant под блокировкой комнаты: не open — ErrStatusMismatch,
 	// участника нет — ErrNotFound.
 	DeleteParticipant(ctx context.Context, id uuid.UUID) error
 
+	// Каналы уведомлений.
+	// SetEmail ставит новый адрес (подтверждение сбрасывается) и кладёт код —
+	// одной транзакцией. Адрес уже у другого участника комнаты — ErrDuplicate;
+	// участника нет — ErrNotFound.
+	SetEmail(ctx context.Context, participantID uuid.UUID, email string, code entity.SantaEmailCode) error
+	GetEmailCode(ctx context.Context, participantID uuid.UUID) (entity.SantaEmailCode, error)
+	// IncEmailCodeAttempts атомарно занимает попытку проверки кода: attempts+1,
+	// пока attempts < max. false — попыток не осталось или кода нет.
+	IncEmailCodeAttempts(ctx context.Context, participantID uuid.UUID, max int) (bool, error)
+	DeleteEmailCode(ctx context.Context, participantID uuid.UUID) error
+	// VerifyEmail: адрес подтверждён, канал — почта, код стёрт, приветствие в
+	// очереди — одной транзакцией. Код стирается по codeHash: если за это время
+	// код заменён (другой адрес) или стёрт — ErrNotFound, ничего не меняется.
+	VerifyEmail(ctx context.Context, participantID uuid.UUID, codeHash string, at time.Time, welcome entity.SantaNotification) error
+	CreateTgLink(ctx context.Context, link entity.SantaTgLink) error
+	// LinkTelegram по одноразовой ссылке: чат записан, канал — Telegram,
+	// ссылки участника стёрты, приветствие в очереди. Ссылки нет или она
+	// истекла — ErrNotFound.
+	LinkTelegram(ctx context.Context, tokenHash string, chatID int64, now time.Time, welcome func(entity.SantaParticipant) entity.SantaNotification) (entity.SantaParticipant, error)
+
 	GetAssignment(ctx context.Context, roomID, giverID uuid.UUID) (entity.SantaAssignment, error)
+	// GetGiver — кто дарит receiverID; пар нет — ErrNotFound.
+	GetGiver(ctx context.Context, roomID, receiverID uuid.UUID) (entity.SantaAssignment, error)
 	// Draw в одной транзакции: блокирует комнату, проверяет статус expected
-	// (иначе ErrStatusMismatch), стирает старые пары, отдаёт build id
-	// участников в порядке вступления, пишет пары и ставит status=drawn.
-	// Ошибка build откатывает всё и возвращается как есть.
-	Draw(ctx context.Context, roomID uuid.UUID, expected entity.SantaRoomStatus, build func(ids []uuid.UUID) ([]entity.SantaAssignment, error)) error
+	// (иначе ErrStatusMismatch), стирает старые пары и несданные уведомления
+	// drawn участников комнаты, отдаёт build id ГОТОВЫХ участников (канал
+	// подтверждён) в порядке вступления, пишет пары, кладёт note каждому
+	// дарящему и ставит status=drawn. Ошибка build откатывает всё и
+	// возвращается как есть.
+	Draw(ctx context.Context, roomID uuid.UUID, expected entity.SantaRoomStatus, build func(ids []uuid.UUID) ([]entity.SantaAssignment, error), note func(giverID uuid.UUID) entity.SantaNotification) error
+	// Remind под блокировкой комнаты: напоминали позже now-cooldown —
+	// ErrTooSoon; иначе ставит last_reminded_at=now и кладёт notes.
+	Remind(ctx context.Context, roomID uuid.UUID, now time.Time, cooldown time.Duration, notes []entity.SantaNotification) error
+
+	// Outbox.
+	// ClaimNotifications берёт до limit созревших pending-уведомлений
+	// (FOR UPDATE SKIP LOCKED) и сдвигает им next_try_at на now+lease: второй
+	// обработчик их не возьмёт, а упавший — отдаст через lease.
+	ClaimNotifications(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]entity.SantaNotification, error)
+	// MarkNotificationSent/Failed меняют только pending-уведомление; уже
+	// отмеченное или стёртое — ErrNotFound.
+	MarkNotificationSent(ctx context.Context, id uuid.UUID) error
+	// MarkNotificationFailed: retryAt == nil — окончательно failed, иначе
+	// снова pending к retryAt.
+	MarkNotificationFailed(ctx context.Context, id uuid.UUID, attempts int, retryAt *time.Time, lastErr string) error
 }

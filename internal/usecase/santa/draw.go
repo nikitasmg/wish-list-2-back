@@ -26,8 +26,11 @@ func (uc *santaUseCase) draw(ctx context.Context, ownerID, roomID uuid.UUID, exp
 	if err != nil {
 		return err
 	}
+	now := uc.now()
 	err = uc.santa.Draw(ctx, room.ID, expected, func(ids []uuid.UUID) ([]entity.SantaAssignment, error) {
 		return buildCycle(room.ID, ids, uc.shuffle)
+	}, func(giverID uuid.UUID) entity.SantaNotification {
+		return entity.NewSantaNotification(giverID, entity.SantaNotifyDrawn, now)
 	})
 	if errors.Is(err, repo.ErrStatusMismatch) {
 		return wrongStatus

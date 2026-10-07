@@ -90,7 +90,10 @@ func (uc *santaUseCase) me(ctx context.Context, room entity.SantaRoom, p entity.
 	if err != nil {
 		return usecase.SantaMe{}, err
 	}
-	me := usecase.SantaMe{ParticipantID: p.ID, Name: p.Name, Wishes: p.Wishes, WishlistURL: p.WishlistURL, Room: inv}
+	me := usecase.SantaMe{
+		ParticipantID: p.ID, Name: p.Name, Wishes: p.Wishes, WishlistURL: p.WishlistURL, Room: inv,
+		Notify: notifyView(p),
+	}
 	if room.Status != entity.SantaRoomDrawn {
 		return me, nil
 	}
@@ -185,6 +188,7 @@ func (uc *santaUseCase) Join(ctx context.Context, slug string, auth usecase.Sant
 		log.Printf("santa: join: me: %v", err)
 		me = usecase.SantaMe{
 			ParticipantID: p.ID, Name: p.Name, Wishes: p.Wishes, WishlistURL: p.WishlistURL,
+			Notify: notifyView(p),
 			Room: usecase.SantaInvite{
 				Slug: room.Slug, Title: room.Title, Budget: room.Budget, ExchangeDate: room.ExchangeDate,
 				DrawAt: room.DrawAt, Message: room.Message, Status: room.Status, DrawnAt: room.DrawnAt,
@@ -222,11 +226,23 @@ func (uc *santaUseCase) UpdateMe(ctx context.Context, slug string, auth usecase.
 	if room.Status != entity.SantaRoomOpen && in.Name != p.Name {
 		return usecase.SantaMe{}, usecase.ErrSantaDrawn
 	}
+	changed := p.Wishes != in.Wishes || p.WishlistURL != in.WishlistURL
 	p.Name = in.Name
 	p.Wishes = in.Wishes
 	p.WishlistURL = in.WishlistURL
 	p.UpdatedAt = uc.now()
-	if err := uc.santa.UpdateParticipant(ctx, p); err != nil {
+
+	var notes []entity.SantaNotification
+	if room.Status == entity.SantaRoomDrawn && changed {
+		a, err := uc.santa.GetGiver(ctx, room.ID, p.ID)
+		switch {
+		case err == nil:
+			notes = append(notes, entity.NewSantaNotification(a.GiverID, entity.SantaNotifyWishesUpdated, p.UpdatedAt))
+		case !errors.Is(err, repo.ErrNotFound):
+			return usecase.SantaMe{}, err
+		}
+	}
+	if err := uc.santa.UpdateParticipant(ctx, p, notes...); err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
 			return usecase.SantaMe{}, usecase.ErrSantaNotFound
 		}
@@ -249,4 +265,15 @@ func (uc *santaUseCase) LeaveMe(ctx context.Context, slug string, auth usecase.S
 	}
 	// Жеребьёвка могла пройти между проверкой и удалением.
 	return mapRoomWriteErr(uc.santa.DeleteParticipant(ctx, p.ID))
+}
+
+func notifyView(p entity.SantaParticipant) usecase.SantaNotifyView {
+	return usecase.SantaNotifyView{
+		Channel:       p.Channel,
+		Email:         p.Email,
+		EmailVerified: p.Email != "" && p.EmailVerifiedAt != nil,
+		EmailPending:  p.Email != "" && p.EmailVerifiedAt == nil,
+		Telegram:      p.TgChatID != nil,
+		Ready:         p.Ready(),
+	}
 }

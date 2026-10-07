@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -24,6 +25,9 @@ func setupSantaDB(t *testing.T) *gorm.DB {
 		&persistent.SantaRoomModel{},
 		&persistent.SantaParticipantModel{},
 		&persistent.SantaAssignmentModel{},
+		&persistent.SantaEmailCodeModel{},
+		&persistent.SantaTgLinkModel{},
+		&persistent.SantaNotificationModel{},
 	))
 	return db
 }
@@ -38,11 +42,32 @@ func seedRoom(t *testing.T, r repo.SantaRepo, owner uuid.UUID) entity.SantaRoom 
 	return room
 }
 
+var chatSeq int64 = 1000
+
+// seedParticipants — готовые участники (подтверждён Telegram): с этапа 2 в
+// жеребьёвку попадают только такие.
 func seedParticipants(t *testing.T, r repo.SantaRepo, roomID uuid.UUID, n int) []uuid.UUID {
 	t.Helper()
 	ids := make([]uuid.UUID, n)
 	for i := range ids {
-		p := entity.SantaParticipant{ID: uuid.New(), RoomID: roomID, Name: "Участник", TokenHash: uuid.NewString()}
+		chatSeq++
+		chat := chatSeq
+		p := entity.SantaParticipant{
+			ID: uuid.New(), RoomID: roomID, Name: "Участник", TokenHash: uuid.NewString(),
+			Channel: entity.SantaChannelTelegram, TgChatID: &chat,
+		}
+		require.NoError(t, r.CreateParticipant(context.Background(), p))
+		ids[i] = p.ID
+	}
+	return ids
+}
+
+// seedUnready — участники без подтверждённого канала.
+func seedUnready(t *testing.T, r repo.SantaRepo, roomID uuid.UUID, n int) []uuid.UUID {
+	t.Helper()
+	ids := make([]uuid.UUID, n)
+	for i := range ids {
+		p := entity.SantaParticipant{ID: uuid.New(), RoomID: roomID, Name: "Без канала", TokenHash: uuid.NewString()}
 		require.NoError(t, r.CreateParticipant(context.Background(), p))
 		ids[i] = p.ID
 	}
@@ -69,7 +94,7 @@ func TestSantaRepo_DrawWritesCycleAndLocksStatus(t *testing.T) {
 	err := r.Draw(ctx, room.ID, entity.SantaRoomOpen, func(in []uuid.UUID) ([]entity.SantaAssignment, error) {
 		got = in
 		return circle(room.ID)(in)
-	})
+	}, noNote)
 	require.NoError(t, err)
 	assert.Equal(t, ids, got, "участники приходят в порядке вступления")
 
@@ -83,7 +108,7 @@ func TestSantaRepo_DrawWritesCycleAndLocksStatus(t *testing.T) {
 	assert.Equal(t, ids[1], a.ReceiverID)
 
 	// Вторая жеребьёвка с ожиданием open — отказ, пары прежние.
-	err = r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID))
+	err = r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID), noNote)
 	assert.ErrorIs(t, err, repo.ErrStatusMismatch)
 
 	a, err = r.GetAssignment(ctx, room.ID, ids[0])
@@ -96,7 +121,7 @@ func TestSantaRepo_RedrawReplacesPairs(t *testing.T) {
 	r := persistent.NewSantaRepo(setupSantaDB(t))
 	room := seedRoom(t, r, uuid.New())
 	ids := seedParticipants(t, r, room.ID, 3)
-	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID)))
+	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID), noNote))
 
 	reversed := func(in []uuid.UUID) ([]entity.SantaAssignment, error) {
 		out := make([]entity.SantaAssignment, len(in))
@@ -105,7 +130,7 @@ func TestSantaRepo_RedrawReplacesPairs(t *testing.T) {
 		}
 		return out, nil
 	}
-	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomDrawn, reversed))
+	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomDrawn, reversed, noNote))
 
 	a, err := r.GetAssignment(ctx, room.ID, ids[0])
 	require.NoError(t, err)
@@ -121,7 +146,7 @@ func TestSantaRepo_DrawRollsBackOnBuildError(t *testing.T) {
 	boom := errors.New("boom")
 	err := r.Draw(ctx, room.ID, entity.SantaRoomOpen, func([]uuid.UUID) ([]entity.SantaAssignment, error) {
 		return nil, boom
-	})
+	}, noNote)
 	assert.ErrorIs(t, err, boom)
 
 	saved, err := r.GetRoomByID(ctx, room.ID)
@@ -196,7 +221,7 @@ func TestSantaRepo_DeleteRoomRemovesEverything(t *testing.T) {
 	r := persistent.NewSantaRepo(setupSantaDB(t))
 	room := seedRoom(t, r, uuid.New())
 	ids := seedParticipants(t, r, room.ID, 3)
-	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID)))
+	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID), noNote))
 
 	require.NoError(t, r.DeleteRoom(ctx, room.ID))
 
@@ -228,7 +253,7 @@ func TestSantaRepo_UpdateRoomRejectedWhenDrawn(t *testing.T) {
 	r := persistent.NewSantaRepo(setupSantaDB(t))
 	room := seedRoom(t, r, uuid.New())
 	seedParticipants(t, r, room.ID, 2)
-	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID)))
+	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID), noNote))
 
 	room.Title = "Поздно"
 	assert.ErrorIs(t, r.UpdateRoom(ctx, room), repo.ErrStatusMismatch)
@@ -268,7 +293,7 @@ func TestSantaRepo_DeleteRoomCascadesAssignments(t *testing.T) {
 	r := persistent.NewSantaRepo(db)
 	room := seedRoom(t, r, uuid.New())
 	seedParticipants(t, r, room.ID, 3)
-	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID)))
+	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID), noNote))
 
 	require.NoError(t, r.DeleteRoom(ctx, room.ID))
 
@@ -284,7 +309,7 @@ func TestSantaRepo_ParticipantsFrozenAfterDraw(t *testing.T) {
 	r := persistent.NewSantaRepo(setupSantaDB(t))
 	room := seedRoom(t, r, uuid.New())
 	ids := seedParticipants(t, r, room.ID, 3)
-	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID)))
+	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID), noNote))
 
 	late := entity.SantaParticipant{ID: uuid.New(), RoomID: room.ID, Name: "Поздно", TokenHash: uuid.NewString()}
 	assert.ErrorIs(t, r.CreateParticipant(ctx, late), repo.ErrStatusMismatch)
@@ -293,4 +318,9 @@ func TestSantaRepo_ParticipantsFrozenAfterDraw(t *testing.T) {
 	list, err := r.ListParticipants(ctx, room.ID)
 	require.NoError(t, err)
 	assert.Len(t, list, 3)
+}
+
+// noNote — уведомление-пустышка для тестов жеребьёвки.
+func noNote(giverID uuid.UUID) entity.SantaNotification {
+	return entity.NewSantaNotification(giverID, entity.SantaNotifyDrawn, time.Now())
 }

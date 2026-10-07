@@ -177,7 +177,7 @@ func TestUpdateMe_RenameAfterDrawIsClosed(t *testing.T) {
 	_, err := uc.UpdateMe(ctx, room.Slug, usecase.SantaAuth{Token: "tok"}, usecase.SantaProfileInput{Name: "Тёма"})
 
 	assert.ErrorIs(t, err, usecase.ErrSantaDrawn)
-	sr.AssertNotCalled(t, "UpdateParticipant", mock.Anything, mock.Anything)
+	sr.AssertNotCalled(t, "UpdateParticipant", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestUpdateMe_WishesAfterDrawAreSaved(t *testing.T) {
@@ -188,10 +188,11 @@ func TestUpdateMe_WishesAfterDrawAreSaved(t *testing.T) {
 	sr.On("GetParticipantByToken", mock.Anything, room.ID, mock.Anything).Return(p, nil)
 	sr.On("UpdateParticipant", mock.Anything, mock.MatchedBy(func(u entity.SantaParticipant) bool {
 		return u.Wishes == "кофе" && u.Name == "Артём"
-	})).Return(nil)
+	}), mock.Anything).Return(nil)
 	sr.On("CountParticipants", mock.Anything, mock.Anything).Return(map[uuid.UUID]int{}, nil)
 	ur.On("GetByID", mock.Anything, mock.Anything).Return(entity.User{}, nil)
 	sr.On("GetAssignment", mock.Anything, room.ID, p.ID).Return(entity.SantaAssignment{}, repo.ErrNotFound)
+	sr.On("GetGiver", mock.Anything, mock.Anything, mock.Anything).Return(entity.SantaAssignment{}, repo.ErrNotFound)
 
 	_, err := uc.UpdateMe(ctx, room.Slug, usecase.SantaAuth{Token: "tok"}, usecase.SantaProfileInput{Name: "Артём", Wishes: "кофе"})
 
@@ -293,7 +294,7 @@ func TestUpdateMe_VanishedParticipantIsNotFound(t *testing.T) {
 	p := entity.SantaParticipant{ID: uuid.New(), RoomID: room.ID, Name: "Маша"}
 	sr.On("GetRoomBySlug", mock.Anything, room.Slug).Return(room, nil)
 	sr.On("GetParticipantByToken", mock.Anything, room.ID, mock.Anything).Return(p, nil)
-	sr.On("UpdateParticipant", mock.Anything, mock.Anything).Return(repo.ErrNotFound)
+	sr.On("UpdateParticipant", mock.Anything, mock.Anything, mock.Anything).Return(repo.ErrNotFound)
 
 	_, err := uc.UpdateMe(ctx, room.Slug, usecase.SantaAuth{Token: "tok"}, usecase.SantaProfileInput{Name: "Маша", Wishes: "чай"})
 
@@ -397,4 +398,42 @@ func TestGetInvite_ExposesDrawnAt(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, inv.DrawnAt)
 	assert.True(t, at.Equal(*inv.DrawnAt))
+}
+
+func TestUpdateMe_AfterDrawNotifiesSanta(t *testing.T) {
+	sr, ur, uc := newUC()
+	room := drawnRoom(uuid.New())
+	p := entity.SantaParticipant{ID: uuid.New(), RoomID: room.ID, Name: "Аня", Wishes: "старое"}
+	santaID := uuid.New()
+	sr.On("GetRoomBySlug", mock.Anything, room.Slug).Return(room, nil)
+	sr.On("GetParticipantByToken", mock.Anything, room.ID, mock.Anything).Return(p, nil)
+	sr.On("GetGiver", mock.Anything, room.ID, p.ID).Return(entity.SantaAssignment{RoomID: room.ID, GiverID: santaID, ReceiverID: p.ID}, nil)
+	sr.On("UpdateParticipant", mock.Anything, mock.Anything, mock.MatchedBy(func(ns []entity.SantaNotification) bool {
+		return len(ns) == 1 && ns[0].ParticipantID == santaID && ns[0].Kind == entity.SantaNotifyWishesUpdated
+	})).Return(nil)
+	sr.On("CountParticipants", mock.Anything, mock.Anything).Return(map[uuid.UUID]int{}, nil)
+	sr.On("GetAssignment", mock.Anything, room.ID, p.ID).Return(entity.SantaAssignment{}, repo.ErrNotFound)
+	ur.On("GetByID", mock.Anything, mock.Anything).Return(entity.User{}, nil)
+
+	_, err := uc.UpdateMe(ctx, room.Slug, usecase.SantaAuth{Token: "tok"}, usecase.SantaProfileInput{Name: "Аня", Wishes: "новое"})
+
+	require.NoError(t, err)
+	sr.AssertExpectations(t)
+}
+
+func TestUpdateMe_AfterDrawSameWishesNoNotify(t *testing.T) {
+	sr, ur, uc := newUC()
+	room := drawnRoom(uuid.New())
+	p := entity.SantaParticipant{ID: uuid.New(), RoomID: room.ID, Name: "Аня", Wishes: "то же"}
+	sr.On("GetRoomBySlug", mock.Anything, room.Slug).Return(room, nil)
+	sr.On("GetParticipantByToken", mock.Anything, room.ID, mock.Anything).Return(p, nil)
+	sr.On("UpdateParticipant", mock.Anything, mock.Anything, []entity.SantaNotification(nil)).Return(nil)
+	sr.On("CountParticipants", mock.Anything, mock.Anything).Return(map[uuid.UUID]int{}, nil)
+	sr.On("GetAssignment", mock.Anything, room.ID, p.ID).Return(entity.SantaAssignment{}, repo.ErrNotFound)
+	ur.On("GetByID", mock.Anything, mock.Anything).Return(entity.User{}, nil)
+
+	_, err := uc.UpdateMe(ctx, room.Slug, usecase.SantaAuth{Token: "tok"}, usecase.SantaProfileInput{Name: "Аня", Wishes: "то же"})
+
+	require.NoError(t, err)
+	sr.AssertNotCalled(t, "GetGiver", mock.Anything, mock.Anything, mock.Anything)
 }

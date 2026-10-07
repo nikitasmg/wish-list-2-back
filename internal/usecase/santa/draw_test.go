@@ -23,7 +23,7 @@ func TestDraw_StrangerIsNotFound(t *testing.T) {
 	err := uc.Draw(ctx, uuid.New(), room.ID)
 
 	assert.ErrorIs(t, err, usecase.ErrSantaNotFound)
-	sr.AssertNotCalled(t, "Draw", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	sr.AssertNotCalled(t, "Draw", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestDraw_BuildsOneCircle(t *testing.T) {
@@ -32,8 +32,13 @@ func TestDraw_BuildsOneCircle(t *testing.T) {
 	room := openRoom(owner)
 	var build buildFunc
 	sr.On("GetRoomByID", mock.Anything, room.ID).Return(room, nil)
-	sr.On("Draw", mock.Anything, room.ID, entity.SantaRoomOpen, mock.Anything).Run(func(args mock.Arguments) {
+	sr.On("Draw", mock.Anything, room.ID, entity.SantaRoomOpen, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		build = args.Get(3).(buildFunc)
+		note := args.Get(4).(func(uuid.UUID) entity.SantaNotification)
+		giver := uuid.New()
+		n := note(giver)
+		assert.Equal(t, giver, n.ParticipantID)
+		assert.Equal(t, entity.SantaNotifyDrawn, n.Kind)
 	}).Return(nil)
 
 	require.NoError(t, uc.Draw(ctx, owner, room.ID))
@@ -56,7 +61,7 @@ func TestDraw_SecondCallIsConflict(t *testing.T) {
 	owner := uuid.New()
 	room := openRoom(owner)
 	sr.On("GetRoomByID", mock.Anything, room.ID).Return(room, nil)
-	sr.On("Draw", mock.Anything, room.ID, entity.SantaRoomOpen, mock.Anything).Return(repo.ErrStatusMismatch)
+	sr.On("Draw", mock.Anything, room.ID, entity.SantaRoomOpen, mock.Anything, mock.Anything).Return(repo.ErrStatusMismatch)
 
 	err := uc.Draw(ctx, owner, room.ID)
 
@@ -68,7 +73,7 @@ func TestRedraw_BeforeDrawIsConflict(t *testing.T) {
 	owner := uuid.New()
 	room := openRoom(owner)
 	sr.On("GetRoomByID", mock.Anything, room.ID).Return(room, nil)
-	sr.On("Draw", mock.Anything, room.ID, entity.SantaRoomDrawn, mock.Anything).Return(repo.ErrStatusMismatch)
+	sr.On("Draw", mock.Anything, room.ID, entity.SantaRoomDrawn, mock.Anything, mock.Anything).Return(repo.ErrStatusMismatch)
 
 	err := uc.Redraw(ctx, owner, room.ID)
 

@@ -26,12 +26,14 @@ type SantaRoom struct {
 	Budget       *int       `json:"budget"`
 	ExchangeDate *time.Time `json:"exchangeDate"`
 	// DrawAt хранится с этапа 1, срабатывает с этапа 3.
-	DrawAt    *time.Time      `json:"drawAt"`
-	Message   string          `json:"message"`
-	Status    SantaRoomStatus `json:"status"`
-	DrawnAt   *time.Time      `json:"drawnAt"`
-	CreatedAt time.Time       `json:"createdAt"`
-	UpdatedAt time.Time       `json:"updatedAt"`
+	DrawAt  *time.Time      `json:"drawAt"`
+	Message string          `json:"message"`
+	Status  SantaRoomStatus `json:"status"`
+	DrawnAt *time.Time      `json:"drawnAt"`
+	// LastRemindedAt — когда организатор последний раз нажал «Напомнить».
+	LastRemindedAt *time.Time `json:"lastRemindedAt"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
 type SantaParticipant struct {
@@ -45,8 +47,14 @@ type SantaParticipant struct {
 	// TokenHash — sha256 секрета из личной ссылки. Сам секрет не хранится.
 	TokenHash string
 	GiftReady bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	// Channel — куда приходят уведомления; пусто — канал не выбран.
+	Channel SantaChannel
+	// Email в нижнем регистре; пусто — адреса нет.
+	Email           string
+	EmailVerifiedAt *time.Time
+	TgChatID        *int64
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 // SantaAssignment — «GiverID дарит ReceiverID».
@@ -54,4 +62,84 @@ type SantaAssignment struct {
 	RoomID     uuid.UUID
 	GiverID    uuid.UUID
 	ReceiverID uuid.UUID
+}
+
+// SantaChannel — куда участнику приходят уведомления.
+type SantaChannel string
+
+const (
+	SantaChannelNone     SantaChannel = ""
+	SantaChannelEmail    SantaChannel = "email"
+	SantaChannelTelegram SantaChannel = "telegram"
+)
+
+// Ready — канал подтверждён: только такие участники попадают в жеребьёвку.
+// То же условие в SQL — santaReadySQL в репозитории; меняются вместе.
+func (p SantaParticipant) Ready() bool {
+	switch p.Channel {
+	case SantaChannelEmail:
+		return p.Email != "" && p.EmailVerifiedAt != nil
+	case SantaChannelTelegram:
+		return p.TgChatID != nil
+	}
+	return false
+}
+
+// SantaEmailCode — код подтверждения почты. Сам код не хранится, только хэш.
+type SantaEmailCode struct {
+	ParticipantID uuid.UUID
+	CodeHash      string
+	ExpiresAt     time.Time
+	Attempts      int
+	SentAt        time.Time
+}
+
+// SantaTgLink — одноразовая ссылка t.me/<бот>?start=<токен>; хранится хэш токена.
+type SantaTgLink struct {
+	TokenHash     string
+	ParticipantID uuid.UUID
+	ExpiresAt     time.Time
+}
+
+type SantaNotificationKind string
+
+const (
+	// SantaNotifyWelcome — канал подтверждён.
+	SantaNotifyWelcome SantaNotificationKind = "welcome"
+	// SantaNotifyDrawn — жеребьёвка или перезапуск: кому дарить.
+	SantaNotifyDrawn SantaNotificationKind = "drawn"
+	// SantaNotifyReminderFill — организатор просит заполнить пожелания.
+	SantaNotifyReminderFill SantaNotificationKind = "reminder_fill"
+	// SantaNotifyWishesUpdated — подопечный поменял пожелания после жеребьёвки.
+	SantaNotifyWishesUpdated SantaNotificationKind = "wishes_updated"
+)
+
+type SantaNotificationStatus string
+
+const (
+	SantaNotificationPending SantaNotificationStatus = "pending"
+	SantaNotificationSent    SantaNotificationStatus = "sent"
+	SantaNotificationFailed  SantaNotificationStatus = "failed"
+)
+
+// SantaNotification — запись outbox. Текст собирается при отправке из
+// текущего состояния базы, поэтому Payload пока пустой — место на будущее.
+type SantaNotification struct {
+	ID            uuid.UUID
+	ParticipantID uuid.UUID
+	Kind          SantaNotificationKind
+	Payload       map[string]string
+	Status        SantaNotificationStatus
+	Attempts      int
+	NextTryAt     time.Time
+	LastError     string
+	CreatedAt     time.Time
+}
+
+// NewSantaNotification — уведомление в очередь «отправить сейчас».
+func NewSantaNotification(participantID uuid.UUID, kind SantaNotificationKind, now time.Time) SantaNotification {
+	return SantaNotification{
+		ID: uuid.New(), ParticipantID: participantID, Kind: kind, Payload: map[string]string{},
+		Status: SantaNotificationPending, NextTryAt: now, CreatedAt: now,
+	}
 }

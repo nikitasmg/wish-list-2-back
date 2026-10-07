@@ -1,12 +1,16 @@
 package v1
 
 import (
+	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/google/uuid"
 
 	"main/internal/controller/restapi/middleware"
@@ -18,6 +22,9 @@ import (
 // localStorage и шлёт с каждым запросом к своей комнате.
 const SantaTokenHeader = "X-Santa-Token"
 
+// TelegramSecretHeader — Telegram кладёт сюда secret_token из setWebhook.
+const TelegramSecretHeader = "X-Telegram-Bot-Api-Secret-Token"
+
 type santaHandler struct {
 	uc usecase.SantaUseCase
 }
@@ -25,7 +32,7 @@ type santaHandler struct {
 // NewSantaRouter вешает маршруты Тайного Санты. Вызывать ДО NewRouter: там
 // защищённая группа с префиксом "" навешивает JWT на весь /api/v1, и
 // публичные маршруты, зарегистрированные после неё, требовали бы вход.
-func NewSantaRouter(router fiber.Router, jwtSecret string, uc usecase.SantaUseCase) {
+func NewSantaRouter(router fiber.Router, jwtSecret, webhookSecret string, uc usecase.SantaUseCase) {
 	h := &santaHandler{uc: uc}
 	api := router.Group("/api/v1/santa")
 	optional := middleware.JWTOptional(jwtSecret)
@@ -35,6 +42,12 @@ func NewSantaRouter(router fiber.Router, jwtSecret string, uc usecase.SantaUseCa
 	api.Get("/r/:slug/me", optional, h.me)
 	api.Patch("/r/:slug/me", optional, h.updateMe)
 	api.Delete("/r/:slug/me", optional, h.leave)
+	// Код на почту — письмо на адрес, который ввёл кто угодно: отдельный
+	// предел по IP поверх общего, иначе маршрут становится рассыльщиком.
+	api.Post("/r/:slug/me/email", emailCodeLimiter(EmailCodePerMinute, time.Minute),
+		emailCodeLimiter(EmailCodePerHour, time.Hour), optional, h.requestEmailCode)
+	api.Post("/r/:slug/me/email/verify", optional, h.verifyEmail)
+	api.Post("/r/:slug/me/telegram", optional, h.telegramLink)
 
 	rooms := api.Group("/rooms", middleware.JWTRequired401(jwtSecret))
 	rooms.Get("", h.listRooms)
@@ -45,10 +58,40 @@ func NewSantaRouter(router fiber.Router, jwtSecret string, uc usecase.SantaUseCa
 	rooms.Delete("/:id/participants/:pid", h.removeParticipant)
 	rooms.Post("/:id/draw", h.draw)
 	rooms.Post("/:id/redraw", h.redraw)
+	rooms.Post("/:id/remind", h.remind)
+
+	// Без секрета вебхук не включаем: иначе любой мог бы слать «апдейты».
+	if webhookSecret != "" {
+		router.Post("/api/v1/telegram/webhook", h.telegramWebhook(webhookSecret))
+	}
+}
+
+// Пределы запросов кода на почту с одного IP.
+const (
+	EmailCodePerMinute = 3
+	EmailCodePerHour   = 20
+)
+
+// EmailCodeLimitMessage — ответ 429 предела по IP.
+const EmailCodeLimitMessage = "слишком много запросов кода — попробуйте позже"
+
+func emailCodeLimiter(max int, window time.Duration) fiber.Handler {
+	return limiter.New(limiter.Config{
+		Max:        max,
+		Expiration: window,
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(response.Error(EmailCodeLimitMessage))
+		},
+	})
 }
 
 func santaError(c *fiber.Ctx, err error) error {
 	switch {
+	case errors.Is(err, usecase.ErrSantaUnavailable):
+		// Текст причины — из обёртки use case: «отправка почты пока не настроена…».
+		return c.Status(fiber.StatusServiceUnavailable).JSON(response.Error(err.Error()))
+	case errors.Is(err, usecase.ErrSantaEmailLimit):
+		return c.Status(fiber.StatusTooManyRequests).JSON(response.Error(usecase.ErrSantaEmailLimit.Error()))
 	case errors.Is(err, usecase.ErrSantaNotFound):
 		return c.Status(fiber.StatusNotFound).JSON(response.Error(usecase.ErrSantaNotFound.Error()))
 	case errors.Is(err, usecase.ErrSantaDrawn):
@@ -57,6 +100,10 @@ func santaError(c *fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusConflict).JSON(response.Error(usecase.ErrSantaNotDrawn.Error()))
 	case errors.Is(err, usecase.ErrSantaAlreadyJoined):
 		return c.Status(fiber.StatusConflict).JSON(response.Error(usecase.ErrSantaAlreadyJoined.Error()))
+	case errors.Is(err, usecase.ErrSantaEmailTaken):
+		return c.Status(fiber.StatusConflict).JSON(response.Error(usecase.ErrSantaEmailTaken.Error()))
+	case errors.Is(err, usecase.ErrSantaTooSoon):
+		return c.Status(fiber.StatusTooManyRequests).JSON(response.Error(usecase.ErrSantaTooSoon.Error()))
 	case errors.Is(err, usecase.ErrSantaTooFew), errors.Is(err, usecase.ErrSantaInvalid):
 		return c.Status(fiber.StatusUnprocessableEntity).JSON(response.Error(err.Error()))
 	}
@@ -284,4 +331,82 @@ func (h *santaHandler) leave(c *fiber.Ctx) error {
 		return santaError(c, err)
 	}
 	return c.JSON(response.Data(true))
+}
+
+func (h *santaHandler) requestEmailCode(c *fiber.Ctx) error {
+	var body struct {
+		Email string `json:"email"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid input"))
+	}
+	if err := h.uc.RequestEmailCode(c.Context(), c.Params("slug"), santaAuth(c), body.Email); err != nil {
+		return santaError(c, err)
+	}
+	return c.JSON(response.Data(true))
+}
+
+func (h *santaHandler) verifyEmail(c *fiber.Ctx) error {
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid input"))
+	}
+	me, err := h.uc.VerifyEmail(c.Context(), c.Params("slug"), santaAuth(c), body.Code)
+	if err != nil {
+		return santaError(c, err)
+	}
+	return c.JSON(response.Data(me))
+}
+
+func (h *santaHandler) telegramLink(c *fiber.Ctx) error {
+	url, err := h.uc.TelegramLink(c.Context(), c.Params("slug"), santaAuth(c))
+	if err != nil {
+		return santaError(c, err)
+	}
+	return c.JSON(response.Data(fiber.Map{"url": url}))
+}
+
+func (h *santaHandler) remind(c *fiber.Ctx) error {
+	userID, roomID, ok, err := ownerParams(c)
+	if !ok {
+		return err
+	}
+	res, err := h.uc.Remind(c.Context(), userID, roomID)
+	if err != nil {
+		return santaError(c, err)
+	}
+	return c.JSON(response.Data(res))
+}
+
+type telegramUpdate struct {
+	Message *struct {
+		Chat struct {
+			ID int64 `json:"id"`
+		} `json:"chat"`
+		Text string `json:"text"`
+	} `json:"message"`
+}
+
+// telegramWebhook всегда отвечает 200 на свои апдейты — иначе Telegram будет
+// повторять их; ошибки только в лог.
+func (h *santaHandler) telegramWebhook(secret string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if subtle.ConstantTimeCompare([]byte(c.Get(TelegramSecretHeader)), []byte(secret)) != 1 {
+			return c.SendStatus(fiber.StatusUnauthorized)
+		}
+		var u telegramUpdate
+		if err := json.Unmarshal(c.Body(), &u); err != nil || u.Message == nil {
+			return c.SendStatus(fiber.StatusOK)
+		}
+		text := strings.TrimSpace(u.Message.Text)
+		if text == "/start" || strings.HasPrefix(text, "/start ") {
+			token := strings.TrimSpace(strings.TrimPrefix(text, "/start"))
+			if err := h.uc.TelegramStart(c.Context(), u.Message.Chat.ID, token); err != nil {
+				log.Printf("santa: telegram start: %v", err)
+			}
+		}
+		return c.SendStatus(fiber.StatusOK)
+	}
 }

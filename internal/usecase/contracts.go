@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"main/internal/entity"
+	"main/pkg/telegram"
 
 	"github.com/google/uuid"
 )
@@ -343,6 +344,16 @@ var (
 	ErrSantaTooFew        = errors.New("для жеребьёвки нужно минимум 3 участника")
 	// ErrSantaInvalid оборачивается с подробностью: «неверные данные: …».
 	ErrSantaInvalid = errors.New("неверные данные")
+	// ErrSantaTooSoon — повтор раньше срока (код на почту, «Напомнить»).
+	ErrSantaTooSoon = errors.New("слишком часто — попробуйте чуть позже")
+	// ErrSantaEmailTaken — адрес уже у другого участника этой комнаты.
+	ErrSantaEmailTaken = errors.New("этот адрес уже у другого участника комнаты")
+	// ErrSantaEmailLimit — на адрес за последний час ушло слишком много кодов
+	// (из любых комнат): защита от рассылки кодов на чужую почту.
+	ErrSantaEmailLimit = errors.New("на этот адрес уже отправили много кодов — попробуйте через час")
+	// ErrSantaUnavailable — канал уведомлений не настроен на сервере (503).
+	// Конкретная причина — в тексте обёрнутой ошибки.
+	ErrSantaUnavailable = errors.New("канал уведомлений пока не настроен")
 )
 
 // SantaRoomInput — создание и правка комнаты.
@@ -385,6 +396,7 @@ type SantaParticipantView struct {
 	Name        string    `json:"name"`
 	HasWishes   bool      `json:"hasWishes"`
 	HasWishlist bool      `json:"hasWishlist"`
+	Ready       bool      `json:"ready"`
 	IsOwner     bool      `json:"isOwner"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
@@ -415,12 +427,32 @@ type SantaReceiver struct {
 	WishlistURL string `json:"wishlistUrl"`
 }
 
+// SantaNotifyView — куда участнику придут уведомления (видит только он сам).
+type SantaNotifyView struct {
+	Channel       entity.SantaChannel `json:"channel"`
+	Email         string              `json:"email"`
+	EmailVerified bool                `json:"emailVerified"`
+	// EmailPending — адрес указан, код отправлен, но ещё не подтверждён.
+	EmailPending bool `json:"emailPending"`
+	Telegram     bool `json:"telegram"`
+	// Ready — канал подтверждён: участник попадёт в жеребьёвку.
+	Ready bool `json:"ready"`
+}
+
+// SantaRemindResult — итог «Напомнить»: сколько получат напоминание и сколько
+// без подтверждённого канала (их организатор зовёт сам).
+type SantaRemindResult struct {
+	Sent        int `json:"sent"`
+	Unreachable int `json:"unreachable"`
+}
+
 type SantaMe struct {
-	ParticipantID uuid.UUID   `json:"participantId"`
-	Name          string      `json:"name"`
-	Wishes        string      `json:"wishes"`
-	WishlistURL   string      `json:"wishlistUrl"`
-	Room          SantaInvite `json:"room"`
+	ParticipantID uuid.UUID       `json:"participantId"`
+	Name          string          `json:"name"`
+	Wishes        string          `json:"wishes"`
+	WishlistURL   string          `json:"wishlistUrl"`
+	Notify        SantaNotifyView `json:"notify"`
+	Room          SantaInvite     `json:"room"`
 	// Receiver — подопечный; nil до жеребьёвки.
 	Receiver *SantaReceiver `json:"receiver"`
 }
@@ -444,6 +476,9 @@ type SantaUseCase interface {
 	Draw(ctx context.Context, ownerID, roomID uuid.UUID) error
 	// Redraw стирает пары и тянет заново; не было жеребьёвки — ErrSantaNotDrawn.
 	Redraw(ctx context.Context, ownerID, roomID uuid.UUID) error
+	// Remind — «Напомнить»: готовым участникам без пожеланий; не чаще раза в
+	// 12 ч — ErrSantaTooSoon.
+	Remind(ctx context.Context, ownerID, roomID uuid.UUID) (SantaRemindResult, error)
 
 	// Участник. Комната по slug; нет комнаты или участника — ErrSantaNotFound.
 	GetInvite(ctx context.Context, slug string) (SantaInvite, error)
@@ -453,4 +488,26 @@ type SantaUseCase interface {
 	// пожелания и вишлист — можно.
 	UpdateMe(ctx context.Context, slug string, auth SantaAuth, in SantaProfileInput) (SantaMe, error)
 	LeaveMe(ctx context.Context, slug string, auth SantaAuth) error
+	// RequestEmailCode ставит адрес и шлёт на него код; раньше чем через
+	// минуту после прошлого — ErrSantaTooSoon; адрес занят — ErrSantaEmailTaken;
+	// на адрес за час ушло 5 кодов — ErrSantaEmailLimit; почта не настроена —
+	// ErrSantaUnavailable.
+	RequestEmailCode(ctx context.Context, slug string, auth SantaAuth, email string) error
+	// VerifyEmail проверяет код; неверный, устаревший или 5 попыток — ErrSantaInvalid.
+	VerifyEmail(ctx context.Context, slug string, auth SantaAuth, code string) (SantaMe, error)
+	// TelegramLink — ссылка t.me на бота с одноразовым токеном (24 ч); бот не
+	// настроен — ErrSantaUnavailable.
+	TelegramLink(ctx context.Context, slug string, auth SantaAuth) (string, error)
+	// TelegramStart — команда /start <токен> из вебхука бота.
+	TelegramStart(ctx context.Context, chatID int64, token string) error
+}
+
+// Mailer отправляет письмо; реализации — pkg/mailer.
+type Mailer interface {
+	Send(ctx context.Context, to, subject, html, text string) error
+}
+
+// TelegramSender отправляет сообщение в чат; реализации — pkg/telegram.
+type TelegramSender interface {
+	SendMessage(ctx context.Context, chatID int64, text string, buttons []telegram.Button) error
 }
