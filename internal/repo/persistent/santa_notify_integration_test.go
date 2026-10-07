@@ -48,13 +48,33 @@ func TestSantaRepo_EmailVerification(t *testing.T) {
 	assert.Equal(t, "hash-"+id.String(), code.CodeHash)
 	assert.Equal(t, 0, code.Attempts)
 
-	require.NoError(t, r.IncEmailCodeAttempts(ctx, id))
+	for i := 1; i <= 5; i++ {
+		taken, err := r.IncEmailCodeAttempts(ctx, id, 5)
+		require.NoError(t, err)
+		assert.True(t, taken, "попытка %d", i)
+	}
+	taken, err := r.IncEmailCodeAttempts(ctx, id, 5)
+	require.NoError(t, err)
+	assert.False(t, taken, "шестая попытка не занимается")
 	code, err = r.GetEmailCode(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, 1, code.Attempts)
+	assert.Equal(t, 5, code.Attempts)
+
+	// Код, который проверяли, уже заменён (другой адрес): подтверждение отклоняется,
+	// новый адрес остаётся неподтверждённым.
+	other := emailCode(id, now)
+	other.CodeHash = "other-hash"
+	require.NoError(t, r.SetEmail(ctx, id, "other@example.com", other))
+	err = r.VerifyEmail(ctx, id, "hash-"+id.String(), now, entity.NewSantaNotification(id, entity.SantaNotifyWelcome, now))
+	assert.ErrorIs(t, err, repo.ErrNotFound)
+	p, err = r.GetParticipant(ctx, id)
+	require.NoError(t, err)
+	assert.False(t, p.Ready())
+	assert.EqualValues(t, 0, countNotes(t, db, id, entity.SantaNotifyWelcome))
+	require.NoError(t, r.SetEmail(ctx, id, "anna@example.com", emailCode(id, now)))
 
 	welcome := entity.NewSantaNotification(id, entity.SantaNotifyWelcome, now)
-	require.NoError(t, r.VerifyEmail(ctx, id, now, welcome))
+	require.NoError(t, r.VerifyEmail(ctx, id, "hash-"+id.String(), now, welcome))
 	p, err = r.GetParticipant(ctx, id)
 	require.NoError(t, err)
 	assert.True(t, p.Ready())
@@ -72,8 +92,10 @@ func TestSantaRepo_SetEmailResetsVerificationAndCode(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	require.NoError(t, r.SetEmail(ctx, id, "a@example.com", emailCode(id, now)))
-	require.NoError(t, r.VerifyEmail(ctx, id, now, entity.NewSantaNotification(id, entity.SantaNotifyWelcome, now)))
-	require.NoError(t, r.IncEmailCodeAttempts(ctx, id)) // кода уже нет — тихо ничего
+	require.NoError(t, r.VerifyEmail(ctx, id, "hash-"+id.String(), now, entity.NewSantaNotification(id, entity.SantaNotifyWelcome, now)))
+	taken, err := r.IncEmailCodeAttempts(ctx, id, 5) // кода уже нет — тихо ничего
+	require.NoError(t, err)
+	assert.False(t, taken)
 
 	later := now.Add(2 * time.Minute)
 	require.NoError(t, r.SetEmail(ctx, id, "b@example.com", emailCode(id, later)))
@@ -165,7 +187,7 @@ func TestSantaRepo_DeleteParticipantCascadesChannelData(t *testing.T) {
 	now := time.Now().UTC()
 	require.NoError(t, r.SetEmail(ctx, id, "c@example.com", emailCode(id, now)))
 	require.NoError(t, r.CreateTgLink(ctx, entity.SantaTgLink{TokenHash: "t", ParticipantID: id, ExpiresAt: now.Add(time.Hour)}))
-	require.NoError(t, r.VerifyEmail(ctx, id, now, entity.NewSantaNotification(id, entity.SantaNotifyWelcome, now)))
+	require.NoError(t, r.VerifyEmail(ctx, id, "hash-"+id.String(), now, entity.NewSantaNotification(id, entity.SantaNotifyWelcome, now)))
 
 	require.NoError(t, r.DeleteParticipant(ctx, id))
 	assert.EqualValues(t, 0, countNotes(t, db, id, entity.SantaNotifyWelcome))

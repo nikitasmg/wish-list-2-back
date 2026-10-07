@@ -154,11 +154,14 @@ type SantaRepo interface {
 	// участника нет — ErrNotFound.
 	SetEmail(ctx context.Context, participantID uuid.UUID, email string, code entity.SantaEmailCode) error
 	GetEmailCode(ctx context.Context, participantID uuid.UUID) (entity.SantaEmailCode, error)
-	IncEmailCodeAttempts(ctx context.Context, participantID uuid.UUID) error
+	// IncEmailCodeAttempts атомарно занимает попытку проверки кода: attempts+1,
+	// пока attempts < max. false — попыток не осталось или кода нет.
+	IncEmailCodeAttempts(ctx context.Context, participantID uuid.UUID, max int) (bool, error)
 	DeleteEmailCode(ctx context.Context, participantID uuid.UUID) error
 	// VerifyEmail: адрес подтверждён, канал — почта, код стёрт, приветствие в
-	// очереди — одной транзакцией.
-	VerifyEmail(ctx context.Context, participantID uuid.UUID, at time.Time, welcome entity.SantaNotification) error
+	// очереди — одной транзакцией. Код стирается по codeHash: если за это время
+	// код заменён (другой адрес) или стёрт — ErrNotFound, ничего не меняется.
+	VerifyEmail(ctx context.Context, participantID uuid.UUID, codeHash string, at time.Time, welcome entity.SantaNotification) error
 	CreateTgLink(ctx context.Context, link entity.SantaTgLink) error
 	// LinkTelegram по одноразовой ссылке: чат записан, канал — Telegram,
 	// ссылки участника стёрты, приветствие в очереди. Ссылки нет или она

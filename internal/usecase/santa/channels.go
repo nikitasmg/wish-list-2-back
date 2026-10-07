@@ -117,20 +117,24 @@ func (uc *santaUseCase) VerifyEmail(ctx context.Context, slug string, auth useca
 	if !rec.ExpiresAt.After(now) {
 		return usecase.SantaMe{}, invalid("код устарел — запросите новый")
 	}
-	if rec.Attempts >= emailCodeAttempts {
+	// Попытка занимается атомарно ДО сравнения: параллельные запросы не
+	// получат больше emailCodeAttempts проверок.
+	taken, err := uc.santa.IncEmailCodeAttempts(ctx, p.ID, emailCodeAttempts)
+	if err != nil {
+		return usecase.SantaMe{}, err
+	}
+	if !taken {
 		return usecase.SantaMe{}, invalid("слишком много попыток — запросите новый код")
 	}
 	code := strings.TrimSpace(rawCode)
 	if subtle.ConstantTimeCompare([]byte(hashEmailCode(p.ID, code)), []byte(rec.CodeHash)) != 1 {
-		if err := uc.santa.IncEmailCodeAttempts(ctx, p.ID); err != nil {
-			return usecase.SantaMe{}, err
-		}
 		return usecase.SantaMe{}, invalid("неверный код")
 	}
 	welcome := entity.NewSantaNotification(p.ID, entity.SantaNotifyWelcome, now)
-	if err := uc.santa.VerifyEmail(ctx, p.ID, now, welcome); err != nil {
+	if err := uc.santa.VerifyEmail(ctx, p.ID, rec.CodeHash, now, welcome); err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
-			return usecase.SantaMe{}, usecase.ErrSantaNotFound
+			// Код успели заменить или стереть — проверенный код уже не действует.
+			return usecase.SantaMe{}, invalid("код устарел — запросите новый")
 		}
 		return usecase.SantaMe{}, err
 	}
@@ -177,5 +181,9 @@ func (uc *santaUseCase) tgReply(ctx context.Context, chatID int64, text string) 
 	if uc.tg == nil {
 		return nil
 	}
-	return uc.tg.SendMessage(ctx, chatID, text, nil)
+	// Сбой ответа не должен ронять вебхук: Telegram повторил бы апдейт.
+	if err := uc.tg.SendMessage(ctx, chatID, text, nil); err != nil {
+		log.Printf("santa: telegram reply: %v", err)
+	}
+	return nil
 }

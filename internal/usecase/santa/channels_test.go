@@ -34,12 +34,13 @@ type fakeTG struct {
 	chatID int64
 	text   string
 	calls  int
+	err    error
 }
 
 func (f *fakeTG) SendMessage(_ context.Context, chatID int64, text string, _ []telegram.Button) error {
 	f.calls++
 	f.chatID, f.text = chatID, text
-	return nil
+	return f.err
 }
 
 var chNow = time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
@@ -138,7 +139,8 @@ func TestVerifyEmail_Success(t *testing.T) {
 	sr.On("GetRoomBySlug", mock.Anything, "abcdefgh").Return(room, nil)
 	sr.On("GetParticipantByToken", mock.Anything, room.ID, hashToken("tok")).Return(p, nil)
 	sr.On("GetEmailCode", mock.Anything, p.ID).Return(validCode(p, "123456", 0), nil)
-	sr.On("VerifyEmail", mock.Anything, p.ID, chNow, mock.MatchedBy(func(n entity.SantaNotification) bool {
+	sr.On("IncEmailCodeAttempts", mock.Anything, p.ID, emailCodeAttempts).Return(true, nil)
+	sr.On("VerifyEmail", mock.Anything, p.ID, hashEmailCode(p.ID, "123456"), chNow, mock.MatchedBy(func(n entity.SantaNotification) bool {
 		return n.ParticipantID == p.ID && n.Kind == entity.SantaNotifyWelcome
 	})).Return(nil)
 	sr.On("CountParticipants", mock.Anything, []uuid.UUID{room.ID}).Return(map[uuid.UUID]int{room.ID: 1}, nil)
@@ -154,19 +156,29 @@ func TestVerifyEmail_Success(t *testing.T) {
 func TestVerifyEmail_WrongCodeCountsAttempt(t *testing.T) {
 	uc, sr, _, _, _, p := channelUC(t)
 	sr.On("GetEmailCode", mock.Anything, p.ID).Return(validCode(p, "123456", 1), nil)
-	sr.On("IncEmailCodeAttempts", mock.Anything, p.ID).Return(nil)
+	sr.On("IncEmailCodeAttempts", mock.Anything, p.ID, emailCodeAttempts).Return(true, nil)
 	_, err := uc.VerifyEmail(context.Background(), "abcdefgh", tokAuth, "654321")
 	assert.ErrorIs(t, err, usecase.ErrSantaInvalid)
-	sr.AssertCalled(t, "IncEmailCodeAttempts", mock.Anything, p.ID)
-	sr.AssertNotCalled(t, "VerifyEmail", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	sr.AssertCalled(t, "IncEmailCodeAttempts", mock.Anything, p.ID, emailCodeAttempts)
+	sr.AssertNotCalled(t, "VerifyEmail", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestVerifyEmail_LockedAfterFiveAttempts(t *testing.T) {
 	uc, sr, _, _, _, p := channelUC(t)
 	sr.On("GetEmailCode", mock.Anything, p.ID).Return(validCode(p, "123456", emailCodeAttempts), nil)
+	sr.On("IncEmailCodeAttempts", mock.Anything, p.ID, emailCodeAttempts).Return(false, nil)
 	_, err := uc.VerifyEmail(context.Background(), "abcdefgh", tokAuth, "123456")
 	assert.ErrorIs(t, err, usecase.ErrSantaInvalid, "даже верный код после 5 попыток не принимается")
-	sr.AssertNotCalled(t, "VerifyEmail", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	sr.AssertNotCalled(t, "VerifyEmail", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestVerifyEmail_CodeReplacedMeanwhile(t *testing.T) {
+	uc, sr, _, _, _, p := channelUC(t)
+	sr.On("GetEmailCode", mock.Anything, p.ID).Return(validCode(p, "123456", 0), nil)
+	sr.On("IncEmailCodeAttempts", mock.Anything, p.ID, emailCodeAttempts).Return(true, nil)
+	sr.On("VerifyEmail", mock.Anything, p.ID, hashEmailCode(p.ID, "123456"), chNow, mock.Anything).Return(repo.ErrNotFound)
+	_, err := uc.VerifyEmail(context.Background(), "abcdefgh", tokAuth, "123456")
+	assert.ErrorIs(t, err, usecase.ErrSantaInvalid)
 }
 
 func TestVerifyEmail_Expired(t *testing.T) {
@@ -226,6 +238,14 @@ func TestTelegramStart_ExpiredLink(t *testing.T) {
 	require.NoError(t, uc.TelegramStart(context.Background(), 77, "OLD"))
 	assert.Equal(t, 1, tg.calls)
 	assert.Equal(t, botLinkExpiredText(), tg.text)
+}
+
+func TestTelegramStart_ReplyFailureIsNotAnError(t *testing.T) {
+	uc, sr, _, tg, _, _ := channelUC(t)
+	tg.err = errors.New("telegram down")
+	sr.On("LinkTelegram", mock.Anything, hashToken("OLD"), int64(77), chNow, mock.Anything).Return(entity.SantaParticipant{}, repo.ErrNotFound)
+	assert.NoError(t, uc.TelegramStart(context.Background(), 77, "OLD"), "вебхук не должен отвечать 500 и провоцировать повтор")
+	assert.Equal(t, 1, tg.calls)
 }
 
 func TestTelegramStart_NoToken(t *testing.T) {

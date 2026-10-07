@@ -66,13 +66,14 @@ func (r *santaRepo) GetEmailCode(ctx context.Context, participantID uuid.UUID) (
 	}, nil
 }
 
-func (r *santaRepo) IncEmailCodeAttempts(ctx context.Context, participantID uuid.UUID) error {
-	if err := r.db.WithContext(ctx).Model(&SantaEmailCodeModel{}).
-		Where("participant_id = ?", participantID).
-		UpdateColumn("attempts", gorm.Expr("attempts + 1")).Error; err != nil {
-		return santaErr("santaRepo.IncEmailCodeAttempts", err)
+func (r *santaRepo) IncEmailCodeAttempts(ctx context.Context, participantID uuid.UUID, max int) (bool, error) {
+	res := r.db.WithContext(ctx).Model(&SantaEmailCodeModel{}).
+		Where("participant_id = ? AND attempts < ?", participantID, max).
+		UpdateColumn("attempts", gorm.Expr("attempts + 1"))
+	if res.Error != nil {
+		return false, santaErr("santaRepo.IncEmailCodeAttempts", res.Error)
 	}
-	return nil
+	return res.RowsAffected > 0, nil
 }
 
 func (r *santaRepo) DeleteEmailCode(ctx context.Context, participantID uuid.UUID) error {
@@ -82,8 +83,15 @@ func (r *santaRepo) DeleteEmailCode(ctx context.Context, participantID uuid.UUID
 	return nil
 }
 
-func (r *santaRepo) VerifyEmail(ctx context.Context, participantID uuid.UUID, at time.Time, welcome entity.SantaNotification) error {
+func (r *santaRepo) VerifyEmail(ctx context.Context, participantID uuid.UUID, codeHash string, at time.Time, welcome entity.SantaNotification) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		del := tx.Delete(&SantaEmailCodeModel{}, "participant_id = ? AND code_hash = ?", participantID, codeHash)
+		if del.Error != nil {
+			return santaErr("santaRepo.VerifyEmail code", del.Error)
+		}
+		if del.RowsAffected == 0 {
+			return fmt.Errorf("santaRepo.VerifyEmail: %w", repo.ErrNotFound)
+		}
 		res := tx.Model(&SantaParticipantModel{}).Where("id = ?", participantID).Updates(map[string]any{
 			"email_verified_at": at,
 			"channel":           string(entity.SantaChannelEmail),
@@ -94,9 +102,6 @@ func (r *santaRepo) VerifyEmail(ctx context.Context, participantID uuid.UUID, at
 		}
 		if res.RowsAffected == 0 {
 			return fmt.Errorf("santaRepo.VerifyEmail: %w", repo.ErrNotFound)
-		}
-		if err := tx.Delete(&SantaEmailCodeModel{}, "participant_id = ?", participantID).Error; err != nil {
-			return santaErr("santaRepo.VerifyEmail code", err)
 		}
 		return insertNotifications(tx, welcome)
 	})

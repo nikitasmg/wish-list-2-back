@@ -124,16 +124,17 @@ func (m *MockSantaRepo) GetEmailCode(ctx context.Context, participantID uuid.UUI
 	return code, args.Error(1)
 }
 
-func (m *MockSantaRepo) IncEmailCodeAttempts(ctx context.Context, participantID uuid.UUID) error {
-	return m.Called(ctx, participantID).Error(0)
+func (m *MockSantaRepo) IncEmailCodeAttempts(ctx context.Context, participantID uuid.UUID, max int) (bool, error) {
+	args := m.Called(ctx, participantID, max)
+	return args.Bool(0), args.Error(1)
 }
 
 func (m *MockSantaRepo) DeleteEmailCode(ctx context.Context, participantID uuid.UUID) error {
 	return m.Called(ctx, participantID).Error(0)
 }
 
-func (m *MockSantaRepo) VerifyEmail(ctx context.Context, participantID uuid.UUID, at time.Time, welcome entity.SantaNotification) error {
-	return m.Called(ctx, participantID, at, welcome).Error(0)
+func (m *MockSantaRepo) VerifyEmail(ctx context.Context, participantID uuid.UUID, codeHash string, at time.Time, welcome entity.SantaNotification) error {
+	return m.Called(ctx, participantID, codeHash, at, welcome).Error(0)
 }
 
 func (m *MockSantaRepo) CreateTgLink(ctx context.Context, link entity.SantaTgLink) error {
