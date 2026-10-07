@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"main/internal/entity"
+	"main/pkg/telegram"
 
 	"github.com/google/uuid"
 )
@@ -453,4 +454,14 @@ type SantaUseCase interface {
 	// пожелания и вишлист — можно.
 	UpdateMe(ctx context.Context, slug string, auth SantaAuth, in SantaProfileInput) (SantaMe, error)
 	LeaveMe(ctx context.Context, slug string, auth SantaAuth) error
+}
+
+// Mailer отправляет письмо; реализации — pkg/mailer.
+type Mailer interface {
+	Send(ctx context.Context, to, subject, html, text string) error
+}
+
+// TelegramSender отправляет сообщение в чат; реализации — pkg/telegram.
+type TelegramSender interface {
+	SendMessage(ctx context.Context, chatID int64, text string, buttons []telegram.Button) error
 }
