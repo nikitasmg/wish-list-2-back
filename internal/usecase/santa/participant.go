@@ -226,11 +226,23 @@ func (uc *santaUseCase) UpdateMe(ctx context.Context, slug string, auth usecase.
 	if room.Status != entity.SantaRoomOpen && in.Name != p.Name {
 		return usecase.SantaMe{}, usecase.ErrSantaDrawn
 	}
+	changed := p.Wishes != in.Wishes || p.WishlistURL != in.WishlistURL
 	p.Name = in.Name
 	p.Wishes = in.Wishes
 	p.WishlistURL = in.WishlistURL
 	p.UpdatedAt = uc.now()
-	if err := uc.santa.UpdateParticipant(ctx, p); err != nil {
+
+	var notes []entity.SantaNotification
+	if room.Status == entity.SantaRoomDrawn && changed {
+		a, err := uc.santa.GetGiver(ctx, room.ID, p.ID)
+		switch {
+		case err == nil:
+			notes = append(notes, entity.NewSantaNotification(a.GiverID, entity.SantaNotifyWishesUpdated, p.UpdatedAt))
+		case !errors.Is(err, repo.ErrNotFound):
+			return usecase.SantaMe{}, err
+		}
+	}
+	if err := uc.santa.UpdateParticipant(ctx, p, notes...); err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
 			return usecase.SantaMe{}, usecase.ErrSantaNotFound
 		}
