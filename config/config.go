@@ -97,7 +97,7 @@ func LoadConfig() (*Config, error) {
 			SMTPUser:              getEnv("SMTP_USER", ""),
 			SMTPPassword:          getEnv("SMTP_PASSWORD", ""),
 			MailFrom:              getEnv("MAIL_FROM", "Тайный Санта <santa@prosto-namekni.ru>"),
-			TelegramBotToken:      getEnv("SANTA_BOT_TOKEN", getEnv("BOT_TOKEN", "")),
+			TelegramBotToken:      getEnvNonEmpty("SANTA_BOT_TOKEN", getEnv("BOT_TOKEN", "")),
 			TelegramBotUsername:   getEnv("BOT_USERNAME", ""),
 			TelegramWebhookSecret: getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
 			SantaPublicURL:        getEnv("SANTA_PUBLIC_URL", "https://santa.prosto-namekni.ru"),
@@ -132,6 +132,15 @@ func getEnvAsBool(key string, defaultValue bool) bool {
 		if value, err := strconv.ParseBool(valueStr); err == nil {
 			return value
 		}
+	}
+	return defaultValue
+}
+
+// getEnvNonEmpty — как getEnv, но пустое значение тоже считается незаданным
+// (env_file и .env.example оставляют переменные пустыми).
+func getEnvNonEmpty(key, defaultValue string) string {
+	if value := getEnv(key, ""); value != "" {
+		return value
 	}
 	return defaultValue
 }

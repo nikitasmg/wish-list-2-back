@@ -120,7 +120,11 @@ func Run(cfg *config.Config) {
 		santaUC.WithMailer(mail), santaUC.WithTelegram(bot, cfg.Notify.TelegramBotUsername))
 	notifyCtx, stopNotify := context.WithCancel(context.Background())
 	defer stopNotify()
-	go santaUC.NewNotifier(santaRepo, mail, bot, cfg.Notify.SantaPublicURL).Run(notifyCtx, 5*time.Second)
+	notifierDone := make(chan struct{})
+	go func() {
+		defer close(notifierDone)
+		santaUC.NewNotifier(santaRepo, mail, bot, cfg.Notify.SantaPublicURL).Run(notifyCtx, 5*time.Second)
+	}()
 
 	// HTTP server
 	app := fiber.New(fiber.Config{
@@ -142,6 +146,7 @@ func Run(cfg *config.Config) {
 	<-quit
 	log.Println("Shutting down server...")
 	stopNotify()
+	<-notifierDone // дать обработчику дописать статус текущей отправки
 	if err := app.Shutdown(); err != nil {
 		log.Printf("server shutdown error: %v", err)
 	}
