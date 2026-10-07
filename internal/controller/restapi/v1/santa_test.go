@@ -225,3 +225,24 @@ func TestSantaJoin_PassesTokenHeader(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, status)
 	m.AssertExpectations(t)
 }
+
+func (m *MockSantaUC) Remind(ctx context.Context, ownerID, roomID uuid.UUID) (usecase.SantaRemindResult, error) {
+	args := m.Called(ctx, ownerID, roomID)
+	r, _ := args.Get(0).(usecase.SantaRemindResult)
+	return r, args.Error(1)
+}
+func (m *MockSantaUC) RequestEmailCode(ctx context.Context, slug string, auth usecase.SantaAuth, email string) error {
+	return m.Called(ctx, slug, auth, email).Error(0)
+}
+func (m *MockSantaUC) VerifyEmail(ctx context.Context, slug string, auth usecase.SantaAuth, code string) (usecase.SantaMe, error) {
+	args := m.Called(ctx, slug, auth, code)
+	me, _ := args.Get(0).(usecase.SantaMe)
+	return me, args.Error(1)
+}
+func (m *MockSantaUC) TelegramLink(ctx context.Context, slug string, auth usecase.SantaAuth) (string, error) {
+	args := m.Called(ctx, slug, auth)
+	return args.String(0), args.Error(1)
+}
+func (m *MockSantaUC) TelegramStart(ctx context.Context, chatID int64, token string) error {
+	return m.Called(ctx, chatID, token).Error(0)
+}

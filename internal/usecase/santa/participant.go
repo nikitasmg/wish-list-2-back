@@ -90,7 +90,10 @@ func (uc *santaUseCase) me(ctx context.Context, room entity.SantaRoom, p entity.
 	if err != nil {
 		return usecase.SantaMe{}, err
 	}
-	me := usecase.SantaMe{ParticipantID: p.ID, Name: p.Name, Wishes: p.Wishes, WishlistURL: p.WishlistURL, Room: inv}
+	me := usecase.SantaMe{
+		ParticipantID: p.ID, Name: p.Name, Wishes: p.Wishes, WishlistURL: p.WishlistURL, Room: inv,
+		Notify: notifyView(p),
+	}
 	if room.Status != entity.SantaRoomDrawn {
 		return me, nil
 	}
@@ -185,6 +188,7 @@ func (uc *santaUseCase) Join(ctx context.Context, slug string, auth usecase.Sant
 		log.Printf("santa: join: me: %v", err)
 		me = usecase.SantaMe{
 			ParticipantID: p.ID, Name: p.Name, Wishes: p.Wishes, WishlistURL: p.WishlistURL,
+			Notify: notifyView(p),
 			Room: usecase.SantaInvite{
 				Slug: room.Slug, Title: room.Title, Budget: room.Budget, ExchangeDate: room.ExchangeDate,
 				DrawAt: room.DrawAt, Message: room.Message, Status: room.Status, DrawnAt: room.DrawnAt,
@@ -249,4 +253,15 @@ func (uc *santaUseCase) LeaveMe(ctx context.Context, slug string, auth usecase.S
 	}
 	// Жеребьёвка могла пройти между проверкой и удалением.
 	return mapRoomWriteErr(uc.santa.DeleteParticipant(ctx, p.ID))
+}
+
+func notifyView(p entity.SantaParticipant) usecase.SantaNotifyView {
+	return usecase.SantaNotifyView{
+		Channel:       p.Channel,
+		Email:         p.Email,
+		EmailVerified: p.Email != "" && p.EmailVerifiedAt != nil,
+		EmailPending:  p.Email != "" && p.EmailVerifiedAt == nil,
+		Telegram:      p.TgChatID != nil,
+		Ready:         p.Ready(),
+	}
 }

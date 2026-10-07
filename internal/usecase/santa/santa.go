@@ -19,14 +19,33 @@ const (
 )
 
 type santaUseCase struct {
-	santa   repo.SantaRepo
-	users   repo.UserRepo
-	shuffle shuffleFunc
-	now     func() time.Time
+	santa       repo.SantaRepo
+	users       repo.UserRepo
+	shuffle     shuffleFunc
+	now         func() time.Time
+	mailer      usecase.Mailer
+	tg          usecase.TelegramSender
+	botUsername string
 }
 
-func New(santaRepo repo.SantaRepo, userRepo repo.UserRepo) usecase.SantaUseCase {
-	return &santaUseCase{santa: santaRepo, users: userRepo, shuffle: cryptoShuffle, now: time.Now}
+// Option подключает каналы уведомлений; без них use case работает как на этапе 1.
+type Option func(*santaUseCase)
+
+func WithMailer(m usecase.Mailer) Option { return func(uc *santaUseCase) { uc.mailer = m } }
+
+func WithTelegram(tg usecase.TelegramSender, botUsername string) Option {
+	return func(uc *santaUseCase) {
+		uc.tg = tg
+		uc.botUsername = botUsername
+	}
+}
+
+func New(santaRepo repo.SantaRepo, userRepo repo.UserRepo, opts ...Option) usecase.SantaUseCase {
+	uc := &santaUseCase{santa: santaRepo, users: userRepo, shuffle: cryptoShuffle, now: time.Now}
+	for _, opt := range opts {
+		opt(uc)
+	}
+	return uc
 }
 
 func (uc *santaUseCase) CreateRoom(ctx context.Context, ownerID uuid.UUID, in usecase.SantaRoomInput) (entity.SantaRoom, error) {
@@ -164,7 +183,7 @@ func (uc *santaUseCase) GetRoom(ctx context.Context, ownerID, roomID uuid.UUID) 
 	views := make([]usecase.SantaParticipantView, len(ps))
 	for i, p := range ps {
 		views[i] = usecase.SantaParticipantView{
-			ID: p.ID, Name: p.Name, HasWishes: p.Wishes != "", HasWishlist: p.WishlistURL != "",
+			ID: p.ID, Name: p.Name, HasWishes: p.Wishes != "", HasWishlist: p.WishlistURL != "", Ready: p.Ready(),
 			IsOwner: p.UserID != nil && *p.UserID == room.OwnerID, CreatedAt: p.CreatedAt,
 		}
 	}
