@@ -75,11 +75,11 @@ func (s *SMTP) Send(ctx context.Context, to, subject, html, text string) error {
 	defer close(done)
 	go func() {
 		select {
+		case <-done:
 		case <-ctx.Done():
 			_ = conn.Close()
 		}
 	}()
-	_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
 
 	c, err := smtp.NewClient(conn, s.cfg.Host)
 	if err != nil {
