@@ -17,6 +17,12 @@ const (
 	notifyBatch       = 20
 	notifyLease       = 2 * time.Minute
 	maxNotifyAttempts = 4
+	// Пачка не должна пережить аренду, иначе второй экземпляр возьмёт те же
+	// строки и отправит дважды. Новую отправку начинаем, пока прошло не больше
+	// половины аренды; каждая ограничена notifySendTimeout, отметка —
+	// notifyMarkTimeout: lease/2 + send + mark < lease.
+	notifySendTimeout = 45 * time.Second
+	notifyMarkTimeout = 5 * time.Second
 )
 
 // retryDelays[i] — пауза после (i+1)-й неудачи; после maxNotifyAttempts — failed.
@@ -55,33 +61,60 @@ func (n *Notifier) Run(ctx context.Context, tick time.Duration) {
 	}
 }
 
+// RunOnce берёт пачку под аренду и отправляет, пока не прошла половина
+// аренды или не отменён ctx; не начатые строки вернутся в очередь сами,
+// когда аренда истечёт.
 func (n *Notifier) RunOnce(ctx context.Context) (int, error) {
-	now := n.now()
-	batch, err := n.santa.ClaimNotifications(ctx, now, notifyBatch, notifyLease)
+	start := n.now()
+	batch, err := n.santa.ClaimNotifications(ctx, start, notifyBatch, notifyLease)
 	if err != nil {
 		return 0, err
 	}
 	sent := 0
 	for _, note := range batch {
-		err := n.deliver(ctx, note)
-		if err == nil {
-			if mErr := n.santa.MarkNotificationSent(ctx, note.ID); mErr != nil {
-				log.Printf("santa notifier: mark sent %s: %v", note.ID, mErr)
-			}
+		if ctx.Err() != nil || n.now().Sub(start) > notifyLease/2 {
+			break
+		}
+		if n.process(ctx, note) {
 			sent++
-			continue
-		}
-		attempts := note.Attempts + 1
-		var retryAt *time.Time
-		if !errors.Is(err, errPermanent) && attempts < maxNotifyAttempts {
-			at := now.Add(retryDelays[attempts-1])
-			retryAt = &at
-		}
-		if mErr := n.santa.MarkNotificationFailed(ctx, note.ID, attempts, retryAt, err.Error()); mErr != nil {
-			log.Printf("santa notifier: mark failed %s: %v", note.ID, mErr)
 		}
 	}
 	return sent, nil
+}
+
+// process отправляет одно уведомление и отмечает итог; true — отправлено.
+func (n *Notifier) process(ctx context.Context, note entity.SantaNotification) bool {
+	sendCtx, cancelSend := context.WithTimeout(ctx, notifySendTimeout)
+	err := n.deliver(sendCtx, note)
+	cancelSend()
+
+	// Отметку пишем и после отмены ctx при остановке: принятое сервером
+	// письмо, оставшись pending, ушло бы повторно.
+	markCtx, cancelMark := context.WithTimeout(context.WithoutCancel(ctx), notifyMarkTimeout)
+	defer cancelMark()
+	if err == nil {
+		n.logMark("sent", note, n.santa.MarkNotificationSent(markCtx, note.ID))
+		return true
+	}
+	attempts := note.Attempts + 1
+	var retryAt *time.Time
+	if !errors.Is(err, errPermanent) && attempts < maxNotifyAttempts {
+		at := n.now().Add(retryDelays[attempts-1])
+		retryAt = &at
+	}
+	n.logMark("failed", note, n.santa.MarkNotificationFailed(markCtx, note.ID, attempts, retryAt, err.Error()))
+	return false
+}
+
+func (n *Notifier) logMark(what string, note entity.SantaNotification, err error) {
+	switch {
+	case err == nil:
+	case errors.Is(err, repo.ErrNotFound):
+		// Уже отмечено другим обработчиком или стёрто при схлопывании.
+		log.Printf("santa notifier: mark %s %s: уже не pending", what, note.ID)
+	default:
+		log.Printf("santa notifier: mark %s %s: %v", what, note.ID, err)
+	}
 }
 
 func (n *Notifier) deliver(ctx context.Context, note entity.SantaNotification) error {

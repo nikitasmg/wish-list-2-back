@@ -250,6 +250,44 @@ func TestSantaRepo_UpdateParticipantEnqueues(t *testing.T) {
 	assert.EqualValues(t, 1, countNotes(t, db, ids[1], entity.SantaNotifyWishesUpdated))
 }
 
+func TestSantaRepo_UpdateParticipantCollapsesWishesUpdated(t *testing.T) {
+	ctx := context.Background()
+	db := setupSantaDB(t)
+	r := persistent.NewSantaRepo(db)
+	room := seedRoom(t, r, uuid.New())
+	ids := seedParticipants(t, r, room.ID, 3)
+	p, err := r.GetParticipant(ctx, ids[0])
+	require.NoError(t, err)
+	now := time.Now().UTC().Truncate(time.Second)
+	save := func(receiver uuid.UUID, wishes string) {
+		p.Wishes = wishes
+		require.NoError(t, r.UpdateParticipant(ctx, p, entity.NewSantaNotification(receiver, entity.SantaNotifyWishesUpdated, now)))
+	}
+
+	// Сданное уведомление остаётся в истории.
+	save(ids[1], "книги")
+	claimed, err := r.ClaimNotifications(ctx, now, 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+	require.NoError(t, r.MarkNotificationSent(ctx, claimed[0].ID))
+
+	// Три быстрых сохранения — одно pending; взятое в работу тоже стирается,
+	// и его отметка уже ничего не меняет.
+	save(ids[1], "носки")
+	inFlight, err := r.ClaimNotifications(ctx, now, 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, inFlight, 1)
+	save(ids[1], "шарф")
+	save(ids[1], "варежки")
+	assert.EqualValues(t, 2, countNotes(t, db, ids[1], entity.SantaNotifyWishesUpdated), "одно сданное + одно свежее")
+	assert.ErrorIs(t, r.MarkNotificationSent(ctx, inFlight[0].ID), repo.ErrNotFound)
+
+	// Уведомления других получателей не задеты.
+	save(ids[2], "свечи")
+	assert.EqualValues(t, 1, countNotes(t, db, ids[2], entity.SantaNotifyWishesUpdated))
+	assert.EqualValues(t, 2, countNotes(t, db, ids[1], entity.SantaNotifyWishesUpdated))
+}
+
 func TestSantaRepo_GetGiver(t *testing.T) {
 	ctx := context.Background()
 	r := persistent.NewSantaRepo(setupSantaDB(t))
@@ -345,4 +383,16 @@ func TestSantaRepo_MarkNotification(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, due, 1, "только отложенное pending")
 	assert.Equal(t, batch[1].ID, due[0].ID)
+
+	// Уже отмеченное не перезаписывается: обработчик, опоздавший с отметкой,
+	// не вернёт sent в pending и не оживит failed.
+	assert.ErrorIs(t, r.MarkNotificationFailed(ctx, batch[0].ID, 1, &retry, "late"), repo.ErrNotFound)
+	assert.ErrorIs(t, r.MarkNotificationSent(ctx, batch[2].ID), repo.ErrNotFound)
+	assert.ErrorIs(t, r.MarkNotificationSent(ctx, uuid.New()), repo.ErrNotFound)
+	var sentRow, failedRow persistent.SantaNotificationModel
+	require.NoError(t, db.First(&sentRow, "id = ?", batch[0].ID).Error)
+	assert.Equal(t, "sent", sentRow.Status)
+	assert.Empty(t, sentRow.LastError)
+	require.NoError(t, db.First(&failedRow, "id = ?", batch[2].ID).Error)
+	assert.Equal(t, "failed", failedRow.Status)
 }

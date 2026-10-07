@@ -138,3 +138,65 @@ func TestNotifier_ClaimError(t *testing.T) {
 	_, err := e.n.RunOnce(context.Background())
 	assert.Error(t, err)
 }
+
+func TestNotifier_LeaseBudgetFitsLease(t *testing.T) {
+	assert.Less(t, notifyLease/2+notifySendTimeout+notifyMarkTimeout, notifyLease,
+		"последняя отправка пачки должна закончиться до конца аренды")
+}
+
+func TestNotifier_StopsBatchAfterHalfLease(t *testing.T) {
+	e := newNotifierEnv(t)
+	calls := 0
+	// start=0, проверка перед 1-й=35с, перед 2-й=70с > lease/2.
+	e.n.now = func() time.Time {
+		at := chNow.Add(time.Duration(calls) * 35 * time.Second)
+		calls++
+		return at
+	}
+	first := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyWelcome, chNow)
+	second := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyReminderFill, chNow)
+	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{first, second}, nil)
+	e.sr.On("MarkNotificationSent", mock.Anything, first.ID).Return(nil)
+
+	sent, err := e.n.RunOnce(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, sent)
+	assert.Equal(t, 1, e.ml.calls, "вторая не отправлена — вернётся после аренды")
+	e.sr.AssertNotCalled(t, "MarkNotificationSent", mock.Anything, second.ID)
+	e.sr.AssertNotCalled(t, "MarkNotificationFailed", mock.Anything, second.ID, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestNotifier_SendDeadlineAndMarkAfterShutdown(t *testing.T) {
+	e := newNotifierEnv(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	e.ml.hook = func(sendCtx context.Context) {
+		deadline, ok := sendCtx.Deadline()
+		assert.True(t, ok, "у отправки есть дедлайн")
+		assert.WithinDuration(t, time.Now().Add(notifySendTimeout), deadline, 5*time.Second)
+		cancel() // остановка сервера во время отправки
+	}
+	first := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyWelcome, chNow)
+	second := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyReminderFill, chNow)
+	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{first, second}, nil)
+	var markErr error
+	e.sr.On("MarkNotificationSent", mock.Anything, first.ID).Run(func(a mock.Arguments) {
+		markErr = a.Get(0).(context.Context).Err()
+	}).Return(nil)
+
+	sent, err := e.n.RunOnce(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, sent)
+	assert.NoError(t, markErr, "отметка пишется и после отмены ctx")
+	assert.Equal(t, 1, e.ml.calls, "после отмены новых отправок нет")
+}
+
+func TestNotifier_MarkAlreadyHandledIsQuiet(t *testing.T) {
+	e := newNotifierEnv(t)
+	note := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyWelcome, chNow)
+	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{note}, nil)
+	e.sr.On("MarkNotificationSent", mock.Anything, note.ID).Return(repo.ErrNotFound)
+	sent, err := e.n.RunOnce(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, sent)
+}

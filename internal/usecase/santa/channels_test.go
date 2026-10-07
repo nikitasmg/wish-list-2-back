@@ -22,9 +22,14 @@ type fakeMailer struct {
 	to, subject, text string
 	err               error
 	calls             int
+	// hook видит контекст отправки (дедлайн, отмена).
+	hook func(context.Context)
 }
 
-func (f *fakeMailer) Send(_ context.Context, to, subject, _, text string) error {
+func (f *fakeMailer) Send(ctx context.Context, to, subject, _, text string) error {
+	if f.hook != nil {
+		f.hook(ctx)
+	}
 	f.calls++
 	f.to, f.subject, f.text = to, subject, text
 	return f.err
@@ -217,7 +222,7 @@ func TestTelegramLink_NotConfigured(t *testing.T) {
 	sr := new(mockrepo.MockSantaRepo)
 	uc := New(sr, new(mockrepo.MockUserRepo))
 	_, err := uc.TelegramLink(context.Background(), "abcdefgh", tokAuth)
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, usecase.ErrSantaUnavailable)
 }
 
 func TestTelegramStart_Links(t *testing.T) {
@@ -253,4 +258,44 @@ func TestTelegramStart_NoToken(t *testing.T) {
 	require.NoError(t, uc.TelegramStart(context.Background(), 77, ""))
 	assert.Equal(t, botHelloText(), tg.text)
 	sr.AssertNotCalled(t, "LinkTelegram", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestRequestEmailCode_MailerNotConfigured(t *testing.T) {
+	sr := new(mockrepo.MockSantaRepo)
+	uc := New(sr, new(mockrepo.MockUserRepo))
+	err := uc.RequestEmailCode(context.Background(), "abcdefgh", tokAuth, "a@example.com")
+	assert.ErrorIs(t, err, usecase.ErrSantaUnavailable)
+	assert.Contains(t, err.Error(), "отправка почты пока не настроена")
+	sr.AssertNotCalled(t, "SetEmail", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// Кулдаун — на участника; предел на адрес держит рассылку через новые
+// вступления в комнаты.
+func TestRequestEmailCode_PerAddressLimit(t *testing.T) {
+	uc, sr, ml, _, _, p := channelUC(t)
+	sr.On("GetEmailCode", mock.Anything, p.ID).Return(entity.SantaEmailCode{}, repo.ErrNotFound)
+	sr.On("SetEmail", mock.Anything, p.ID, mock.Anything, mock.Anything).Return(nil)
+	for i := 0; i < emailCodesPerHour; i++ {
+		require.NoError(t, uc.RequestEmailCode(context.Background(), "abcdefgh", tokAuth, "victim@example.com"), "код %d", i+1)
+	}
+	err := uc.RequestEmailCode(context.Background(), "abcdefgh", tokAuth, "Victim@Example.com")
+	assert.ErrorIs(t, err, usecase.ErrSantaEmailLimit)
+	assert.Equal(t, emailCodesPerHour, ml.calls)
+
+	require.NoError(t, uc.RequestEmailCode(context.Background(), "abcdefgh", tokAuth, "other@example.com"), "другой адрес не задет")
+
+	uc.now = func() time.Time { return chNow.Add(emailQuotaWindow + time.Second) }
+	require.NoError(t, uc.RequestEmailCode(context.Background(), "abcdefgh", tokAuth, "victim@example.com"), "через час снова можно")
+}
+
+func TestEmailQuota_SlidingWindowAndSweep(t *testing.T) {
+	q := newEmailQuota(2, time.Hour)
+	assert.True(t, q.take("a", chNow))
+	assert.True(t, q.take("a", chNow.Add(30*time.Minute)))
+	assert.False(t, q.take("a", chNow.Add(59*time.Minute)))
+	assert.True(t, q.take("a", chNow.Add(61*time.Minute)), "первая отметка вышла из окна")
+	assert.True(t, q.take("b", chNow))
+	q.take("c", chNow.Add(3*time.Hour)) // чистка: у b не осталось отметок в окне
+	_, kept := q.sent["b"]
+	assert.False(t, kept)
 }

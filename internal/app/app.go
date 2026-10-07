@@ -97,6 +97,7 @@ func Run(cfg *config.Config) {
 	guestDataUseCase := guestDataUC.New(guestDataRepo, wishlistRepo)
 	templateUseCase := templateUC.New(templateRepo, wishlistRepo)
 	// Уведомления Санты: без SMTP и токена бота — в лог (разработка).
+	production := cfg.App.Env == "production"
 	var mail usecase.Mailer = mailer.NewLog()
 	if cfg.Notify.SMTPHost != "" {
 		smtpMailer, err := mailer.NewSMTP(mailer.Config{
@@ -107,6 +108,8 @@ func Run(cfg *config.Config) {
 			log.Fatalf("mailer: %v", err)
 		}
 		mail = smtpMailer
+	} else if production {
+		log.Println("WARNING: SMTP_HOST не задан — коды на почту Санты не отправляются (ответ 503)")
 	} else {
 		log.Println("WARNING: SMTP_HOST не задан — письма Санты уходят в лог")
 	}
@@ -114,10 +117,27 @@ func Run(cfg *config.Config) {
 	if cfg.Notify.TelegramBotToken != "" {
 		bot = telegram.New(cfg.Notify.TelegramBotToken)
 	} else {
-		log.Println("WARNING: токен бота не задан — сообщения Санты уходят в лог")
+		log.Println("WARNING: SANTA_BOT_TOKEN/BOT_TOKEN не задан — сообщения Санты уходят в лог")
 	}
-	santaUseCase := santaUC.New(santaRepo, userRepo,
-		santaUC.WithMailer(mail), santaUC.WithTelegram(bot, cfg.Notify.TelegramBotUsername))
+	if cfg.Notify.TelegramBotUsername == "" {
+		log.Println("WARNING: BOT_USERNAME не задан — ссылки на бота Санты не выдаются (ответ 503)")
+	}
+	if cfg.Notify.TelegramWebhookSecret == "" {
+		log.Println("WARNING: TELEGRAM_WEBHOOK_SECRET не задан — вебхук бота выключен, ссылки на бота Санты не выдаются (ответ 503)")
+	}
+	// Процесс не роняем: переменные могут задать позже, а остальной сервис
+	// должен работать. Ненастроенный канал отвечает 503, а не «код отправлен»
+	// или ссылкой на бота, который никому не ответит.
+	var santaOpts []santaUC.Option
+	if cfg.Notify.SMTPHost != "" || !production {
+		santaOpts = append(santaOpts, santaUC.WithMailer(mail))
+	}
+	linkBot := cfg.Notify.TelegramBotUsername
+	if cfg.Notify.TelegramWebhookSecret == "" || cfg.Notify.TelegramBotToken == "" {
+		linkBot = "" // /start по ссылке до нас не дойдёт
+	}
+	santaOpts = append(santaOpts, santaUC.WithTelegram(bot, linkBot))
+	santaUseCase := santaUC.New(santaRepo, userRepo, santaOpts...)
 	notifyCtx, stopNotify := context.WithCancel(context.Background())
 	defer stopNotify()
 	notifierDone := make(chan struct{})

@@ -142,7 +142,8 @@ type SantaRepo interface {
 	ListParticipants(ctx context.Context, roomID uuid.UUID) ([]entity.SantaParticipant, error)
 	CountParticipants(ctx context.Context, roomIDs []uuid.UUID) (map[uuid.UUID]int, error)
 	// UpdateParticipant пишет имя/пожелания/вишлист и кладёт notes в очередь —
-	// одной транзакцией.
+	// одной транзакцией. Несданные (pending) wishes_updated того же получателя
+	// стираются: Санта получит одно сообщение о последней правке.
 	UpdateParticipant(ctx context.Context, p entity.SantaParticipant, notes ...entity.SantaNotification) error
 	// DeleteParticipant под блокировкой комнаты: не open — ErrStatusMismatch,
 	// участника нет — ErrNotFound.
@@ -187,6 +188,8 @@ type SantaRepo interface {
 	// (FOR UPDATE SKIP LOCKED) и сдвигает им next_try_at на now+lease: второй
 	// обработчик их не возьмёт, а упавший — отдаст через lease.
 	ClaimNotifications(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]entity.SantaNotification, error)
+	// MarkNotificationSent/Failed меняют только pending-уведомление; уже
+	// отмеченное или стёртое — ErrNotFound.
 	MarkNotificationSent(ctx context.Context, id uuid.UUID) error
 	// MarkNotificationFailed: retryAt == nil — окончательно failed, иначе
 	// снова pending к retryAt.

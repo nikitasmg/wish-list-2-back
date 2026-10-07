@@ -348,6 +348,12 @@ var (
 	ErrSantaTooSoon = errors.New("слишком часто — попробуйте чуть позже")
 	// ErrSantaEmailTaken — адрес уже у другого участника этой комнаты.
 	ErrSantaEmailTaken = errors.New("этот адрес уже у другого участника комнаты")
+	// ErrSantaEmailLimit — на адрес за последний час ушло слишком много кодов
+	// (из любых комнат): защита от рассылки кодов на чужую почту.
+	ErrSantaEmailLimit = errors.New("на этот адрес уже отправили много кодов — попробуйте через час")
+	// ErrSantaUnavailable — канал уведомлений не настроен на сервере (503).
+	// Конкретная причина — в тексте обёрнутой ошибки.
+	ErrSantaUnavailable = errors.New("канал уведомлений пока не настроен")
 )
 
 // SantaRoomInput — создание и правка комнаты.
@@ -483,11 +489,14 @@ type SantaUseCase interface {
 	UpdateMe(ctx context.Context, slug string, auth SantaAuth, in SantaProfileInput) (SantaMe, error)
 	LeaveMe(ctx context.Context, slug string, auth SantaAuth) error
 	// RequestEmailCode ставит адрес и шлёт на него код; раньше чем через
-	// минуту после прошлого — ErrSantaTooSoon; адрес занят — ErrSantaEmailTaken.
+	// минуту после прошлого — ErrSantaTooSoon; адрес занят — ErrSantaEmailTaken;
+	// на адрес за час ушло 5 кодов — ErrSantaEmailLimit; почта не настроена —
+	// ErrSantaUnavailable.
 	RequestEmailCode(ctx context.Context, slug string, auth SantaAuth, email string) error
 	// VerifyEmail проверяет код; неверный, устаревший или 5 попыток — ErrSantaInvalid.
 	VerifyEmail(ctx context.Context, slug string, auth SantaAuth, code string) (SantaMe, error)
-	// TelegramLink — ссылка t.me на бота с одноразовым токеном (24 ч).
+	// TelegramLink — ссылка t.me на бота с одноразовым токеном (24 ч); бот не
+	// настроен — ErrSantaUnavailable.
 	TelegramLink(ctx context.Context, slug string, auth SantaAuth) (string, error)
 	// TelegramStart — команда /start <токен> из вебхука бота.
 	TelegramStart(ctx context.Context, chatID int64, token string) error

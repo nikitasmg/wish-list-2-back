@@ -198,14 +198,26 @@ func (r *santaRepo) ClaimNotifications(ctx context.Context, now time.Time, limit
 	return out, nil
 }
 
-func (r *santaRepo) MarkNotificationSent(ctx context.Context, id uuid.UUID) error {
-	if err := r.db.WithContext(ctx).Model(&SantaNotificationModel{}).Where("id = ?", id).Updates(map[string]any{
-		"status":     string(entity.SantaNotificationSent),
-		"last_error": "",
-	}).Error; err != nil {
-		return santaErr("santaRepo.MarkNotificationSent", err)
+// markPending меняет только ещё pending-уведомление: отмеченное другим
+// обработчиком или стёртое при схлопывании не трогаем — ErrNotFound.
+func (r *santaRepo) markPending(ctx context.Context, op string, id uuid.UUID, updates map[string]any) error {
+	res := r.db.WithContext(ctx).Model(&SantaNotificationModel{}).
+		Where("id = ? AND status = ?", id, string(entity.SantaNotificationPending)).
+		Updates(updates)
+	if res.Error != nil {
+		return santaErr(op, res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("%s: %w", op, repo.ErrNotFound)
 	}
 	return nil
+}
+
+func (r *santaRepo) MarkNotificationSent(ctx context.Context, id uuid.UUID) error {
+	return r.markPending(ctx, "santaRepo.MarkNotificationSent", id, map[string]any{
+		"status":     string(entity.SantaNotificationSent),
+		"last_error": "",
+	})
 }
 
 func (r *santaRepo) MarkNotificationFailed(ctx context.Context, id uuid.UUID, attempts int, retryAt *time.Time, lastErr string) error {
@@ -216,8 +228,5 @@ func (r *santaRepo) MarkNotificationFailed(ctx context.Context, id uuid.UUID, at
 		updates["status"] = string(entity.SantaNotificationPending)
 		updates["next_try_at"] = *retryAt
 	}
-	if err := r.db.WithContext(ctx).Model(&SantaNotificationModel{}).Where("id = ?", id).Updates(updates).Error; err != nil {
-		return santaErr("santaRepo.MarkNotificationFailed", err)
-	}
-	return nil
+	return r.markPending(ctx, "santaRepo.MarkNotificationFailed", id, updates)
 }

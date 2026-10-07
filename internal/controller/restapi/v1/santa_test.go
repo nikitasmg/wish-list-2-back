@@ -366,3 +366,78 @@ func TestSantaRemind_RequiresLogin(t *testing.T) {
 	status, _ := doReq(t, newSantaApp(m), httptest.NewRequest(http.MethodPost, "/api/v1/santa/rooms/"+uuid.NewString()+"/remind", nil))
 	assert.Equal(t, http.StatusUnauthorized, status)
 }
+
+func TestSantaVerifyEmail_WrongCodeIs422(t *testing.T) {
+	m := &MockSantaUC{}
+	m.On("VerifyEmail", mock.Anything, "abcdefgh", mock.Anything, "000000").
+		Return(usecase.SantaMe{}, fmt.Errorf("%w: неверный код", usecase.ErrSantaInvalid))
+
+	status, body := doReq(t, newSantaApp(m), jsonReq("/api/v1/santa/r/abcdefgh/me/email/verify", `{"code":"000000"}`))
+
+	assert.Equal(t, http.StatusUnprocessableEntity, status)
+	assert.Contains(t, body, "неверный код")
+}
+
+func TestTelegramWebhook_RejectsMissingSecret(t *testing.T) {
+	m := &MockSantaUC{}
+	req := jsonReq("/api/v1/telegram/webhook", `{"message":{"chat":{"id":77},"text":"/start X"}}`)
+
+	status, _ := doReq(t, newSantaApp(m), req)
+
+	assert.Equal(t, http.StatusUnauthorized, status)
+	m.AssertNotCalled(t, "TelegramStart", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestSantaRequestEmailCode_IPLimit(t *testing.T) {
+	m := &MockSantaUC{}
+	m.On("RequestEmailCode", mock.Anything, "abcdefgh", mock.Anything, mock.Anything).Return(nil)
+	app := newSantaApp(m)
+
+	for i := 0; i < v1.EmailCodePerMinute; i++ {
+		status, _ := doReq(t, app, jsonReq("/api/v1/santa/r/abcdefgh/me/email", `{"email":"a@example.com"}`))
+		require.Equal(t, http.StatusOK, status, "запрос %d", i+1)
+	}
+	status, body := doReq(t, app, jsonReq("/api/v1/santa/r/abcdefgh/me/email", `{"email":"b@example.com"}`))
+
+	assert.Equal(t, http.StatusTooManyRequests, status)
+	assert.Contains(t, body, v1.EmailCodeLimitMessage)
+	m.AssertNumberOfCalls(t, "RequestEmailCode", v1.EmailCodePerMinute)
+
+	// Предел только на запрос кода: соседние маршруты участника работают.
+	m.On("VerifyEmail", mock.Anything, "abcdefgh", mock.Anything, "123456").Return(usecase.SantaMe{}, nil)
+	status, _ = doReq(t, app, jsonReq("/api/v1/santa/r/abcdefgh/me/email/verify", `{"code":"123456"}`))
+	assert.Equal(t, http.StatusOK, status)
+}
+
+func TestSantaRequestEmailCode_PerAddressLimitIs429(t *testing.T) {
+	m := &MockSantaUC{}
+	m.On("RequestEmailCode", mock.Anything, "abcdefgh", mock.Anything, mock.Anything).Return(usecase.ErrSantaEmailLimit)
+
+	status, body := doReq(t, newSantaApp(m), jsonReq("/api/v1/santa/r/abcdefgh/me/email", `{"email":"a@example.com"}`))
+
+	assert.Equal(t, http.StatusTooManyRequests, status)
+	assert.Contains(t, body, usecase.ErrSantaEmailLimit.Error())
+}
+
+// unavailableErr — как ошибка use case: свой текст, errors.Is — ErrSantaUnavailable.
+type unavailableErr struct{ msg string }
+
+func (e unavailableErr) Error() string { return e.msg }
+func (e unavailableErr) Unwrap() error { return usecase.ErrSantaUnavailable }
+
+func TestSantaChannelsUnavailableIs503(t *testing.T) {
+	m := &MockSantaUC{}
+	m.On("RequestEmailCode", mock.Anything, "abcdefgh", mock.Anything, mock.Anything).
+		Return(unavailableErr{"отправка почты пока не настроена"})
+	m.On("TelegramLink", mock.Anything, "abcdefgh", mock.Anything).
+		Return("", unavailableErr{"подключение Telegram пока не настроено"})
+	app := newSantaApp(m)
+
+	status, body := doReq(t, app, jsonReq("/api/v1/santa/r/abcdefgh/me/email", `{"email":"a@example.com"}`))
+	assert.Equal(t, http.StatusServiceUnavailable, status)
+	assert.JSONEq(t, `{"error":"отправка почты пока не настроена"}`, body)
+
+	status, body = doReq(t, app, httptest.NewRequest(http.MethodPost, "/api/v1/santa/r/abcdefgh/me/telegram", nil))
+	assert.Equal(t, http.StatusServiceUnavailable, status)
+	assert.Contains(t, body, "подключение Telegram пока не настроено")
+}

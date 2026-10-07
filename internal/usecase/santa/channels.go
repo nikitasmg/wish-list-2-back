@@ -23,6 +23,15 @@ const (
 	tgLinkTTL         = 24 * time.Hour
 )
 
+// unavailableError — канал не настроен на сервере: текст для человека,
+// errors.Is — usecase.ErrSantaUnavailable (503).
+type unavailableError struct{ msg string }
+
+func (e unavailableError) Error() string { return e.msg }
+func (e unavailableError) Unwrap() error { return usecase.ErrSantaUnavailable }
+
+func unavailable(msg string) error { return unavailableError{msg: msg} }
+
 // normalizeEmail: нижний регистр, только голый адрес без имени.
 func normalizeEmail(raw string) (string, error) {
 	email := strings.ToLower(strings.TrimSpace(raw))
@@ -53,7 +62,7 @@ func (uc *santaUseCase) participantBySlug(ctx context.Context, slug string, auth
 
 func (uc *santaUseCase) RequestEmailCode(ctx context.Context, slug string, auth usecase.SantaAuth, rawEmail string) error {
 	if uc.mailer == nil {
-		return errors.New("santa: почта не настроена")
+		return unavailable("отправка почты пока не настроена — подключите Telegram или попробуйте позже")
 	}
 	room, p, err := uc.participantBySlug(ctx, slug, auth)
 	if err != nil {
@@ -72,6 +81,9 @@ func (uc *santaUseCase) RequestEmailCode(ctx context.Context, slug string, auth 
 		}
 	case !errors.Is(err, repo.ErrNotFound):
 		return err
+	}
+	if !uc.emailQuota.take(email, now) {
+		return usecase.ErrSantaEmailLimit
 	}
 	code, err := newEmailCode()
 	if err != nil {
@@ -145,7 +157,7 @@ func (uc *santaUseCase) VerifyEmail(ctx context.Context, slug string, auth useca
 
 func (uc *santaUseCase) TelegramLink(ctx context.Context, slug string, auth usecase.SantaAuth) (string, error) {
 	if uc.botUsername == "" {
-		return "", errors.New("santa: бот Telegram не настроен")
+		return "", unavailable("подключение Telegram пока не настроено — укажите почту или попробуйте позже")
 	}
 	_, p, err := uc.participantBySlug(ctx, slug, auth)
 	if err != nil {

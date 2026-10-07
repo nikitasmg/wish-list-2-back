@@ -217,6 +217,20 @@ func (r *santaRepo) UpdateParticipant(ctx context.Context, p entity.SantaPartici
 		if res.RowsAffected == 0 {
 			return fmt.Errorf("santaRepo.UpdateParticipant: %w", repo.ErrNotFound)
 		}
+		// «Пожелания обновились» схлопываются: несданное старое стираем, кладём
+		// одно новое. Стираем любое pending этого вида — и ждущее повтора, и
+		// взятое обработчиком в работу: тот при отметке увидит 0 строк, а Санта
+		// всё равно получит свежее сообщение о последней правке.
+		for _, n := range notes {
+			if n.Kind != entity.SantaNotifyWishesUpdated {
+				continue
+			}
+			if err := tx.Where("participant_id = ? AND kind = ? AND status = ?",
+				n.ParticipantID, string(n.Kind), string(entity.SantaNotificationPending)).
+				Delete(&SantaNotificationModel{}).Error; err != nil {
+				return santaErr("santaRepo.UpdateParticipant collapse", err)
+			}
+		}
 		return insertNotifications(tx, notes...)
 	})
 }

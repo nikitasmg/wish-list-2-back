@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/google/uuid"
 
 	"main/internal/controller/restapi/middleware"
@@ -41,7 +42,10 @@ func NewSantaRouter(router fiber.Router, jwtSecret, webhookSecret string, uc use
 	api.Get("/r/:slug/me", optional, h.me)
 	api.Patch("/r/:slug/me", optional, h.updateMe)
 	api.Delete("/r/:slug/me", optional, h.leave)
-	api.Post("/r/:slug/me/email", optional, h.requestEmailCode)
+	// Код на почту — письмо на адрес, который ввёл кто угодно: отдельный
+	// предел по IP поверх общего, иначе маршрут становится рассыльщиком.
+	api.Post("/r/:slug/me/email", emailCodeLimiter(EmailCodePerMinute, time.Minute),
+		emailCodeLimiter(EmailCodePerHour, time.Hour), optional, h.requestEmailCode)
 	api.Post("/r/:slug/me/email/verify", optional, h.verifyEmail)
 	api.Post("/r/:slug/me/telegram", optional, h.telegramLink)
 
@@ -62,8 +66,32 @@ func NewSantaRouter(router fiber.Router, jwtSecret, webhookSecret string, uc use
 	}
 }
 
+// Пределы запросов кода на почту с одного IP.
+const (
+	EmailCodePerMinute = 3
+	EmailCodePerHour   = 20
+)
+
+// EmailCodeLimitMessage — ответ 429 предела по IP.
+const EmailCodeLimitMessage = "слишком много запросов кода — попробуйте позже"
+
+func emailCodeLimiter(max int, window time.Duration) fiber.Handler {
+	return limiter.New(limiter.Config{
+		Max:        max,
+		Expiration: window,
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(response.Error(EmailCodeLimitMessage))
+		},
+	})
+}
+
 func santaError(c *fiber.Ctx, err error) error {
 	switch {
+	case errors.Is(err, usecase.ErrSantaUnavailable):
+		// Текст причины — из обёртки use case: «отправка почты пока не настроена…».
+		return c.Status(fiber.StatusServiceUnavailable).JSON(response.Error(err.Error()))
+	case errors.Is(err, usecase.ErrSantaEmailLimit):
+		return c.Status(fiber.StatusTooManyRequests).JSON(response.Error(usecase.ErrSantaEmailLimit.Error()))
 	case errors.Is(err, usecase.ErrSantaNotFound):
 		return c.Status(fiber.StatusNotFound).JSON(response.Error(usecase.ErrSantaNotFound.Error()))
 	case errors.Is(err, usecase.ErrSantaDrawn):
