@@ -61,3 +61,10 @@ func TestSendMessageAPIError(t *testing.T) {
 func TestEscape(t *testing.T) {
 	assert.Equal(t, "&lt;b&gt;Аня &amp; Ко&lt;/b&gt;", Escape("<b>Аня & Ко</b>"))
 }
+
+func TestSendMessageErrorDoesNotLeakToken(t *testing.T) {
+	c := NewWithBase("SECRET-TOKEN", "http://127.0.0.1:1", &http.Client{})
+	err := c.SendMessage(context.Background(), 1, "x", nil)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "SECRET-TOKEN")
+}

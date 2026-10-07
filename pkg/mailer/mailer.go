@@ -59,13 +59,26 @@ func (s *SMTP) Send(ctx context.Context, to, subject, html, text string) error {
 
 	var conn net.Conn
 	if s.cfg.Port == 465 {
-		conn, err = tls.DialWithDialer(dialer, "tcp", addr, tlsCfg)
+		conn, err = (&tls.Dialer{NetDialer: dialer, Config: tlsCfg}).DialContext(ctx, "tcp", addr)
 	} else {
 		conn, err = dialer.DialContext(ctx, "tcp", addr)
 	}
 	if err != nil {
 		return fmt.Errorf("mailer: dial: %w", err)
 	}
+	deadline := time.Now().Add(30 * time.Second)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d
+	}
+	_ = conn.SetDeadline(deadline)
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		}
+	}()
 	_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
 
 	c, err := smtp.NewClient(conn, s.cfg.Host)
@@ -104,7 +117,8 @@ func (s *SMTP) Send(ctx context.Context, to, subject, html, text string) error {
 	if err := w.Close(); err != nil {
 		return fmt.Errorf("mailer: close data: %w", err)
 	}
-	return c.Quit()
+	_ = c.Quit() // письмо уже принято; ошибка Quit не повод повторять отправку
+	return nil
 }
 
 // buildMessage собирает multipart/alternative: текст и HTML в quoted-printable.

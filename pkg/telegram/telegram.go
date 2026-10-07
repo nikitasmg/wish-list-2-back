@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"log"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -56,12 +58,16 @@ func (c *Client) SendMessage(ctx context.Context, chatID int64, text string, but
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/bot"+c.token+"/sendMessage", bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return errors.New("telegram: не удалось собрать запрос")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("telegram: %w", err)
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err // url.Error содержит URL с токеном бота
+		}
+		return fmt.Errorf("telegram sendMessage: %w", err)
 	}
 	defer resp.Body.Close()
 	var out struct {

@@ -44,7 +44,7 @@ func TestBuildMessage(t *testing.T) {
 		}
 		require.NoError(t, err)
 		ct, _, _ := mime.ParseMediaType(part.Header.Get("Content-Type"))
-		b, err := io.ReadAll(part) // multipart.Reader снимает base64 сам
+		b, err := io.ReadAll(part) // multipart.Reader снимает quoted-printable сам
 		require.NoError(t, err)
 		bodies[ct] = string(b)
 	}
