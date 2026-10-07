@@ -141,7 +141,9 @@ type SantaRepo interface {
 	// ListParticipants — в порядке вступления.
 	ListParticipants(ctx context.Context, roomID uuid.UUID) ([]entity.SantaParticipant, error)
 	CountParticipants(ctx context.Context, roomIDs []uuid.UUID) (map[uuid.UUID]int, error)
-	UpdateParticipant(ctx context.Context, p entity.SantaParticipant) error
+	// UpdateParticipant пишет имя/пожелания/вишлист и кладёт notes в очередь —
+	// одной транзакцией.
+	UpdateParticipant(ctx context.Context, p entity.SantaParticipant, notes ...entity.SantaNotification) error
 	// DeleteParticipant под блокировкой комнаты: не open — ErrStatusMismatch,
 	// участника нет — ErrNotFound.
 	DeleteParticipant(ctx context.Context, id uuid.UUID) error
@@ -164,9 +166,26 @@ type SantaRepo interface {
 	LinkTelegram(ctx context.Context, tokenHash string, chatID int64, now time.Time, welcome func(entity.SantaParticipant) entity.SantaNotification) (entity.SantaParticipant, error)
 
 	GetAssignment(ctx context.Context, roomID, giverID uuid.UUID) (entity.SantaAssignment, error)
+	// GetGiver — кто дарит receiverID; пар нет — ErrNotFound.
+	GetGiver(ctx context.Context, roomID, receiverID uuid.UUID) (entity.SantaAssignment, error)
 	// Draw в одной транзакции: блокирует комнату, проверяет статус expected
-	// (иначе ErrStatusMismatch), стирает старые пары, отдаёт build id
-	// участников в порядке вступления, пишет пары и ставит status=drawn.
-	// Ошибка build откатывает всё и возвращается как есть.
-	Draw(ctx context.Context, roomID uuid.UUID, expected entity.SantaRoomStatus, build func(ids []uuid.UUID) ([]entity.SantaAssignment, error)) error
+	// (иначе ErrStatusMismatch), стирает старые пары и несданные уведомления
+	// drawn участников комнаты, отдаёт build id ГОТОВЫХ участников (канал
+	// подтверждён) в порядке вступления, пишет пары, кладёт note каждому
+	// дарящему и ставит status=drawn. Ошибка build откатывает всё и
+	// возвращается как есть.
+	Draw(ctx context.Context, roomID uuid.UUID, expected entity.SantaRoomStatus, build func(ids []uuid.UUID) ([]entity.SantaAssignment, error), note func(giverID uuid.UUID) entity.SantaNotification) error
+	// Remind под блокировкой комнаты: напоминали позже now-cooldown —
+	// ErrTooSoon; иначе ставит last_reminded_at=now и кладёт notes.
+	Remind(ctx context.Context, roomID uuid.UUID, now time.Time, cooldown time.Duration, notes []entity.SantaNotification) error
+
+	// Outbox.
+	// ClaimNotifications берёт до limit созревших pending-уведомлений
+	// (FOR UPDATE SKIP LOCKED) и сдвигает им next_try_at на now+lease: второй
+	// обработчик их не возьмёт, а упавший — отдаст через lease.
+	ClaimNotifications(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]entity.SantaNotification, error)
+	MarkNotificationSent(ctx context.Context, id uuid.UUID) error
+	// MarkNotificationFailed: retryAt == nil — окончательно failed, иначе
+	// снова pending к retryAt.
+	MarkNotificationFailed(ctx context.Context, id uuid.UUID, attempts int, retryAt *time.Time, lastErr string) error
 }

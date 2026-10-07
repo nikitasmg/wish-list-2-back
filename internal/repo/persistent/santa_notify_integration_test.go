@@ -173,3 +173,154 @@ func TestSantaRepo_DeleteParticipantCascadesChannelData(t *testing.T) {
 	require.NoError(t, db.Model(&persistent.SantaTgLinkModel{}).Where("participant_id = ?", id).Count(&links).Error)
 	assert.EqualValues(t, 0, links)
 }
+
+func drawnNote(now time.Time) func(uuid.UUID) entity.SantaNotification {
+	return func(giverID uuid.UUID) entity.SantaNotification {
+		return entity.NewSantaNotification(giverID, entity.SantaNotifyDrawn, now)
+	}
+}
+
+func TestSantaRepo_DrawOnlyReadyAndEnqueues(t *testing.T) {
+	ctx := context.Background()
+	db := setupSantaDB(t)
+	r := persistent.NewSantaRepo(db)
+	room := seedRoom(t, r, uuid.New())
+	ready := seedParticipants(t, r, room.ID, 3)
+	unready := seedUnready(t, r, room.ID, 1)[0]
+
+	var got []uuid.UUID
+	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, func(in []uuid.UUID) ([]entity.SantaAssignment, error) {
+		got = in
+		return circle(room.ID)(in)
+	}, drawnNote(time.Now())))
+	assert.Equal(t, ready, got, "неготовый в жеребьёвку не попал")
+	for _, id := range ready {
+		assert.EqualValues(t, 1, countNotes(t, db, id, entity.SantaNotifyDrawn))
+	}
+	assert.EqualValues(t, 0, countNotes(t, db, unready, entity.SantaNotifyDrawn))
+	_, err := r.GetAssignment(ctx, room.ID, unready)
+	assert.ErrorIs(t, err, repo.ErrNotFound)
+}
+
+func TestSantaRepo_RedrawDropsPendingDrawn(t *testing.T) {
+	ctx := context.Background()
+	db := setupSantaDB(t)
+	r := persistent.NewSantaRepo(db)
+	room := seedRoom(t, r, uuid.New())
+	ids := seedParticipants(t, r, room.ID, 3)
+	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID), drawnNote(time.Now())))
+	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomDrawn, circle(room.ID), drawnNote(time.Now())))
+	for _, id := range ids {
+		assert.EqualValues(t, 1, countNotes(t, db, id, entity.SantaNotifyDrawn), "несданное старое drawn стёрто, новое одно")
+	}
+}
+
+func TestSantaRepo_UpdateParticipantEnqueues(t *testing.T) {
+	ctx := context.Background()
+	db := setupSantaDB(t)
+	r := persistent.NewSantaRepo(db)
+	room := seedRoom(t, r, uuid.New())
+	ids := seedParticipants(t, r, room.ID, 2)
+	p, err := r.GetParticipant(ctx, ids[0])
+	require.NoError(t, err)
+	p.Wishes = "Книги"
+	require.NoError(t, r.UpdateParticipant(ctx, p, entity.NewSantaNotification(ids[1], entity.SantaNotifyWishesUpdated, time.Now())))
+	assert.EqualValues(t, 1, countNotes(t, db, ids[1], entity.SantaNotifyWishesUpdated))
+}
+
+func TestSantaRepo_GetGiver(t *testing.T) {
+	ctx := context.Background()
+	r := persistent.NewSantaRepo(setupSantaDB(t))
+	room := seedRoom(t, r, uuid.New())
+	ids := seedParticipants(t, r, room.ID, 3)
+	_, err := r.GetGiver(ctx, room.ID, ids[1])
+	assert.ErrorIs(t, err, repo.ErrNotFound, "до жеребьёвки дарящего нет")
+
+	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID), drawnNote(time.Now())))
+	a, err := r.GetGiver(ctx, room.ID, ids[1])
+	require.NoError(t, err)
+	assert.Equal(t, ids[0], a.GiverID)
+}
+
+func TestSantaRepo_RemindCooldown(t *testing.T) {
+	ctx := context.Background()
+	db := setupSantaDB(t)
+	r := persistent.NewSantaRepo(db)
+	room := seedRoom(t, r, uuid.New())
+	id := seedParticipants(t, r, room.ID, 1)[0]
+	now := time.Now().UTC().Truncate(time.Second)
+	note := func() []entity.SantaNotification {
+		return []entity.SantaNotification{entity.NewSantaNotification(id, entity.SantaNotifyReminderFill, now)}
+	}
+
+	require.NoError(t, r.Remind(ctx, room.ID, now, 12*time.Hour, note()))
+	saved, err := r.GetRoomByID(ctx, room.ID)
+	require.NoError(t, err)
+	require.NotNil(t, saved.LastRemindedAt)
+	assert.WithinDuration(t, now, *saved.LastRemindedAt, time.Second)
+
+	err = r.Remind(ctx, room.ID, now.Add(11*time.Hour), 12*time.Hour, note())
+	assert.ErrorIs(t, err, repo.ErrTooSoon)
+	assert.EqualValues(t, 1, countNotes(t, db, id, entity.SantaNotifyReminderFill), "второе напоминание не легло")
+
+	require.NoError(t, r.Remind(ctx, room.ID, now.Add(13*time.Hour), 12*time.Hour, note()))
+	assert.EqualValues(t, 2, countNotes(t, db, id, entity.SantaNotifyReminderFill))
+}
+
+func TestSantaRepo_ClaimLeasesNotifications(t *testing.T) {
+	ctx := context.Background()
+	db := setupSantaDB(t)
+	r := persistent.NewSantaRepo(db)
+	room := seedRoom(t, r, uuid.New())
+	seedParticipants(t, r, room.ID, 3)
+	now := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID), drawnNote(now)))
+
+	first, err := r.ClaimNotifications(ctx, now, 10, 2*time.Minute)
+	require.NoError(t, err)
+	assert.Len(t, first, 3)
+
+	again, err := r.ClaimNotifications(ctx, now.Add(time.Minute), 10, 2*time.Minute)
+	require.NoError(t, err)
+	assert.Empty(t, again, "под арендой — второй обработчик не берёт")
+
+	afterLease, err := r.ClaimNotifications(ctx, now.Add(3*time.Minute), 10, 2*time.Minute)
+	require.NoError(t, err)
+	assert.Len(t, afterLease, 3, "аренда истекла — снова в работе")
+}
+
+func TestSantaRepo_MarkNotification(t *testing.T) {
+	ctx := context.Background()
+	db := setupSantaDB(t)
+	r := persistent.NewSantaRepo(db)
+	room := seedRoom(t, r, uuid.New())
+	seedParticipants(t, r, room.ID, 3)
+	now := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, r.Draw(ctx, room.ID, entity.SantaRoomOpen, circle(room.ID), drawnNote(now)))
+	batch, err := r.ClaimNotifications(ctx, now, 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, batch, 3)
+
+	require.NoError(t, r.MarkNotificationSent(ctx, batch[0].ID))
+	retry := now.Add(5 * time.Minute)
+	require.NoError(t, r.MarkNotificationFailed(ctx, batch[1].ID, 2, &retry, "timeout"))
+	require.NoError(t, r.MarkNotificationFailed(ctx, batch[2].ID, 4, nil, "gone"))
+
+	var rows []persistent.SantaNotificationModel
+	require.NoError(t, db.Order("id").Find(&rows).Error)
+	byID := map[uuid.UUID]persistent.SantaNotificationModel{}
+	for _, row := range rows {
+		byID[row.ID] = row
+	}
+	assert.Equal(t, "sent", byID[batch[0].ID].Status)
+	assert.Equal(t, "pending", byID[batch[1].ID].Status)
+	assert.Equal(t, 2, byID[batch[1].ID].Attempts)
+	assert.WithinDuration(t, retry, byID[batch[1].ID].NextTryAt, time.Second)
+	assert.Equal(t, "timeout", byID[batch[1].ID].LastError)
+	assert.Equal(t, "failed", byID[batch[2].ID].Status)
+
+	due, err := r.ClaimNotifications(ctx, now.Add(10*time.Minute), 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, due, 1, "только отложенное pending")
+	assert.Equal(t, batch[1].ID, due[0].ID)
+}

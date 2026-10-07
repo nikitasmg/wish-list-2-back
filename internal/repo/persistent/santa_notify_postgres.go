@@ -142,3 +142,77 @@ func (r *santaRepo) LinkTelegram(ctx context.Context, tokenHash string, chatID i
 	}
 	return out, nil
 }
+
+func (r *santaRepo) Remind(ctx context.Context, roomID uuid.UUID, now time.Time, cooldown time.Duration, notes []entity.SantaNotification) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var room SantaRoomModel
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&room, "id = ?", roomID).Error; err != nil {
+			return santaErr("santaRepo.Remind lock", err)
+		}
+		if room.LastRemindedAt != nil && room.LastRemindedAt.After(now.Add(-cooldown)) {
+			return repo.ErrTooSoon
+		}
+		if err := tx.Model(&SantaRoomModel{}).Where("id = ?", roomID).
+			Update("last_reminded_at", now).Error; err != nil {
+			return santaErr("santaRepo.Remind mark", err)
+		}
+		return insertNotifications(tx, notes...)
+	})
+}
+
+func (r *santaRepo) ClaimNotifications(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]entity.SantaNotification, error) {
+	var models []SantaNotificationModel
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
+			Where("status = ? AND next_try_at <= ?", string(entity.SantaNotificationPending), now).
+			Order("next_try_at, id").
+			Limit(limit).
+			Find(&models).Error; err != nil {
+			return santaErr("santaRepo.ClaimNotifications", err)
+		}
+		if len(models) == 0 {
+			return nil
+		}
+		ids := make([]uuid.UUID, len(models))
+		for i, m := range models {
+			ids[i] = m.ID
+		}
+		if err := tx.Model(&SantaNotificationModel{}).Where("id IN ?", ids).
+			Update("next_try_at", now.Add(lease)).Error; err != nil {
+			return santaErr("santaRepo.ClaimNotifications lease", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]entity.SantaNotification, len(models))
+	for i, m := range models {
+		out[i] = toSantaNotificationEntity(m)
+	}
+	return out, nil
+}
+
+func (r *santaRepo) MarkNotificationSent(ctx context.Context, id uuid.UUID) error {
+	if err := r.db.WithContext(ctx).Model(&SantaNotificationModel{}).Where("id = ?", id).Updates(map[string]any{
+		"status":     string(entity.SantaNotificationSent),
+		"last_error": "",
+	}).Error; err != nil {
+		return santaErr("santaRepo.MarkNotificationSent", err)
+	}
+	return nil
+}
+
+func (r *santaRepo) MarkNotificationFailed(ctx context.Context, id uuid.UUID, attempts int, retryAt *time.Time, lastErr string) error {
+	updates := map[string]any{"attempts": attempts, "last_error": lastErr}
+	if retryAt == nil {
+		updates["status"] = string(entity.SantaNotificationFailed)
+	} else {
+		updates["status"] = string(entity.SantaNotificationPending)
+		updates["next_try_at"] = *retryAt
+	}
+	if err := r.db.WithContext(ctx).Model(&SantaNotificationModel{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		return santaErr("santaRepo.MarkNotificationFailed", err)
+	}
+	return nil
+}

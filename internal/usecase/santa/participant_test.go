@@ -177,7 +177,7 @@ func TestUpdateMe_RenameAfterDrawIsClosed(t *testing.T) {
 	_, err := uc.UpdateMe(ctx, room.Slug, usecase.SantaAuth{Token: "tok"}, usecase.SantaProfileInput{Name: "Тёма"})
 
 	assert.ErrorIs(t, err, usecase.ErrSantaDrawn)
-	sr.AssertNotCalled(t, "UpdateParticipant", mock.Anything, mock.Anything)
+	sr.AssertNotCalled(t, "UpdateParticipant", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestUpdateMe_WishesAfterDrawAreSaved(t *testing.T) {
@@ -188,7 +188,7 @@ func TestUpdateMe_WishesAfterDrawAreSaved(t *testing.T) {
 	sr.On("GetParticipantByToken", mock.Anything, room.ID, mock.Anything).Return(p, nil)
 	sr.On("UpdateParticipant", mock.Anything, mock.MatchedBy(func(u entity.SantaParticipant) bool {
 		return u.Wishes == "кофе" && u.Name == "Артём"
-	})).Return(nil)
+	}), mock.Anything).Return(nil)
 	sr.On("CountParticipants", mock.Anything, mock.Anything).Return(map[uuid.UUID]int{}, nil)
 	ur.On("GetByID", mock.Anything, mock.Anything).Return(entity.User{}, nil)
 	sr.On("GetAssignment", mock.Anything, room.ID, p.ID).Return(entity.SantaAssignment{}, repo.ErrNotFound)
@@ -293,7 +293,7 @@ func TestUpdateMe_VanishedParticipantIsNotFound(t *testing.T) {
 	p := entity.SantaParticipant{ID: uuid.New(), RoomID: room.ID, Name: "Маша"}
 	sr.On("GetRoomBySlug", mock.Anything, room.Slug).Return(room, nil)
 	sr.On("GetParticipantByToken", mock.Anything, room.ID, mock.Anything).Return(p, nil)
-	sr.On("UpdateParticipant", mock.Anything, mock.Anything).Return(repo.ErrNotFound)
+	sr.On("UpdateParticipant", mock.Anything, mock.Anything, mock.Anything).Return(repo.ErrNotFound)
 
 	_, err := uc.UpdateMe(ctx, room.Slug, usecase.SantaAuth{Token: "tok"}, usecase.SantaProfileInput{Name: "Маша", Wishes: "чай"})
 

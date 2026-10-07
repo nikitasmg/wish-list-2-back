@@ -73,8 +73,8 @@ func (m *MockSantaRepo) CountParticipants(ctx context.Context, roomIDs []uuid.UU
 	return counts, args.Error(1)
 }
 
-func (m *MockSantaRepo) UpdateParticipant(ctx context.Context, p entity.SantaParticipant) error {
-	return m.Called(ctx, p).Error(0)
+func (m *MockSantaRepo) UpdateParticipant(ctx context.Context, p entity.SantaParticipant, notes ...entity.SantaNotification) error {
+	return m.Called(ctx, p, notes).Error(0)
 }
 
 func (m *MockSantaRepo) DeleteParticipant(ctx context.Context, id uuid.UUID) error {
@@ -86,8 +86,32 @@ func (m *MockSantaRepo) GetAssignment(ctx context.Context, roomID, giverID uuid.
 	return args.Get(0).(entity.SantaAssignment), args.Error(1)
 }
 
-func (m *MockSantaRepo) Draw(ctx context.Context, roomID uuid.UUID, expected entity.SantaRoomStatus, build func([]uuid.UUID) ([]entity.SantaAssignment, error)) error {
-	return m.Called(ctx, roomID, expected, build).Error(0)
+func (m *MockSantaRepo) Draw(ctx context.Context, roomID uuid.UUID, expected entity.SantaRoomStatus, build func([]uuid.UUID) ([]entity.SantaAssignment, error), note func(uuid.UUID) entity.SantaNotification) error {
+	return m.Called(ctx, roomID, expected, build, note).Error(0)
+}
+
+func (m *MockSantaRepo) GetGiver(ctx context.Context, roomID, receiverID uuid.UUID) (entity.SantaAssignment, error) {
+	args := m.Called(ctx, roomID, receiverID)
+	a, _ := args.Get(0).(entity.SantaAssignment)
+	return a, args.Error(1)
+}
+
+func (m *MockSantaRepo) Remind(ctx context.Context, roomID uuid.UUID, now time.Time, cooldown time.Duration, notes []entity.SantaNotification) error {
+	return m.Called(ctx, roomID, now, cooldown, notes).Error(0)
+}
+
+func (m *MockSantaRepo) ClaimNotifications(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]entity.SantaNotification, error) {
+	args := m.Called(ctx, now, limit, lease)
+	notes, _ := args.Get(0).([]entity.SantaNotification)
+	return notes, args.Error(1)
+}
+
+func (m *MockSantaRepo) MarkNotificationSent(ctx context.Context, id uuid.UUID) error {
+	return m.Called(ctx, id).Error(0)
+}
+
+func (m *MockSantaRepo) MarkNotificationFailed(ctx context.Context, id uuid.UUID, attempts int, retryAt *time.Time, lastErr string) error {
+	return m.Called(ctx, id, attempts, retryAt, lastErr).Error(0)
 }
 
 func (m *MockSantaRepo) SetEmail(ctx context.Context, participantID uuid.UUID, email string, code entity.SantaEmailCode) error {
