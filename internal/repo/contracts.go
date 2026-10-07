@@ -117,6 +117,9 @@ var ErrDuplicate = errors.New("duplicate")
 // ErrStatusMismatch — комната не в том статусе, которого ждал вызов.
 var ErrStatusMismatch = errors.New("status mismatch")
 
+// ErrTooSoon — повтор раньше разрешённого (напоминание организатора).
+var ErrTooSoon = errors.New("too soon")
+
 type SantaRepo interface {
 	CreateRoom(ctx context.Context, room entity.SantaRoom) error
 	GetRoomByID(ctx context.Context, id uuid.UUID) (entity.SantaRoom, error)
@@ -142,6 +145,23 @@ type SantaRepo interface {
 	// DeleteParticipant под блокировкой комнаты: не open — ErrStatusMismatch,
 	// участника нет — ErrNotFound.
 	DeleteParticipant(ctx context.Context, id uuid.UUID) error
+
+	// Каналы уведомлений.
+	// SetEmail ставит новый адрес (подтверждение сбрасывается) и кладёт код —
+	// одной транзакцией. Адрес уже у другого участника комнаты — ErrDuplicate;
+	// участника нет — ErrNotFound.
+	SetEmail(ctx context.Context, participantID uuid.UUID, email string, code entity.SantaEmailCode) error
+	GetEmailCode(ctx context.Context, participantID uuid.UUID) (entity.SantaEmailCode, error)
+	IncEmailCodeAttempts(ctx context.Context, participantID uuid.UUID) error
+	DeleteEmailCode(ctx context.Context, participantID uuid.UUID) error
+	// VerifyEmail: адрес подтверждён, канал — почта, код стёрт, приветствие в
+	// очереди — одной транзакцией.
+	VerifyEmail(ctx context.Context, participantID uuid.UUID, at time.Time, welcome entity.SantaNotification) error
+	CreateTgLink(ctx context.Context, link entity.SantaTgLink) error
+	// LinkTelegram по одноразовой ссылке: чат записан, канал — Telegram,
+	// ссылки участника стёрты, приветствие в очереди. Ссылки нет или она
+	// истекла — ErrNotFound.
+	LinkTelegram(ctx context.Context, tokenHash string, chatID int64, now time.Time, welcome func(entity.SantaParticipant) entity.SantaNotification) (entity.SantaParticipant, error)
 
 	GetAssignment(ctx context.Context, roomID, giverID uuid.UUID) (entity.SantaAssignment, error)
 	// Draw в одной транзакции: блокирует комнату, проверяет статус expected

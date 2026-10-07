@@ -2,6 +2,7 @@ package mockrepo
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
@@ -87,4 +88,36 @@ func (m *MockSantaRepo) GetAssignment(ctx context.Context, roomID, giverID uuid.
 
 func (m *MockSantaRepo) Draw(ctx context.Context, roomID uuid.UUID, expected entity.SantaRoomStatus, build func([]uuid.UUID) ([]entity.SantaAssignment, error)) error {
 	return m.Called(ctx, roomID, expected, build).Error(0)
+}
+
+func (m *MockSantaRepo) SetEmail(ctx context.Context, participantID uuid.UUID, email string, code entity.SantaEmailCode) error {
+	return m.Called(ctx, participantID, email, code).Error(0)
+}
+
+func (m *MockSantaRepo) GetEmailCode(ctx context.Context, participantID uuid.UUID) (entity.SantaEmailCode, error) {
+	args := m.Called(ctx, participantID)
+	code, _ := args.Get(0).(entity.SantaEmailCode)
+	return code, args.Error(1)
+}
+
+func (m *MockSantaRepo) IncEmailCodeAttempts(ctx context.Context, participantID uuid.UUID) error {
+	return m.Called(ctx, participantID).Error(0)
+}
+
+func (m *MockSantaRepo) DeleteEmailCode(ctx context.Context, participantID uuid.UUID) error {
+	return m.Called(ctx, participantID).Error(0)
+}
+
+func (m *MockSantaRepo) VerifyEmail(ctx context.Context, participantID uuid.UUID, at time.Time, welcome entity.SantaNotification) error {
+	return m.Called(ctx, participantID, at, welcome).Error(0)
+}
+
+func (m *MockSantaRepo) CreateTgLink(ctx context.Context, link entity.SantaTgLink) error {
+	return m.Called(ctx, link).Error(0)
+}
+
+func (m *MockSantaRepo) LinkTelegram(ctx context.Context, tokenHash string, chatID int64, now time.Time, welcome func(entity.SantaParticipant) entity.SantaNotification) (entity.SantaParticipant, error) {
+	args := m.Called(ctx, tokenHash, chatID, now, welcome)
+	p, _ := args.Get(0).(entity.SantaParticipant)
+	return p, args.Error(1)
 }

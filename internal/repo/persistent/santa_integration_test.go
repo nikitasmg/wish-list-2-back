@@ -24,6 +24,9 @@ func setupSantaDB(t *testing.T) *gorm.DB {
 		&persistent.SantaRoomModel{},
 		&persistent.SantaParticipantModel{},
 		&persistent.SantaAssignmentModel{},
+		&persistent.SantaEmailCodeModel{},
+		&persistent.SantaTgLinkModel{},
+		&persistent.SantaNotificationModel{},
 	))
 	return db
 }
@@ -38,11 +41,32 @@ func seedRoom(t *testing.T, r repo.SantaRepo, owner uuid.UUID) entity.SantaRoom 
 	return room
 }
 
+var chatSeq int64 = 1000
+
+// seedParticipants — готовые участники (подтверждён Telegram): с этапа 2 в
+// жеребьёвку попадают только такие.
 func seedParticipants(t *testing.T, r repo.SantaRepo, roomID uuid.UUID, n int) []uuid.UUID {
 	t.Helper()
 	ids := make([]uuid.UUID, n)
 	for i := range ids {
-		p := entity.SantaParticipant{ID: uuid.New(), RoomID: roomID, Name: "Участник", TokenHash: uuid.NewString()}
+		chatSeq++
+		chat := chatSeq
+		p := entity.SantaParticipant{
+			ID: uuid.New(), RoomID: roomID, Name: "Участник", TokenHash: uuid.NewString(),
+			Channel: entity.SantaChannelTelegram, TgChatID: &chat,
+		}
+		require.NoError(t, r.CreateParticipant(context.Background(), p))
+		ids[i] = p.ID
+	}
+	return ids
+}
+
+// seedUnready — участники без подтверждённого канала.
+func seedUnready(t *testing.T, r repo.SantaRepo, roomID uuid.UUID, n int) []uuid.UUID {
+	t.Helper()
+	ids := make([]uuid.UUID, n)
+	for i := range ids {
+		p := entity.SantaParticipant{ID: uuid.New(), RoomID: roomID, Name: "Без канала", TokenHash: uuid.NewString()}
 		require.NoError(t, r.CreateParticipant(context.Background(), p))
 		ids[i] = p.ID
 	}

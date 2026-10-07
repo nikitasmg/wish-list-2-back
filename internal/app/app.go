@@ -48,6 +48,7 @@ func Run(cfg *config.Config) {
 		&persistent.TemplateModel{},
 		&persistent.TemplateLikeModel{},
 		&persistent.SantaRoomModel{}, &persistent.SantaParticipantModel{}, &persistent.SantaAssignmentModel{},
+		&persistent.SantaEmailCodeModel{}, &persistent.SantaTgLinkModel{}, &persistent.SantaNotificationModel{},
 	); err != nil {
 		log.Fatalf("automigrate: %v", err)
 	}

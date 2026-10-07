@@ -31,6 +31,12 @@ func santaErr(op string, err error) error {
 	return fmt.Errorf("%s: %w", op, err)
 }
 
+// isUniqueViolation — нарушен именно этот уникальный индекс.
+func isUniqueViolation(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == constraint
+}
+
 func (r *santaRepo) CreateRoom(ctx context.Context, room entity.SantaRoom) error {
 	m := toSantaRoomModel(room)
 	if err := r.db.WithContext(ctx).Create(&m).Error; err != nil {
@@ -128,8 +134,7 @@ func (r *santaRepo) CreateParticipant(ctx context.Context, p entity.SantaPartici
 		}
 		if err := tx.Create(&m).Error; err != nil {
 			// Параллельное вступление того же аккаунта в ту же комнату.
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "idx_santa_participant_user" {
+			if isUniqueViolation(err, "idx_santa_participant_user") {
 				return fmt.Errorf("santaRepo.CreateParticipant: %w", repo.ErrDuplicate)
 			}
 			return santaErr("santaRepo.CreateParticipant", err)
