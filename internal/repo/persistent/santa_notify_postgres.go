@@ -230,10 +230,11 @@ func (r *santaRepo) markPending(ctx context.Context, op string, id uuid.UUID, up
 	return nil
 }
 
-func (r *santaRepo) MarkNotificationSent(ctx context.Context, id uuid.UUID) error {
+func (r *santaRepo) MarkNotificationSent(ctx context.Context, id uuid.UUID, tgMessageID *int64) error {
 	return r.markPending(ctx, "santaRepo.MarkNotificationSent", id, map[string]any{
-		"status":     string(entity.SantaNotificationSent),
-		"last_error": "",
+		"status":        string(entity.SantaNotificationSent),
+		"last_error":    "",
+		"tg_message_id": tgMessageID,
 	})
 }
 

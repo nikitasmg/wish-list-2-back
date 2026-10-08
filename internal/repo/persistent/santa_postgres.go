@@ -314,12 +314,18 @@ func drawLocked(tx *gorm.DB, roomID uuid.UUID, ids []uuid.UUID, build func([]uui
 	if err := tx.Where("room_id = ?", roomID).Delete(&SantaAssignmentModel{}).Error; err != nil {
 		return santaErr("santaRepo.Draw clear", err)
 	}
-	// Несданные «кому дарить» от прошлой жеребьёвки больше не правда.
+	// Несданные «кому дарить» прошлой жеребьёвки больше не правда, а «новое
+	// сообщение» — про переписку, которой сейчас не станет.
 	members := tx.Model(&SantaParticipantModel{}).Select("id").Where("room_id = ?", roomID)
-	if err := tx.Where("status = ? AND kind = ? AND participant_id IN (?)",
-		string(entity.SantaNotificationPending), string(entity.SantaNotifyDrawn), members).
+	if err := tx.Where("status = ? AND kind IN ? AND participant_id IN (?)",
+		string(entity.SantaNotificationPending),
+		[]string{string(entity.SantaNotifyDrawn), string(entity.SantaNotifyChatMessage)}, members).
 		Delete(&SantaNotificationModel{}).Error; err != nil {
 		return santaErr("santaRepo.Draw clear notes", err)
+	}
+	// Переписка привязана к паре: у новых пар старые сообщения всплыть не должны.
+	if err := tx.Where("room_id = ?", roomID).Delete(&SantaMessageModel{}).Error; err != nil {
+		return santaErr("santaRepo.Draw clear messages", err)
 	}
 	pairs, err := build(ids)
 	if err != nil {

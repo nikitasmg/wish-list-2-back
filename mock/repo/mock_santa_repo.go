@@ -107,8 +107,8 @@ func (m *MockSantaRepo) ClaimNotifications(ctx context.Context, now time.Time, l
 	return notes, args.Error(1)
 }
 
-func (m *MockSantaRepo) MarkNotificationSent(ctx context.Context, id uuid.UUID) error {
-	return m.Called(ctx, id).Error(0)
+func (m *MockSantaRepo) MarkNotificationSent(ctx context.Context, id uuid.UUID, tgMessageID *int64) error {
+	return m.Called(ctx, id, tgMessageID).Error(0)
 }
 
 func (m *MockSantaRepo) MarkNotificationFailed(ctx context.Context, id uuid.UUID, attempts int, retryAt *time.Time, lastErr string) error {
@@ -162,4 +162,33 @@ func (m *MockSantaRepo) DueDrawRooms(ctx context.Context, now time.Time, limit i
 func (m *MockSantaRepo) DrawScheduled(ctx context.Context, roomID uuid.UUID, now time.Time, minReady int, build func([]uuid.UUID) ([]entity.SantaAssignment, error), note func(uuid.UUID) entity.SantaNotification, failNote func(uuid.UUID) entity.SantaNotification) (repo.ScheduledDrawOutcome, error) {
 	args := m.Called(ctx, roomID, now, minReady, build, note, failNote)
 	return args.Get(0).(repo.ScheduledDrawOutcome), args.Error(1)
+}
+
+func (m *MockSantaRepo) CreateMessage(ctx context.Context, msg entity.SantaMessage, since time.Time, limit int, note entity.SantaNotification) error {
+	return m.Called(ctx, msg, since, limit, note).Error(0)
+}
+
+func (m *MockSantaRepo) GetMessage(ctx context.Context, id uuid.UUID) (entity.SantaMessage, error) {
+	args := m.Called(ctx, id)
+	return args.Get(0).(entity.SantaMessage), args.Error(1)
+}
+
+func (m *MockSantaRepo) ListMessages(ctx context.Context, roomID, giverID, receiverID uuid.UUID, limit int) ([]entity.SantaMessage, error) {
+	args := m.Called(ctx, roomID, giverID, receiverID, limit)
+	msgs, _ := args.Get(0).([]entity.SantaMessage)
+	return msgs, args.Error(1)
+}
+
+func (m *MockSantaRepo) MarkMessagesRead(ctx context.Context, roomID, giverID, receiverID uuid.UUID, fromGiver bool, at time.Time) error {
+	return m.Called(ctx, roomID, giverID, receiverID, fromGiver, at).Error(0)
+}
+
+func (m *MockSantaRepo) CountUnread(ctx context.Context, roomID, participantID uuid.UUID) (int, int, error) {
+	args := m.Called(ctx, roomID, participantID)
+	return args.Int(0), args.Int(1), args.Error(2)
+}
+
+func (m *MockSantaRepo) FindChatNotification(ctx context.Context, chatID, tgMessageID int64) (entity.SantaNotification, error) {
+	args := m.Called(ctx, chatID, tgMessageID)
+	return args.Get(0).(entity.SantaNotification), args.Error(1)
 }

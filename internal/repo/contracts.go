@@ -216,8 +216,9 @@ type SantaRepo interface {
 	// обработчик их не возьмёт, а упавший — отдаст через lease.
 	ClaimNotifications(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]entity.SantaNotification, error)
 	// MarkNotificationSent/Failed меняют только pending-уведомление; уже
-	// отмеченное или стёртое — ErrNotFound.
-	MarkNotificationSent(ctx context.Context, id uuid.UUID) error
+	// отмеченное или стёртое — ErrNotFound. tgMessageID — message_id в
+	// Telegram (nil для почты).
+	MarkNotificationSent(ctx context.Context, id uuid.UUID, tgMessageID *int64) error
 	// MarkNotificationFailed: retryAt == nil — окончательно failed, иначе
 	// снова pending к retryAt.
 	MarkNotificationFailed(ctx context.Context, id uuid.UUID, attempts int, retryAt *time.Time, lastErr string) error
@@ -225,4 +226,23 @@ type SantaRepo interface {
 	// (sent/failed) уведомления, созданные раньше now-keepNotes. Возвращает,
 	// сколько строк стёрто.
 	PurgeStale(ctx context.Context, now time.Time, keepNotes time.Duration) (int64, error)
+
+	// Анонимный чат пары «Санта → подопечный».
+	// CreateMessage пишет сообщение и уведомление получателю одной транзакцией
+	// под блокировкой комнаты (FOR SHARE): перезапуск жеребьёвки не проскочит
+	// между проверкой пары и вставкой. Комната не drawn — ErrStatusMismatch;
+	// такой пары нет — ErrNotFound; автор написал limit сообщений позже since —
+	// ErrTooSoon.
+	CreateMessage(ctx context.Context, msg entity.SantaMessage, since time.Time, limit int, note entity.SantaNotification) error
+	GetMessage(ctx context.Context, id uuid.UUID) (entity.SantaMessage, error)
+	// ListMessages — последние limit сообщений пары по возрастанию времени.
+	ListMessages(ctx context.Context, roomID, giverID, receiverID uuid.UUID, limit int) ([]entity.SantaMessage, error)
+	// MarkMessagesRead отмечает прочитанными непрочитанные сообщения пары,
+	// написанные одной стороной: fromGiver — Сантой, иначе подопечным.
+	MarkMessagesRead(ctx context.Context, roomID, giverID, receiverID uuid.UUID, fromGiver bool, at time.Time) error
+	// CountUnread — непрочитанные участником: от его Санты и от его подопечного.
+	CountUnread(ctx context.Context, roomID, participantID uuid.UUID) (fromSanta, fromReceiver int, err error)
+	// FindChatNotification — уведомление chat_message, ушедшее в Telegram-чат
+	// chatID сообщением tgMessageID; нет — ErrNotFound.
+	FindChatNotification(ctx context.Context, chatID, tgMessageID int64) (entity.SantaNotification, error)
 }

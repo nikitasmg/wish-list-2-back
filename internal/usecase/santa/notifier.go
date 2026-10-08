@@ -119,7 +119,7 @@ func (n *Notifier) RunOnce(ctx context.Context) (int, error) {
 // process отправляет одно уведомление и отмечает итог; true — отправлено.
 func (n *Notifier) process(ctx context.Context, note entity.SantaNotification) bool {
 	sendCtx, cancelSend := context.WithTimeout(ctx, notifySendTimeout)
-	err := n.deliver(sendCtx, note)
+	tgMessageID, err := n.deliver(sendCtx, note)
 	cancelSend()
 
 	// Отметку пишем и после отмены ctx при остановке: принятое сервером
@@ -127,7 +127,12 @@ func (n *Notifier) process(ctx context.Context, note entity.SantaNotification) b
 	markCtx, cancelMark := context.WithTimeout(context.WithoutCancel(ctx), notifyMarkTimeout)
 	defer cancelMark()
 	if err == nil {
-		n.logMark("sent", note, n.santa.MarkNotificationSent(markCtx, note.ID))
+		// message_id храним: по нему бот узнаёт ответ (reply) на сообщение чата.
+		var tgID *int64
+		if tgMessageID != 0 {
+			tgID = &tgMessageID
+		}
+		n.logMark("sent", note, n.santa.MarkNotificationSent(markCtx, note.ID, tgID))
 		return true
 	}
 	attempts := note.Attempts + 1
@@ -151,53 +156,54 @@ func (n *Notifier) logMark(what string, note entity.SantaNotification, err error
 	}
 }
 
-func (n *Notifier) deliver(ctx context.Context, note entity.SantaNotification) error {
+// deliver отправляет уведомление; для Telegram возвращает message_id.
+func (n *Notifier) deliver(ctx context.Context, note entity.SantaNotification) (int64, error) {
 	p, err := n.santa.GetParticipant(ctx, note.ParticipantID)
 	if errors.Is(err, repo.ErrNotFound) {
-		return fmt.Errorf("%w: участника нет", errPermanent)
+		return 0, fmt.Errorf("%w: участника нет", errPermanent)
 	}
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if !p.Ready() {
-		return fmt.Errorf("%w: канал не подтверждён", errPermanent)
+		return 0, fmt.Errorf("%w: канал не подтверждён", errPermanent)
 	}
 	room, err := n.santa.GetRoomByID(ctx, p.RoomID)
 	if errors.Is(err, repo.ErrNotFound) {
-		return fmt.Errorf("%w: комнаты нет", errPermanent)
+		return 0, fmt.Errorf("%w: комнаты нет", errPermanent)
 	}
 	if err != nil {
-		return err
+		return 0, err
 	}
-	msg, err := n.compose(ctx, note.Kind, room, p)
+	msg, err := n.compose(ctx, note, room, p)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	switch p.Channel {
 	case entity.SantaChannelEmail:
 		if n.mailer == nil {
 			// Не errPermanent: SMTP могут настроить и перезапустить сервис,
 			// пока идут повторы, — тогда письмо всё-таки уйдёт.
-			return errors.New("почта не настроена (SMTP_HOST)")
+			return 0, errors.New("почта не настроена (SMTP_HOST)")
 		}
-		return n.mailer.Send(ctx, p.Email, msg.Subject, msg.HTML, msg.Text)
+		return 0, n.mailer.Send(ctx, p.Email, msg.Subject, msg.HTML, msg.Text)
 	case entity.SantaChannelTelegram:
 		if n.tg == nil {
-			return errors.New("бот не настроен (SANTA_BOT_TOKEN/BOT_TOKEN)")
+			return 0, errors.New("бот не настроен (SANTA_BOT_TOKEN/BOT_TOKEN)")
 		}
-		_, err := n.tg.SendMessage(ctx, *p.TgChatID, msg.Telegram, []telegram.Button{{Text: msg.ButtonText, URL: msg.URL}})
+		id, err := n.tg.SendMessage(ctx, *p.TgChatID, msg.Telegram, []telegram.Button{{Text: msg.ButtonText, URL: msg.URL}})
 		if errors.Is(err, telegram.ErrPermanent) {
 			// Бот заблокирован или чата нет — повтор через минуту ничего не изменит.
-			return fmt.Errorf("%w: %v", errPermanent, err)
+			return 0, fmt.Errorf("%w: %v", errPermanent, err)
 		}
-		return err
+		return id, err
 	}
-	return fmt.Errorf("%w: нет канала", errPermanent)
+	return 0, fmt.Errorf("%w: нет канала", errPermanent)
 }
 
-func (n *Notifier) compose(ctx context.Context, kind entity.SantaNotificationKind, room entity.SantaRoom, p entity.SantaParticipant) (message, error) {
+func (n *Notifier) compose(ctx context.Context, note entity.SantaNotification, room entity.SantaRoom, p entity.SantaParticipant) (message, error) {
 	link := roomLink(n.publicURL, room.Slug)
-	switch kind {
+	switch note.Kind {
 	case entity.SantaNotifyWelcome:
 		return welcomeMessage(room, link), nil
 	case entity.SantaNotifyReminderFill:
@@ -219,10 +225,10 @@ func (n *Notifier) compose(ctx context.Context, kind entity.SantaNotificationKin
 		if err != nil {
 			return message{}, err
 		}
-		if kind == entity.SantaNotifyDrawn {
+		if note.Kind == entity.SantaNotifyDrawn {
 			return drawnMessage(room, ward, link), nil
 		}
 		return wishesUpdatedMessage(room, ward, link), nil
 	}
-	return message{}, fmt.Errorf("%w: неизвестный вид %q", errPermanent, kind)
+	return message{}, fmt.Errorf("%w: неизвестный вид %q", errPermanent, note.Kind)
 }

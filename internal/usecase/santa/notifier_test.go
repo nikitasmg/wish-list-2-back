@@ -50,7 +50,7 @@ func TestNotifier_DrawnByEmail(t *testing.T) {
 	note := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyDrawn, chNow)
 	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{note}, nil)
 	e.sr.On("GetAssignment", mock.Anything, e.room.ID, e.giver.ID).Return(entity.SantaAssignment{RoomID: e.room.ID, GiverID: e.giver.ID, ReceiverID: e.ward.ID}, nil)
-	e.sr.On("MarkNotificationSent", mock.Anything, note.ID).Return(nil)
+	e.sr.On("MarkNotificationSent", mock.Anything, note.ID, mock.Anything).Return(nil)
 
 	sent, err := e.n.RunOnce(context.Background())
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestNotifier_WelcomeByTelegram(t *testing.T) {
 	e := newNotifierEnv(t)
 	note := entity.NewSantaNotification(e.ward.ID, entity.SantaNotifyWelcome, chNow)
 	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{note}, nil)
-	e.sr.On("MarkNotificationSent", mock.Anything, note.ID).Return(nil)
+	e.sr.On("MarkNotificationSent", mock.Anything, note.ID, mock.Anything).Return(nil)
 
 	_, err := e.n.RunOnce(context.Background())
 	require.NoError(t, err)
@@ -157,13 +157,13 @@ func TestNotifier_StopsBatchAfterHalfLease(t *testing.T) {
 	first := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyWelcome, chNow)
 	second := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyReminderFill, chNow)
 	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{first, second}, nil)
-	e.sr.On("MarkNotificationSent", mock.Anything, first.ID).Return(nil)
+	e.sr.On("MarkNotificationSent", mock.Anything, first.ID, mock.Anything).Return(nil)
 
 	sent, err := e.n.RunOnce(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 1, sent)
 	assert.Equal(t, 1, e.ml.calls, "вторая не отправлена — вернётся после аренды")
-	e.sr.AssertNotCalled(t, "MarkNotificationSent", mock.Anything, second.ID)
+	e.sr.AssertNotCalled(t, "MarkNotificationSent", mock.Anything, second.ID, mock.Anything)
 	e.sr.AssertNotCalled(t, "MarkNotificationFailed", mock.Anything, second.ID, mock.Anything, mock.Anything, mock.Anything)
 }
 
@@ -181,7 +181,7 @@ func TestNotifier_SendDeadlineAndMarkAfterShutdown(t *testing.T) {
 	second := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyReminderFill, chNow)
 	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{first, second}, nil)
 	var markErr error
-	e.sr.On("MarkNotificationSent", mock.Anything, first.ID).Run(func(a mock.Arguments) {
+	e.sr.On("MarkNotificationSent", mock.Anything, first.ID, mock.Anything).Run(func(a mock.Arguments) {
 		markErr = a.Get(0).(context.Context).Err()
 	}).Return(nil)
 
@@ -196,7 +196,7 @@ func TestNotifier_MarkAlreadyHandledIsQuiet(t *testing.T) {
 	e := newNotifierEnv(t)
 	note := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyWelcome, chNow)
 	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{note}, nil)
-	e.sr.On("MarkNotificationSent", mock.Anything, note.ID).Return(repo.ErrNotFound)
+	e.sr.On("MarkNotificationSent", mock.Anything, note.ID, mock.Anything).Return(repo.ErrNotFound)
 	sent, err := e.n.RunOnce(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 1, sent)
@@ -283,10 +283,35 @@ func TestNotifier_DrawFailedLinksToOrganizerRoom(t *testing.T) {
 	e := newNotifierEnv(t)
 	note := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyDrawFailed, chNow)
 	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{note}, nil)
-	e.sr.On("MarkNotificationSent", mock.Anything, note.ID).Return(nil)
+	e.sr.On("MarkNotificationSent", mock.Anything, note.ID, mock.Anything).Return(nil)
 
 	sent, err := e.n.RunOnce(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 1, sent)
 	assert.Contains(t, e.ml.text, "https://santa.prosto-namekni.ru/rooms/"+e.room.ID.String())
+}
+
+func TestNotifier_StoresTelegramMessageID(t *testing.T) {
+	e := newNotifierEnv(t)
+	e.tg.msgID = 777
+	note := entity.NewSantaNotification(e.ward.ID, entity.SantaNotifyWelcome, chNow)
+	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{note}, nil)
+	e.sr.On("MarkNotificationSent", mock.Anything, note.ID, mock.MatchedBy(func(id *int64) bool { return id != nil && *id == 777 })).Return(nil)
+
+	sent, err := e.n.RunOnce(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, sent)
+	// AssertExpectations не годится: giver из newNotifierEnv здесь не запрашивается.
+	e.sr.AssertNumberOfCalls(t, "MarkNotificationSent", 1)
+}
+
+func TestNotifier_EmailHasNoTelegramMessageID(t *testing.T) {
+	e := newNotifierEnv(t)
+	note := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyWelcome, chNow)
+	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{note}, nil)
+	e.sr.On("MarkNotificationSent", mock.Anything, note.ID, (*int64)(nil)).Return(nil)
+
+	_, err := e.n.RunOnce(context.Background())
+	require.NoError(t, err)
+	e.sr.AssertCalled(t, "MarkNotificationSent", mock.Anything, note.ID, (*int64)(nil))
 }

@@ -330,7 +330,7 @@ func TestSantaRepo_UpdateParticipantCollapsesWishesUpdated(t *testing.T) {
 	claimed, err := r.ClaimNotifications(ctx, now, 10, time.Minute)
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
-	require.NoError(t, r.MarkNotificationSent(ctx, claimed[0].ID))
+	require.NoError(t, r.MarkNotificationSent(ctx, claimed[0].ID, nil))
 
 	// Три быстрых сохранения — одно pending; взятое в работу тоже стирается,
 	// и его отметка уже ничего не меняет.
@@ -341,7 +341,7 @@ func TestSantaRepo_UpdateParticipantCollapsesWishesUpdated(t *testing.T) {
 	save(ids[1], "шарф")
 	save(ids[1], "варежки")
 	assert.EqualValues(t, 2, countNotes(t, db, ids[1], entity.SantaNotifyWishesUpdated), "одно сданное + одно свежее")
-	assert.ErrorIs(t, r.MarkNotificationSent(ctx, inFlight[0].ID), repo.ErrNotFound)
+	assert.ErrorIs(t, r.MarkNotificationSent(ctx, inFlight[0].ID, nil), repo.ErrNotFound)
 
 	// Уведомления других получателей не задеты.
 	save(ids[2], "свечи")
@@ -422,7 +422,7 @@ func TestSantaRepo_MarkNotification(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, batch, 3)
 
-	require.NoError(t, r.MarkNotificationSent(ctx, batch[0].ID))
+	require.NoError(t, r.MarkNotificationSent(ctx, batch[0].ID, nil))
 	retry := now.Add(5 * time.Minute)
 	require.NoError(t, r.MarkNotificationFailed(ctx, batch[1].ID, 2, &retry, "timeout"))
 	require.NoError(t, r.MarkNotificationFailed(ctx, batch[2].ID, 4, nil, "gone"))
@@ -448,8 +448,8 @@ func TestSantaRepo_MarkNotification(t *testing.T) {
 	// Уже отмеченное не перезаписывается: обработчик, опоздавший с отметкой,
 	// не вернёт sent в pending и не оживит failed.
 	assert.ErrorIs(t, r.MarkNotificationFailed(ctx, batch[0].ID, 1, &retry, "late"), repo.ErrNotFound)
-	assert.ErrorIs(t, r.MarkNotificationSent(ctx, batch[2].ID), repo.ErrNotFound)
-	assert.ErrorIs(t, r.MarkNotificationSent(ctx, uuid.New()), repo.ErrNotFound)
+	assert.ErrorIs(t, r.MarkNotificationSent(ctx, batch[2].ID, nil), repo.ErrNotFound)
+	assert.ErrorIs(t, r.MarkNotificationSent(ctx, uuid.New(), nil), repo.ErrNotFound)
 	var sentRow, failedRow persistent.SantaNotificationModel
 	require.NoError(t, db.First(&sentRow, "id = ?", batch[0].ID).Error)
 	assert.Equal(t, "sent", sentRow.Status)

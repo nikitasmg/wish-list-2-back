@@ -29,6 +29,7 @@ type SantaRoomModel struct {
 	// Связи нужны ради внешних ключей с каскадом при AutoMigrate; в запросах не используются.
 	Participants []SantaParticipantModel `gorm:"foreignKey:RoomID;constraint:OnDelete:CASCADE"`
 	Assignments  []SantaAssignmentModel  `gorm:"foreignKey:RoomID;constraint:OnDelete:CASCADE"`
+	Messages     []SantaMessageModel     `gorm:"foreignKey:RoomID;constraint:OnDelete:CASCADE"`
 }
 
 func (SantaRoomModel) TableName() string { return "santa_rooms" }
@@ -57,9 +58,11 @@ type SantaParticipantModel struct {
 	Given    []SantaAssignmentModel `gorm:"foreignKey:GiverID;constraint:OnDelete:CASCADE"`
 	Received []SantaAssignmentModel `gorm:"foreignKey:ReceiverID;constraint:OnDelete:CASCADE"`
 	// Ради внешних ключей с каскадом; в запросах не используются.
-	EmailCode     *SantaEmailCodeModel     `gorm:"foreignKey:ParticipantID;constraint:OnDelete:CASCADE"`
-	TgLinks       []SantaTgLinkModel       `gorm:"foreignKey:ParticipantID;constraint:OnDelete:CASCADE"`
-	Notifications []SantaNotificationModel `gorm:"foreignKey:ParticipantID;constraint:OnDelete:CASCADE"`
+	EmailCode          *SantaEmailCodeModel     `gorm:"foreignKey:ParticipantID;constraint:OnDelete:CASCADE"`
+	TgLinks            []SantaTgLinkModel       `gorm:"foreignKey:ParticipantID;constraint:OnDelete:CASCADE"`
+	Notifications      []SantaNotificationModel `gorm:"foreignKey:ParticipantID;constraint:OnDelete:CASCADE"`
+	AsGiverMessages    []SantaMessageModel      `gorm:"foreignKey:GiverID;constraint:OnDelete:CASCADE"`
+	AsReceiverMessages []SantaMessageModel      `gorm:"foreignKey:ReceiverID;constraint:OnDelete:CASCADE"`
 }
 
 func (SantaParticipantModel) TableName() string { return "santa_participants" }
@@ -147,12 +150,13 @@ type SantaNotificationModel struct {
 	ParticipantID uuid.UUID `gorm:"type:uuid;not null;index"`
 	Kind          string    `gorm:"not null"`
 	// JSON-объект строкой: text, а не jsonb — payload пока не читается в SQL.
-	Payload   string    `gorm:"type:text;not null;default:'{}'"`
-	Status    string    `gorm:"not null;default:pending;index:idx_santa_notification_due,priority:1"`
-	Attempts  int       `gorm:"not null;default:0"`
-	NextTryAt time.Time `gorm:"not null;index:idx_santa_notification_due,priority:2"`
-	LastError string    `gorm:"not null;default:''"`
-	CreatedAt time.Time `gorm:"autoCreateTime"`
+	Payload     string    `gorm:"type:text;not null;default:'{}'"`
+	Status      string    `gorm:"not null;default:pending;index:idx_santa_notification_due,priority:1"`
+	Attempts    int       `gorm:"not null;default:0"`
+	NextTryAt   time.Time `gorm:"not null;index:idx_santa_notification_due,priority:2"`
+	LastError   string    `gorm:"not null;default:''"`
+	TgMessageID *int64    `gorm:"index"`
+	CreatedAt   time.Time `gorm:"autoCreateTime"`
 }
 
 func (SantaNotificationModel) TableName() string { return "santa_notifications" }
@@ -167,7 +171,7 @@ func toSantaNotificationModel(n entity.SantaNotification) SantaNotificationModel
 	return SantaNotificationModel{
 		ID: n.ID, ParticipantID: n.ParticipantID, Kind: string(n.Kind), Payload: payload,
 		Status: string(n.Status), Attempts: n.Attempts, NextTryAt: n.NextTryAt,
-		LastError: n.LastError, CreatedAt: n.CreatedAt,
+		LastError: n.LastError, TgMessageID: n.TgMessageID, CreatedAt: n.CreatedAt,
 	}
 }
 
@@ -177,6 +181,34 @@ func toSantaNotificationEntity(m SantaNotificationModel) entity.SantaNotificatio
 	return entity.SantaNotification{
 		ID: m.ID, ParticipantID: m.ParticipantID, Kind: entity.SantaNotificationKind(m.Kind), Payload: payload,
 		Status: entity.SantaNotificationStatus(m.Status), Attempts: m.Attempts, NextTryAt: m.NextTryAt,
-		LastError: m.LastError, CreatedAt: m.CreatedAt,
+		LastError: m.LastError, TgMessageID: m.TgMessageID, CreatedAt: m.CreatedAt,
+	}
+}
+
+type SantaMessageModel struct {
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey"`
+	RoomID     uuid.UUID `gorm:"type:uuid;not null;index:idx_santa_message_pair,priority:1"`
+	GiverID    uuid.UUID `gorm:"type:uuid;not null;index:idx_santa_message_pair,priority:2"`
+	ReceiverID uuid.UUID `gorm:"type:uuid;not null;index:idx_santa_message_pair,priority:3"`
+	FromGiver  bool      `gorm:"not null"`
+	Body       string    `gorm:"type:text;not null"`
+	// Ставит use case: от него же отсчитывается лимит сообщений в час.
+	CreatedAt time.Time `gorm:"not null;index:idx_santa_message_pair,priority:4"`
+	ReadAt    *time.Time
+}
+
+func (SantaMessageModel) TableName() string { return "santa_messages" }
+
+func toSantaMessageModel(m entity.SantaMessage) SantaMessageModel {
+	return SantaMessageModel{
+		ID: m.ID, RoomID: m.RoomID, GiverID: m.GiverID, ReceiverID: m.ReceiverID,
+		FromGiver: m.FromGiver, Body: m.Body, CreatedAt: m.CreatedAt, ReadAt: m.ReadAt,
+	}
+}
+
+func toSantaMessageEntity(m SantaMessageModel) entity.SantaMessage {
+	return entity.SantaMessage{
+		ID: m.ID, RoomID: m.RoomID, GiverID: m.GiverID, ReceiverID: m.ReceiverID,
+		FromGiver: m.FromGiver, Body: m.Body, CreatedAt: m.CreatedAt, ReadAt: m.ReadAt,
 	}
 }
