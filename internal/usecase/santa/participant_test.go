@@ -159,12 +159,15 @@ func TestGetMe_DrawnShowsReceiver(t *testing.T) {
 	ur.On("GetByID", mock.Anything, room.OwnerID).Return(entity.User{}, nil)
 	sr.On("GetAssignment", mock.Anything, room.ID, me.ID).Return(entity.SantaAssignment{RoomID: room.ID, GiverID: me.ID, ReceiverID: ward.ID}, nil)
 	sr.On("GetParticipant", mock.Anything, ward.ID).Return(ward, nil)
+	sr.On("CountUnread", mock.Anything, room.ID, me.ID).Return(2, 1, nil)
 
 	got, err := uc.GetMe(ctx, room.Slug, usecase.SantaAuth{Token: "tok"})
 
 	require.NoError(t, err)
 	require.NotNil(t, got.Receiver)
 	assert.Equal(t, usecase.SantaReceiver{Name: "Маша", Wishes: "чай", WishlistURL: "https://x.ru/w"}, *got.Receiver)
+	require.NotNil(t, got.Chat)
+	assert.Equal(t, usecase.SantaChatUnread{FromSanta: 2, FromReceiver: 1}, *got.Chat)
 }
 
 func TestUpdateMe_RenameAfterDrawIsClosed(t *testing.T) {

@@ -7,6 +7,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/google/uuid"
+
 	"main/internal/entity"
 	"main/internal/repo"
 	"main/internal/usecase"
@@ -210,6 +212,31 @@ func (n *Notifier) compose(ctx context.Context, note entity.SantaNotification, r
 		return reminderMessage(room, link), nil
 	case entity.SantaNotifyDrawFailed:
 		return drawFailedMessage(room, organizerLink(n.publicURL, room.ID)), nil
+	case entity.SantaNotifyChatMessage:
+		id, err := uuid.Parse(note.Payload[entity.SantaPayloadMessageID])
+		if err != nil {
+			return message{}, fmt.Errorf("%w: нет id сообщения", errPermanent)
+		}
+		msg, err := n.santa.GetMessage(ctx, id)
+		if errors.Is(err, repo.ErrNotFound) {
+			return message{}, fmt.Errorf("%w: сообщения нет", errPermanent)
+		}
+		if err != nil {
+			return message{}, err
+		}
+		chatLink := link + "#chat"
+		if msg.FromGiver {
+			// Подопечному — без имени Санты: тайна держится и в уведомлениях.
+			return chatFromSantaMessage(room, msg.Body, chatLink), nil
+		}
+		ward, err := n.santa.GetParticipant(ctx, msg.ReceiverID)
+		if errors.Is(err, repo.ErrNotFound) {
+			return message{}, fmt.Errorf("%w: подопечного нет", errPermanent)
+		}
+		if err != nil {
+			return message{}, err
+		}
+		return chatFromWardMessage(room, ward.Name, msg.Body, chatLink), nil
 	case entity.SantaNotifyDrawn, entity.SantaNotifyWishesUpdated:
 		a, err := n.santa.GetAssignment(ctx, room.ID, p.ID)
 		if errors.Is(err, repo.ErrNotFound) {

@@ -88,3 +88,15 @@ func TestDrawFailedMessage(t *testing.T) {
 	assert.Contains(t, msg.Telegram, "&lt;Офис&gt;")
 	assert.NotContains(t, msg.HTML, "<Офис>")
 }
+
+func TestChatMessages(t *testing.T) {
+	room := entity.SantaRoom{Title: "Офис"}
+	fromSanta := chatFromSantaMessage(room, "<b>размер?</b>", "https://santa.prosto-namekni.ru/r/abcdefgh#chat")
+	assert.Contains(t, fromSanta.Telegram, "&lt;b&gt;размер?&lt;/b&gt;")
+	assert.Contains(t, fromSanta.Text, "#chat")
+	assert.Contains(t, fromSanta.Text, "странице комнаты", "на почте ответ — только ссылкой")
+
+	fromWard := chatFromWardMessage(room, "Боря", "M", "https://santa.prosto-namekni.ru/r/abcdefgh#chat")
+	assert.Contains(t, fromWard.Subject, "Боря")
+	assert.Contains(t, fromWard.Telegram, "<b>Боря</b>")
+}

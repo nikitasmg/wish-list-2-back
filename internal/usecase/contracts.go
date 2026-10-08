@@ -339,7 +339,12 @@ var (
 	// ErrSantaDrawn — действие возможно только до жеребьёвки.
 	ErrSantaDrawn = errors.New("жеребьёвка уже прошла")
 	// ErrSantaNotDrawn — действие возможно только после жеребьёвки.
-	ErrSantaNotDrawn      = errors.New("жеребьёвки ещё не было")
+	ErrSantaNotDrawn = errors.New("жеребьёвки ещё не было")
+	// ErrSantaNotInDraw — у участника нет пары: он не попал в жеребьёвку
+	// или пару сменил перезапуск (409).
+	ErrSantaNotInDraw = errors.New("вы не попали в эту жеребьёвку")
+	// ErrSantaChatLimit — участник написал 30 сообщений за час (429).
+	ErrSantaChatLimit     = errors.New("не больше 30 сообщений в час — продолжите чуть позже")
 	ErrSantaAlreadyJoined = errors.New("вы уже в этой комнате")
 	ErrSantaTooFew        = errors.New("для жеребьёвки нужно минимум 3 участника")
 	// ErrSantaInvalid оборачивается с подробностью: «неверные данные: …».
@@ -449,6 +454,34 @@ type SantaRemindResult struct {
 	Unreachable int `json:"unreachable"`
 }
 
+// SantaChatWith — с кем переписка: со своим подопечным или со своим Сантой.
+type SantaChatWith string
+
+const (
+	SantaChatReceiver SantaChatWith = "receiver"
+	SantaChatSanta    SantaChatWith = "santa"
+)
+
+// SantaChatMessage — сообщение глазами участника: без имён и id сторон, чтобы
+// подопечный не узнал Санту.
+type SantaChatMessage struct {
+	ID        uuid.UUID `json:"id"`
+	Mine      bool      `json:"mine"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type SantaChat struct {
+	With     SantaChatWith      `json:"with"`
+	Messages []SantaChatMessage `json:"messages"`
+}
+
+// SantaChatUnread — непрочитанные: от своего Санты и от своего подопечного.
+type SantaChatUnread struct {
+	FromSanta    int `json:"fromSanta"`
+	FromReceiver int `json:"fromReceiver"`
+}
+
 type SantaMe struct {
 	ParticipantID uuid.UUID       `json:"participantId"`
 	Name          string          `json:"name"`
@@ -458,6 +491,8 @@ type SantaMe struct {
 	Room          SantaInvite     `json:"room"`
 	// Receiver — подопечный; nil до жеребьёвки.
 	Receiver *SantaReceiver `json:"receiver"`
+	// Chat — непрочитанные в чате; nil, пока у участника нет пары.
+	Chat *SantaChatUnread `json:"chat"`
 }
 
 type SantaJoinResult struct {
@@ -503,6 +538,16 @@ type SantaUseCase interface {
 	TelegramLink(ctx context.Context, slug string, auth SantaAuth) (string, error)
 	// TelegramStart — команда /start <токен> из вебхука бота.
 	TelegramStart(ctx context.Context, chatID int64, token string) error
+	// GetChat — переписка с подопечным (receiver) или со своим Сантой (santa),
+	// последние 200 сообщений; входящие отмечаются прочитанными. До
+	// жеребьёвки — ErrSantaNotDrawn, без пары — ErrSantaNotInDraw.
+	GetChat(ctx context.Context, slug string, auth SantaAuth, with SantaChatWith) (SantaChat, error)
+	// SendChat — сообщение (1..1000 символов) и уведомление получателю; больше
+	// 30 в час — ErrSantaChatLimit.
+	SendChat(ctx context.Context, slug string, auth SantaAuth, with SantaChatWith, body string) (SantaChatMessage, error)
+	// TelegramReply — ответ в боте (reply) на уведомление о сообщении чата.
+	// Итог участнику сообщает сам бот; ошибка — только сбой базы.
+	TelegramReply(ctx context.Context, chatID, replyToMessageID int64, text string) error
 }
 
 // Mailer отправляет письмо; реализации — pkg/mailer.

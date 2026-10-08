@@ -246,6 +246,17 @@ func (m *MockSantaUC) TelegramLink(ctx context.Context, slug string, auth usecas
 func (m *MockSantaUC) TelegramStart(ctx context.Context, chatID int64, token string) error {
 	return m.Called(ctx, chatID, token).Error(0)
 }
+func (m *MockSantaUC) GetChat(ctx context.Context, slug string, auth usecase.SantaAuth, with usecase.SantaChatWith) (usecase.SantaChat, error) {
+	args := m.Called(ctx, slug, auth, with)
+	return args.Get(0).(usecase.SantaChat), args.Error(1)
+}
+func (m *MockSantaUC) SendChat(ctx context.Context, slug string, auth usecase.SantaAuth, with usecase.SantaChatWith, body string) (usecase.SantaChatMessage, error) {
+	args := m.Called(ctx, slug, auth, with, body)
+	return args.Get(0).(usecase.SantaChatMessage), args.Error(1)
+}
+func (m *MockSantaUC) TelegramReply(ctx context.Context, chatID, replyToMessageID int64, text string) error {
+	return m.Called(ctx, chatID, replyToMessageID, text).Error(0)
+}
 
 func jsonReq(path, body string) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))

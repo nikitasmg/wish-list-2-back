@@ -263,3 +263,54 @@ func botHelloText() string {
 func botLinkExpiredText() string {
 	return "Эта ссылка устарела или уже использована. Откройте страницу комнаты и нажмите «Подключить Telegram» ещё раз."
 }
+
+// chatFromSantaMessage — подопечному о сообщении Санты. Имени Санты здесь нет
+// и быть не должно: оно тайна до обмена подарками.
+func chatFromSantaMessage(room entity.SantaRoom, body, link string) message {
+	return compose(
+		"Тайный Санта написал вам — «"+room.Title+"»",
+		emailView{
+			Heading:    "Вам пишет ваш Тайный Санта",
+			Lines:      []string{"Сообщение в комнате «" + room.Title + "». Кто он — останется тайной до обмена подарками."},
+			Quote:      body,
+			ButtonText: "Ответить",
+			URL:        link,
+			Footer:     "Ответить можно только на странице комнаты: ответ на это письмо Санта не получит.",
+		},
+		"💬 Вам пишет ваш <b>Тайный Санта</b> (комната «"+telegram.Escape(room.Title)+"»):\n\n<blockquote>"+telegram.Escape(body)+"</blockquote>\n\nЧтобы ответить, ответьте на это сообщение (Reply) — Санта получит ответ и не узнает ваш Telegram.",
+	)
+}
+
+// chatFromWardMessage — Санте о сообщении подопечного.
+func chatFromWardMessage(room entity.SantaRoom, wardName, body, link string) message {
+	return compose(
+		wardName+" написал(а) вам — «"+room.Title+"»",
+		emailView{
+			Heading:    "Вам пишет подопечный: " + wardName,
+			Lines:      []string{"Сообщение в комнате «" + room.Title + "». Ваше имя подопечный не знает."},
+			Quote:      body,
+			ButtonText: "Ответить",
+			URL:        link,
+			Footer:     "Ответить можно только на странице комнаты: ответ на это письмо не дойдёт.",
+		},
+		"💬 Вам пишет подопечный <b>"+telegram.Escape(wardName)+"</b> (комната «"+telegram.Escape(room.Title)+"»):\n\n<blockquote>"+telegram.Escape(body)+"</blockquote>\n\nЧтобы ответить, ответьте на это сообщение (Reply) — подопечный не узнает, кто вы.",
+	)
+}
+
+func botChatSentText() string { return "Отправлено ✓" }
+
+func botChatUnknownText() string {
+	return "Не понял, кому это. Чтобы написать в чат Тайного Санты, ответьте (Reply) на сообщение из чата или напишите на странице комнаты."
+}
+
+func botChatClosedText() string {
+	return "Этот чат закрыт: организатор перезапустил жеребьёвку или удалил комнату."
+}
+
+func botChatLimitText() string {
+	return "Не больше 30 сообщений в час — продолжите чуть позже."
+}
+
+func botChatTooLongText() string {
+	return "Сообщение длиннее 1000 символов — сократите и отправьте ещё раз."
+}
