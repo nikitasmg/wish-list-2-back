@@ -49,8 +49,11 @@ type SantaParticipant struct {
 	GiftReady bool
 	// Channel — куда приходят уведомления; пусто — канал не выбран.
 	Channel SantaChannel
-	// Email в нижнем регистре; пусто — адреса нет.
-	Email           string
+	// Email — подтверждённый адрес в нижнем регистре; пусто — адреса нет.
+	Email string
+	// PendingEmail — новый адрес, ждущий кода. Пока он не подтверждён, письма
+	// идут на Email, а готовность не меняется.
+	PendingEmail    string
 	EmailVerifiedAt *time.Time
 	TgChatID        *int64
 	CreatedAt       time.Time

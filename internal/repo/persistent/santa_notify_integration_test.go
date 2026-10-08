@@ -40,7 +40,8 @@ func TestSantaRepo_EmailVerification(t *testing.T) {
 	require.NoError(t, r.SetEmail(ctx, id, "anna@example.com", emailCode(id, now)))
 	p, err := r.GetParticipant(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, "anna@example.com", p.Email)
+	assert.Empty(t, p.Email, "до кода адрес не подтверждён")
+	assert.Equal(t, "anna@example.com", p.PendingEmail)
 	assert.False(t, p.Ready(), "до подтверждения не готов")
 
 	code, err := r.GetEmailCode(ctx, id)
@@ -79,12 +80,14 @@ func TestSantaRepo_EmailVerification(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, p.Ready())
 	assert.Equal(t, entity.SantaChannelEmail, p.Channel)
+	assert.Equal(t, "anna@example.com", p.Email)
+	assert.Empty(t, p.PendingEmail)
 	_, err = r.GetEmailCode(ctx, id)
 	assert.ErrorIs(t, err, repo.ErrNotFound, "код стёрт")
 	assert.EqualValues(t, 1, countNotes(t, db, id, entity.SantaNotifyWelcome))
 }
 
-func TestSantaRepo_SetEmailResetsVerificationAndCode(t *testing.T) {
+func TestSantaRepo_PendingEmailKeepsReady(t *testing.T) {
 	ctx := context.Background()
 	r := persistent.NewSantaRepo(setupSantaDB(t))
 	room := seedRoom(t, r, uuid.New())
@@ -101,14 +104,22 @@ func TestSantaRepo_SetEmailResetsVerificationAndCode(t *testing.T) {
 	require.NoError(t, r.SetEmail(ctx, id, "b@example.com", emailCode(id, later)))
 	p, err := r.GetParticipant(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, "b@example.com", p.Email)
-	assert.Nil(t, p.EmailVerifiedAt, "новый адрес надо подтвердить заново")
-	assert.False(t, p.Ready())
+	assert.Equal(t, "a@example.com", p.Email, "старый адрес в силе до кода")
+	assert.Equal(t, "b@example.com", p.PendingEmail)
+	assert.NotNil(t, p.EmailVerifiedAt)
+	assert.True(t, p.Ready(), "смена адреса не снимает готовность")
 
 	code, err := r.GetEmailCode(ctx, id)
 	require.NoError(t, err)
 	assert.WithinDuration(t, later, code.SentAt, time.Second)
 	assert.Equal(t, 0, code.Attempts, "новый код — счётчик попыток с нуля")
+
+	require.NoError(t, r.VerifyEmail(ctx, id, "hash-"+id.String(), later, entity.NewSantaNotification(id, entity.SantaNotifyWelcome, later)))
+	p, err = r.GetParticipant(ctx, id)
+	require.NoError(t, err)
+	assert.Equal(t, "b@example.com", p.Email)
+	assert.Empty(t, p.PendingEmail)
+	assert.True(t, p.Ready())
 }
 
 func TestSantaRepo_EmailUniqueWithinRoom(t *testing.T) {
@@ -118,13 +129,63 @@ func TestSantaRepo_EmailUniqueWithinRoom(t *testing.T) {
 	room := seedRoom(t, r, uuid.New())
 	ids := seedUnready(t, r, room.ID, 2)
 	require.NoError(t, r.SetEmail(ctx, ids[0], "same@example.com", emailCode(ids[0], now)))
+	require.NoError(t, r.VerifyEmail(ctx, ids[0], "hash-"+ids[0].String(), now, entity.NewSantaNotification(ids[0], entity.SantaNotifyWelcome, now)))
 
 	err := r.SetEmail(ctx, ids[1], "same@example.com", emailCode(ids[1], now))
-	assert.ErrorIs(t, err, repo.ErrDuplicate)
+	assert.ErrorIs(t, err, repo.ErrDuplicate, "подтверждённый адрес соседа занят")
 
 	other := seedRoom(t, r, uuid.New())
 	stranger := seedUnready(t, r, other.ID, 1)[0]
 	assert.NoError(t, r.SetEmail(ctx, stranger, "same@example.com", emailCode(stranger, now)), "в другой комнате адрес свободен")
+}
+
+func TestSantaRepo_VerifyEmailTakenMeanwhile(t *testing.T) {
+	ctx := context.Background()
+	db := setupSantaDB(t)
+	r := persistent.NewSantaRepo(db)
+	now := time.Now().UTC()
+	room := seedRoom(t, r, uuid.New())
+	ids := seedUnready(t, r, room.ID, 2)
+	// Оба ждут код на один адрес — неподтверждённый адрес никого не блокирует.
+	require.NoError(t, r.SetEmail(ctx, ids[0], "same@example.com", emailCode(ids[0], now)))
+	require.NoError(t, r.SetEmail(ctx, ids[1], "same@example.com", emailCode(ids[1], now)))
+
+	require.NoError(t, r.VerifyEmail(ctx, ids[0], "hash-"+ids[0].String(), now, entity.NewSantaNotification(ids[0], entity.SantaNotifyWelcome, now)))
+	err := r.VerifyEmail(ctx, ids[1], "hash-"+ids[1].String(), now, entity.NewSantaNotification(ids[1], entity.SantaNotifyWelcome, now))
+	assert.ErrorIs(t, err, repo.ErrDuplicate)
+
+	p, err := r.GetParticipant(ctx, ids[1])
+	require.NoError(t, err)
+	assert.False(t, p.Ready())
+	assert.Equal(t, "same@example.com", p.PendingEmail, "откат: ничего не поменялось")
+	assert.EqualValues(t, 0, countNotes(t, db, ids[1], entity.SantaNotifyWelcome))
+}
+
+func TestBackfillSantaPendingEmail(t *testing.T) {
+	ctx := context.Background()
+	db := setupSantaDB(t)
+	r := persistent.NewSantaRepo(db)
+	room := seedRoom(t, r, uuid.New())
+	ids := seedUnready(t, r, room.ID, 2)
+	now := time.Now().UTC()
+	// Как писал этап 2: новый адрес сразу в email, подтверждение сброшено.
+	require.NoError(t, db.Model(&persistent.SantaParticipantModel{}).Where("id = ?", ids[0]).
+		Update("email", "old@example.com").Error)
+	require.NoError(t, db.Model(&persistent.SantaParticipantModel{}).Where("id = ?", ids[1]).
+		Updates(map[string]any{"email": "ok@example.com", "email_verified_at": now, "channel": "email"}).Error)
+
+	require.NoError(t, persistent.BackfillSantaPendingEmail(db))
+	require.NoError(t, persistent.BackfillSantaPendingEmail(db), "повторный запуск безопасен")
+
+	p, err := r.GetParticipant(ctx, ids[0])
+	require.NoError(t, err)
+	assert.Empty(t, p.Email)
+	assert.Equal(t, "old@example.com", p.PendingEmail)
+	q, err := r.GetParticipant(ctx, ids[1])
+	require.NoError(t, err)
+	assert.Equal(t, "ok@example.com", q.Email)
+	assert.Empty(t, q.PendingEmail)
+	assert.True(t, q.Ready())
 }
 
 func TestSantaRepo_SetEmailMissingParticipant(t *testing.T) {

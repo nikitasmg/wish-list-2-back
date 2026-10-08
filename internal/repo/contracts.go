@@ -150,18 +150,21 @@ type SantaRepo interface {
 	DeleteParticipant(ctx context.Context, id uuid.UUID) error
 
 	// Каналы уведомлений.
-	// SetEmail ставит новый адрес (подтверждение сбрасывается) и кладёт код —
-	// одной транзакцией. Адрес уже у другого участника комнаты — ErrDuplicate;
-	// участника нет — ErrNotFound.
+	// SetEmail запоминает новый адрес в pending_email и кладёт код — одной
+	// транзакцией; подтверждённый адрес и готовность не меняются. Адрес
+	// подтверждён у другого участника комнаты — ErrDuplicate; участника нет —
+	// ErrNotFound.
 	SetEmail(ctx context.Context, participantID uuid.UUID, email string, code entity.SantaEmailCode) error
 	GetEmailCode(ctx context.Context, participantID uuid.UUID) (entity.SantaEmailCode, error)
 	// IncEmailCodeAttempts атомарно занимает попытку проверки кода: attempts+1,
 	// пока attempts < max. false — попыток не осталось или кода нет.
 	IncEmailCodeAttempts(ctx context.Context, participantID uuid.UUID, max int) (bool, error)
 	DeleteEmailCode(ctx context.Context, participantID uuid.UUID) error
-	// VerifyEmail: адрес подтверждён, канал — почта, код стёрт, приветствие в
-	// очереди — одной транзакцией. Код стирается по codeHash: если за это время
-	// код заменён (другой адрес) или стёрт — ErrNotFound, ничего не меняется.
+	// VerifyEmail: pending_email становится подтверждённым email, канал —
+	// почта, код стёрт, приветствие в очереди — одной транзакцией. Код
+	// стирается по codeHash: если за это время код заменён или стёрт —
+	// ErrNotFound, ничего не меняется. Тот же адрес успел подтвердить другой
+	// участник комнаты — ErrDuplicate.
 	VerifyEmail(ctx context.Context, participantID uuid.UUID, codeHash string, at time.Time, welcome entity.SantaNotification) error
 	CreateTgLink(ctx context.Context, link entity.SantaTgLink) error
 	// LinkTelegram по одноразовой ссылке: чат записан, канал — Telegram,

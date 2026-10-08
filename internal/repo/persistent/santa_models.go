@@ -44,7 +44,9 @@ type SantaParticipantModel struct {
 	GiftReady   bool       `gorm:"not null;default:false"`
 	Channel     string     `gorm:"not null;default:''"`
 	// NULL, пока адреса нет: уникальность (room_id, email) пустых не задевает.
-	Email           *string `gorm:"uniqueIndex:idx_santa_participant_email"`
+	Email *string `gorm:"uniqueIndex:idx_santa_participant_email"`
+	// Адрес, ждущий кода. Уникальности нет: занять адрес можно только подтвердив.
+	PendingEmail    *string
 	EmailVerifiedAt *time.Time
 	TgChatID        *int64
 	CreatedAt       time.Time `gorm:"autoCreateTime"`
@@ -90,10 +92,15 @@ func toSantaParticipantModel(p entity.SantaParticipant) SantaParticipantModel {
 		e := p.Email
 		email = &e
 	}
+	var pending *string
+	if p.PendingEmail != "" {
+		e := p.PendingEmail
+		pending = &e
+	}
 	return SantaParticipantModel{
 		ID: p.ID, RoomID: p.RoomID, UserID: p.UserID, Name: p.Name, Wishes: p.Wishes,
 		WishlistURL: p.WishlistURL, TokenHash: p.TokenHash, GiftReady: p.GiftReady,
-		Channel: string(p.Channel), Email: email, EmailVerifiedAt: p.EmailVerifiedAt, TgChatID: p.TgChatID,
+		Channel: string(p.Channel), Email: email, PendingEmail: pending, EmailVerifiedAt: p.EmailVerifiedAt, TgChatID: p.TgChatID,
 		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
@@ -103,10 +110,14 @@ func toSantaParticipantEntity(m SantaParticipantModel) entity.SantaParticipant {
 	if m.Email != nil {
 		email = *m.Email
 	}
+	pending := ""
+	if m.PendingEmail != nil {
+		pending = *m.PendingEmail
+	}
 	return entity.SantaParticipant{
 		ID: m.ID, RoomID: m.RoomID, UserID: m.UserID, Name: m.Name, Wishes: m.Wishes,
 		WishlistURL: m.WishlistURL, TokenHash: m.TokenHash, GiftReady: m.GiftReady,
-		Channel: entity.SantaChannel(m.Channel), Email: email, EmailVerifiedAt: m.EmailVerifiedAt, TgChatID: m.TgChatID,
+		Channel: entity.SantaChannel(m.Channel), Email: email, PendingEmail: pending, EmailVerifiedAt: m.EmailVerifiedAt, TgChatID: m.TgChatID,
 		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }

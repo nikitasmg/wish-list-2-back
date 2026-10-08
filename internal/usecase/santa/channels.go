@@ -144,12 +144,17 @@ func (uc *santaUseCase) VerifyEmail(ctx context.Context, slug string, auth useca
 	}
 	welcome := entity.NewSantaNotification(p.ID, entity.SantaNotifyWelcome, now)
 	if err := uc.santa.VerifyEmail(ctx, p.ID, rec.CodeHash, now, welcome); err != nil {
-		if errors.Is(err, repo.ErrNotFound) {
+		switch {
+		case errors.Is(err, repo.ErrNotFound):
 			// Код успели заменить или стереть — проверенный код уже не действует.
 			return usecase.SantaMe{}, invalid("код устарел — запросите новый")
+		case errors.Is(err, repo.ErrDuplicate):
+			return usecase.SantaMe{}, usecase.ErrSantaEmailTaken
 		}
 		return usecase.SantaMe{}, err
 	}
+	p.Email = p.PendingEmail
+	p.PendingEmail = ""
 	p.EmailVerifiedAt = &now
 	p.Channel = entity.SantaChannelEmail
 	return uc.me(ctx, room, p)

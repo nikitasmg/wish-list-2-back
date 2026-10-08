@@ -272,7 +272,8 @@ func notifyView(p entity.SantaParticipant) usecase.SantaNotifyView {
 		Channel:       p.Channel,
 		Email:         p.Email,
 		EmailVerified: p.Email != "" && p.EmailVerifiedAt != nil,
-		EmailPending:  p.Email != "" && p.EmailVerifiedAt == nil,
+		PendingEmail:  p.PendingEmail,
+		EmailPending:  p.PendingEmail != "",
 		Telegram:      p.TgChatID != nil,
 		Ready:         p.Ready(),
 	}

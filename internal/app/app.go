@@ -69,6 +69,9 @@ func Run(cfg *config.Config) {
 	if err := persistent.BackfillPollChoices(db); err != nil {
 		log.Fatalf("backfill poll choices: %v", err)
 	}
+	if err := persistent.BackfillSantaPendingEmail(db); err != nil {
+		log.Fatalf("backfill santa pending_email: %v", err)
+	}
 
 	// MinIO
 	fileStorage, err := minioPkg.New(cfg.Minio, cfg.App.MinioPublicURL)

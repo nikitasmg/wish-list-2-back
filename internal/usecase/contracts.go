@@ -429,10 +429,13 @@ type SantaReceiver struct {
 
 // SantaNotifyView — куда участнику придут уведомления (видит только он сам).
 type SantaNotifyView struct {
-	Channel       entity.SantaChannel `json:"channel"`
-	Email         string              `json:"email"`
-	EmailVerified bool                `json:"emailVerified"`
-	// EmailPending — адрес указан, код отправлен, но ещё не подтверждён.
+	Channel entity.SantaChannel `json:"channel"`
+	// Email — подтверждённый адрес; на него идут письма.
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"emailVerified"`
+	// PendingEmail — новый адрес, ждущий кода; пусто — нет.
+	PendingEmail string `json:"pendingEmail"`
+	// EmailPending — код отправлен на PendingEmail, но ещё не введён.
 	EmailPending bool `json:"emailPending"`
 	Telegram     bool `json:"telegram"`
 	// Ready — канал подтверждён: участник попадёт в жеребьёвку.
@@ -488,7 +491,7 @@ type SantaUseCase interface {
 	// пожелания и вишлист — можно.
 	UpdateMe(ctx context.Context, slug string, auth SantaAuth, in SantaProfileInput) (SantaMe, error)
 	LeaveMe(ctx context.Context, slug string, auth SantaAuth) error
-	// RequestEmailCode ставит адрес и шлёт на него код; раньше чем через
+	// RequestEmailCode запоминает новый адрес до подтверждения (подтверждённый остаётся в силе) и шлёт на него код; раньше чем через
 	// минуту после прошлого — ErrSantaTooSoon; адрес занят — ErrSantaEmailTaken;
 	// на адрес за час ушло 5 кодов — ErrSantaEmailLimit; почта не настроена —
 	// ErrSantaUnavailable.
