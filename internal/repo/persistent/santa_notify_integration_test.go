@@ -457,3 +457,44 @@ func TestSantaRepo_MarkNotification(t *testing.T) {
 	require.NoError(t, db.First(&failedRow, "id = ?", batch[2].ID).Error)
 	assert.Equal(t, "failed", failedRow.Status)
 }
+
+func TestSantaRepo_PurgeStale(t *testing.T) {
+	ctx := context.Background()
+	db := setupSantaDB(t)
+	r := persistent.NewSantaRepo(db)
+	room := seedRoom(t, r, uuid.New())
+	ids := seedUnready(t, r, room.ID, 2)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	require.NoError(t, r.CreateTgLink(ctx, entity.SantaTgLink{TokenHash: "old", ParticipantID: ids[0], ExpiresAt: now.Add(-time.Hour)}))
+	require.NoError(t, r.CreateTgLink(ctx, entity.SantaTgLink{TokenHash: "fresh", ParticipantID: ids[0], ExpiresAt: now.Add(time.Hour)}))
+	expired := emailCode(ids[0], now.Add(-time.Hour)) // истёк 45 минут назад
+	require.NoError(t, r.SetEmail(ctx, ids[0], "a@example.com", expired))
+	require.NoError(t, r.SetEmail(ctx, ids[1], "b@example.com", emailCode(ids[1], now)))
+
+	month := 30 * 24 * time.Hour
+	note := func(status string, age time.Duration) persistent.SantaNotificationModel {
+		return persistent.SantaNotificationModel{
+			ID: uuid.New(), ParticipantID: ids[0], Kind: string(entity.SantaNotifyWelcome), Payload: "{}",
+			Status: status, NextTryAt: now, CreatedAt: now.Add(-age),
+		}
+	}
+	oldSent, oldFailed, oldPending, freshSent := note("sent", month+time.Hour), note("failed", month+time.Hour), note("pending", month+time.Hour), note("sent", 24*time.Hour)
+	require.NoError(t, db.Create(&[]persistent.SantaNotificationModel{oldSent, oldFailed, oldPending, freshSent}).Error)
+
+	deleted, err := r.PurgeStale(ctx, now, month)
+	require.NoError(t, err)
+	assert.EqualValues(t, 4, deleted, "ссылка, код и два отработанных уведомления")
+
+	var links []persistent.SantaTgLinkModel
+	require.NoError(t, db.Find(&links).Error)
+	require.Len(t, links, 1)
+	assert.Equal(t, "fresh", links[0].TokenHash)
+	_, err = r.GetEmailCode(ctx, ids[0])
+	assert.ErrorIs(t, err, repo.ErrNotFound, "истёкший код стёрт")
+	_, err = r.GetEmailCode(ctx, ids[1])
+	assert.NoError(t, err, "живой код остался")
+	var left []uuid.UUID
+	require.NoError(t, db.Model(&persistent.SantaNotificationModel{}).Order("id").Pluck("id", &left).Error)
+	assert.ElementsMatch(t, []uuid.UUID{oldPending.ID, freshSent.ID}, left, "pending не трогаем, свежие храним")
+}

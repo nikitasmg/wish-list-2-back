@@ -247,3 +247,29 @@ func (r *santaRepo) MarkNotificationFailed(ctx context.Context, id uuid.UUID, at
 	}
 	return r.markPending(ctx, "santaRepo.MarkNotificationFailed", id, updates)
 }
+
+func (r *santaRepo) PurgeStale(ctx context.Context, now time.Time, keepNotes time.Duration) (int64, error) {
+	db := r.db.WithContext(ctx)
+	done := []string{string(entity.SantaNotificationSent), string(entity.SantaNotificationFailed)}
+	steps := []struct {
+		op    string
+		model any
+		where string
+		args  []any
+	}{
+		// Ссылка и код с истёкшим сроком уже ничего не подтверждают.
+		{"links", &SantaTgLinkModel{}, "expires_at <= ?", []any{now}},
+		{"codes", &SantaEmailCodeModel{}, "expires_at <= ?", []any{now}},
+		// pending не трогаем: они ещё в работе, сколько бы ни ждали.
+		{"notifications", &SantaNotificationModel{}, "status IN ? AND created_at < ?", []any{done, now.Add(-keepNotes)}},
+	}
+	var total int64
+	for _, s := range steps {
+		res := db.Where(s.where, s.args...).Delete(s.model)
+		if res.Error != nil {
+			return total, santaErr("santaRepo.PurgeStale "+s.op, res.Error)
+		}
+		total += res.RowsAffected
+	}
+	return total, nil
+}

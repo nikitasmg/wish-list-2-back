@@ -146,3 +146,8 @@ func (m *MockSantaRepo) LinkTelegram(ctx context.Context, tokenHash string, chat
 	p, _ := args.Get(0).(entity.SantaParticipant)
 	return p, args.Error(1)
 }
+
+func (m *MockSantaRepo) PurgeStale(ctx context.Context, now time.Time, keepNotes time.Duration) (int64, error) {
+	args := m.Called(ctx, now, keepNotes)
+	return args.Get(0).(int64), args.Error(1)
+}

@@ -197,4 +197,8 @@ type SantaRepo interface {
 	// MarkNotificationFailed: retryAt == nil — окончательно failed, иначе
 	// снова pending к retryAt.
 	MarkNotificationFailed(ctx context.Context, id uuid.UUID, attempts int, retryAt *time.Time, lastErr string) error
+	// PurgeStale стирает истёкшие ссылки Telegram и коды почты и отработанные
+	// (sent/failed) уведомления, созданные раньше now-keepNotes. Возвращает,
+	// сколько строк стёрто.
+	PurgeStale(ctx context.Context, now time.Time, keepNotes time.Duration) (int64, error)
 }

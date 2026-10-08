@@ -252,3 +252,29 @@ func TestNotifier_NoBotRetries(t *testing.T) {
 	require.NoError(t, err)
 	e.sr.AssertCalled(t, "MarkNotificationFailed", mock.Anything, note.ID, 1, &retry, mock.Anything)
 }
+
+func TestNotifier_PurgeHourly(t *testing.T) {
+	e := newNotifierEnv(t)
+	at := chNow
+	e.n.now = func() time.Time { return at }
+	e.sr.On("PurgeStale", mock.Anything, mock.Anything, notifyRetention).Return(int64(3), nil)
+
+	assert.True(t, e.n.purgeIfDue(context.Background()), "первый тик чистит сразу")
+	at = chNow.Add(59 * time.Minute)
+	assert.False(t, e.n.purgeIfDue(context.Background()))
+	at = chNow.Add(time.Hour)
+	assert.True(t, e.n.purgeIfDue(context.Background()))
+	e.sr.AssertNumberOfCalls(t, "PurgeStale", 2)
+	e.sr.AssertCalled(t, "PurgeStale", mock.Anything, chNow, notifyRetention)
+}
+
+func TestNotifier_PurgeErrorWaitsNextHour(t *testing.T) {
+	e := newNotifierEnv(t)
+	at := chNow
+	e.n.now = func() time.Time { return at }
+	e.sr.On("PurgeStale", mock.Anything, mock.Anything, notifyRetention).Return(int64(0), errors.New("db down"))
+
+	assert.True(t, e.n.purgeIfDue(context.Background()))
+	at = chNow.Add(time.Minute)
+	assert.False(t, e.n.purgeIfDue(context.Background()), "сбой не превращается в запрос каждые 5 с")
+}
