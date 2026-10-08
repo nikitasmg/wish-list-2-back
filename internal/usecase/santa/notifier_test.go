@@ -13,8 +13,8 @@ import (
 
 	"main/internal/entity"
 	"main/internal/repo"
-	"main/pkg/telegram"
 	mockrepo "main/mock/repo"
+	"main/pkg/telegram"
 )
 
 type notifierEnv struct {
