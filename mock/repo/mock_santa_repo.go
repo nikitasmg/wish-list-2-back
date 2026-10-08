@@ -192,3 +192,7 @@ func (m *MockSantaRepo) FindChatNotification(ctx context.Context, chatID, tgMess
 	args := m.Called(ctx, chatID, tgMessageID)
 	return args.Get(0).(entity.SantaNotification), args.Error(1)
 }
+
+func (m *MockSantaRepo) SetGiftReady(ctx context.Context, roomID, participantID uuid.UUID, ready bool) error {
+	return m.Called(ctx, roomID, participantID, ready).Error(0)
+}

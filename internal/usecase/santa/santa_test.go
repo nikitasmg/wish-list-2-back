@@ -163,6 +163,26 @@ func TestGetRoom_HidesWishesText(t *testing.T) {
 	assert.NotContains(t, string(raw), "example.com")
 }
 
+func TestGetRoom_CountsGiftsReadyWithoutNames(t *testing.T) {
+	sr, _, uc := newUC()
+	owner := uuid.New()
+	room := drawnRoom(owner)
+	sr.On("GetRoomByID", mock.Anything, room.ID).Return(room, nil)
+	sr.On("ListParticipants", mock.Anything, room.ID).Return([]entity.SantaParticipant{
+		{ID: uuid.New(), RoomID: room.ID, Name: "Аня", GiftReady: true},
+		{ID: uuid.New(), RoomID: room.ID, Name: "Боря", GiftReady: true},
+		{ID: uuid.New(), RoomID: room.ID, Name: "Вера"},
+	}, nil)
+
+	details, err := uc.GetRoom(ctx, owner, room.ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, details.GiftsReady)
+	raw, err := json.Marshal(details.Participants)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "giftReady", "кто именно готов — организатору не видно")
+}
+
 func TestUpdateRoom_AfterDrawIsClosed(t *testing.T) {
 	sr, _, uc := newUC()
 	owner := uuid.New()

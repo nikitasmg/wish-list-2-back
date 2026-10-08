@@ -327,6 +327,11 @@ func drawLocked(tx *gorm.DB, roomID uuid.UUID, ids []uuid.UUID, build func([]uui
 	if err := tx.Where("room_id = ?", roomID).Delete(&SantaMessageModel{}).Error; err != nil {
 		return santaErr("santaRepo.Draw clear messages", err)
 	}
+	// Подарок готовили прошлому подопечному — у нового его ещё нет.
+	if err := tx.Model(&SantaParticipantModel{}).Where("room_id = ? AND gift_ready", roomID).
+		Update("gift_ready", false).Error; err != nil {
+		return santaErr("santaRepo.Draw clear gifts", err)
+	}
 	pairs, err := build(ids)
 	if err != nil {
 		return err

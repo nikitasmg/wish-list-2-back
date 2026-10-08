@@ -50,6 +50,7 @@ func NewSantaRouter(router fiber.Router, jwtSecret, webhookSecret string, uc use
 	api.Post("/r/:slug/me/telegram", optional, h.telegramLink)
 	api.Get("/r/:slug/me/chat", optional, h.getChat)
 	api.Post("/r/:slug/me/chat", optional, h.sendChat)
+	api.Put("/r/:slug/me/gift", optional, h.giftReady)
 
 	rooms := api.Group("/rooms", middleware.JWTRequired401(jwtSecret))
 	rooms.Get("", h.listRooms)
@@ -410,6 +411,20 @@ func (h *santaHandler) sendChat(c *fiber.Ctx) error {
 		return santaError(c, err)
 	}
 	return c.Status(fiber.StatusCreated).JSON(response.Data(msg))
+}
+
+func (h *santaHandler) giftReady(c *fiber.Ctx) error {
+	var body struct {
+		Ready bool `json:"ready"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid input"))
+	}
+	me, err := h.uc.SetGiftReady(c.Context(), c.Params("slug"), santaAuth(c), body.Ready)
+	if err != nil {
+		return santaError(c, err)
+	}
+	return c.JSON(response.Data(me))
 }
 
 type telegramUpdate struct {

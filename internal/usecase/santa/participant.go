@@ -92,7 +92,7 @@ func (uc *santaUseCase) me(ctx context.Context, room entity.SantaRoom, p entity.
 	}
 	me := usecase.SantaMe{
 		ParticipantID: p.ID, Name: p.Name, Wishes: p.Wishes, WishlistURL: p.WishlistURL, Room: inv,
-		Notify: notifyView(p),
+		Notify: notifyView(p), GiftReady: p.GiftReady,
 	}
 	if room.Status != entity.SantaRoomDrawn {
 		return me, nil
