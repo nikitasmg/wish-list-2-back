@@ -142,12 +142,14 @@ func (n *Notifier) deliver(ctx context.Context, note entity.SantaNotification) e
 	switch p.Channel {
 	case entity.SantaChannelEmail:
 		if n.mailer == nil {
-			return fmt.Errorf("%w: почта не настроена", errPermanent)
+			// Не errPermanent: SMTP могут настроить и перезапустить сервис,
+			// пока идут повторы, — тогда письмо всё-таки уйдёт.
+			return errors.New("почта не настроена (SMTP_HOST)")
 		}
 		return n.mailer.Send(ctx, p.Email, msg.Subject, msg.HTML, msg.Text)
 	case entity.SantaChannelTelegram:
 		if n.tg == nil {
-			return fmt.Errorf("%w: бот не настроен", errPermanent)
+			return errors.New("бот не настроен (SANTA_BOT_TOKEN/BOT_TOKEN)")
 		}
 		_, err := n.tg.SendMessage(ctx, *p.TgChatID, msg.Telegram, []telegram.Button{{Text: msg.ButtonText, URL: msg.URL}})
 		if errors.Is(err, telegram.ErrPermanent) {

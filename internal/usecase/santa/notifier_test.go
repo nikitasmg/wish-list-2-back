@@ -226,3 +226,29 @@ func TestNotifier_TelegramTransientRetries(t *testing.T) {
 	require.NoError(t, err)
 	e.sr.AssertCalled(t, "MarkNotificationFailed", mock.Anything, note.ID, 1, &retry, mock.Anything)
 }
+
+func TestNotifier_NoMailerRetries(t *testing.T) {
+	e := newNotifierEnv(t)
+	e.n.mailer = nil
+	note := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyWelcome, chNow)
+	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{note}, nil)
+	retry := chNow.Add(time.Minute)
+	e.sr.On("MarkNotificationFailed", mock.Anything, note.ID, 1, &retry, mock.Anything).Return(nil)
+
+	_, err := e.n.RunOnce(context.Background())
+	require.NoError(t, err)
+	e.sr.AssertCalled(t, "MarkNotificationFailed", mock.Anything, note.ID, 1, &retry, mock.Anything)
+}
+
+func TestNotifier_NoBotRetries(t *testing.T) {
+	e := newNotifierEnv(t)
+	e.n.tg = nil
+	note := entity.NewSantaNotification(e.ward.ID, entity.SantaNotifyWelcome, chNow)
+	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{note}, nil)
+	retry := chNow.Add(time.Minute)
+	e.sr.On("MarkNotificationFailed", mock.Anything, note.ID, 1, &retry, mock.Anything).Return(nil)
+
+	_, err := e.n.RunOnce(context.Background())
+	require.NoError(t, err)
+	e.sr.AssertCalled(t, "MarkNotificationFailed", mock.Anything, note.ID, 1, &retry, mock.Anything)
+}
