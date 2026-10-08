@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"main/internal/entity"
@@ -74,4 +75,16 @@ func TestAllMessagesHaveBothBodies(t *testing.T) {
 	}
 	assert.NotEmpty(t, botHelloText())
 	assert.NotEmpty(t, botLinkExpiredText())
+}
+
+func TestDrawFailedMessage(t *testing.T) {
+	room := entity.SantaRoom{ID: uuid.New(), Title: "<Офис>"}
+	link := organizerLink("https://santa.prosto-namekni.ru/", room.ID)
+	assert.Equal(t, "https://santa.prosto-namekni.ru/rooms/"+room.ID.String(), link)
+
+	msg := drawFailedMessage(room, link)
+	assert.Contains(t, msg.Subject, "не прошла")
+	assert.Contains(t, msg.Text, link)
+	assert.Contains(t, msg.Telegram, "&lt;Офис&gt;")
+	assert.NotContains(t, msg.HTML, "<Офис>")
 }

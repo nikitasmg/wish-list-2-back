@@ -205,6 +205,41 @@ func TestUpdateRoom_SavesFields(t *testing.T) {
 	sr.AssertExpectations(t)
 }
 
+func TestUpdateRoom_NewDrawAtClearsFailure(t *testing.T) {
+	sr, _, uc := newUC()
+	owner := uuid.New()
+	room := openRoom(owner)
+	failed := time.Now().Add(-time.Hour)
+	room.DrawFailedAt = &failed
+	sr.On("GetRoomByID", mock.Anything, room.ID).Return(room, nil)
+	sr.On("UpdateRoom", mock.Anything, mock.MatchedBy(func(r entity.SantaRoom) bool {
+		return r.DrawFailedAt == nil && r.DrawAt != nil
+	})).Return(nil)
+
+	at := time.Now().Add(24 * time.Hour)
+	_, err := uc.UpdateRoom(ctx, owner, room.ID, usecase.SantaRoomInput{Title: "Офис", DrawAt: &at})
+
+	require.NoError(t, err)
+	sr.AssertExpectations(t)
+}
+
+func TestUpdateRoom_SameDrawAtKeepsFailure(t *testing.T) {
+	sr, _, uc := newUC()
+	owner := uuid.New()
+	room := openRoom(owner)
+	failed := time.Now().Add(-time.Hour)
+	room.DrawFailedAt = &failed
+	sr.On("GetRoomByID", mock.Anything, room.ID).Return(room, nil)
+	sr.On("UpdateRoom", mock.Anything, mock.MatchedBy(func(r entity.SantaRoom) bool {
+		return r.DrawFailedAt != nil && r.Title == "Новое"
+	})).Return(nil)
+
+	_, err := uc.UpdateRoom(ctx, owner, room.ID, usecase.SantaRoomInput{Title: "Новое"})
+
+	require.NoError(t, err)
+	sr.AssertExpectations(t)
+}
+
 func TestDeleteRoom_Stranger(t *testing.T) {
 	sr, _, uc := newUC()
 	room := openRoom(uuid.New())

@@ -202,6 +202,8 @@ func (n *Notifier) compose(ctx context.Context, kind entity.SantaNotificationKin
 		return welcomeMessage(room, link), nil
 	case entity.SantaNotifyReminderFill:
 		return reminderMessage(room, link), nil
+	case entity.SantaNotifyDrawFailed:
+		return drawFailedMessage(room, organizerLink(n.publicURL, room.ID)), nil
 	case entity.SantaNotifyDrawn, entity.SantaNotifyWishesUpdated:
 		a, err := n.santa.GetAssignment(ctx, room.ID, p.ID)
 		if errors.Is(err, repo.ErrNotFound) {

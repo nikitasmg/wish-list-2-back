@@ -278,3 +278,15 @@ func TestNotifier_PurgeErrorWaitsNextHour(t *testing.T) {
 	at = chNow.Add(time.Minute)
 	assert.False(t, e.n.purgeIfDue(context.Background()), "сбой не превращается в запрос каждые 5 с")
 }
+
+func TestNotifier_DrawFailedLinksToOrganizerRoom(t *testing.T) {
+	e := newNotifierEnv(t)
+	note := entity.NewSantaNotification(e.giver.ID, entity.SantaNotifyDrawFailed, chNow)
+	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{note}, nil)
+	e.sr.On("MarkNotificationSent", mock.Anything, note.ID).Return(nil)
+
+	sent, err := e.n.RunOnce(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, sent)
+	assert.Contains(t, e.ml.text, "https://santa.prosto-namekni.ru/rooms/"+e.room.ID.String())
+}

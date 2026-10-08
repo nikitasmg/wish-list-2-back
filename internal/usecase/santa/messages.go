@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"main/internal/entity"
 	"main/pkg/telegram"
 )
@@ -27,6 +29,11 @@ var monthsGen = [...]string{"января", "февраля", "марта", "а�
 
 func roomLink(publicURL, slug string) string {
 	return strings.TrimRight(publicURL, "/") + "/r/" + slug
+}
+
+// organizerLink — комната в кабинете организатора на поддомене.
+func organizerLink(publicURL string, roomID uuid.UUID) string {
+	return strings.TrimRight(publicURL, "/") + "/rooms/" + roomID.String()
 }
 
 // budgetText: «до 3 000 ₽» (неразрывный пробел между разрядами) или «без лимита».
@@ -230,6 +237,22 @@ func wishesUpdatedMessage(room entity.SantaRoom, ward entity.SantaParticipant, l
 			URL:         link,
 		},
 		tg,
+	)
+}
+
+func drawFailedMessage(room entity.SantaRoom, link string) message {
+	return compose(
+		"Жеребьёвка не прошла — «"+room.Title+"»",
+		emailView{
+			Heading: "Жеребьёвка по расписанию не прошла",
+			Lines: []string{
+				"В комнате «" + room.Title + "» меньше трёх участников с подтверждённой почтой или Telegram.",
+				"Попросите остальных подключить канал, а потом проведите жеребьёвку вручную или назначьте новое время.",
+			},
+			ButtonText: "Открыть комнату",
+			URL:        link,
+		},
+		"⚠️ Жеребьёвка по расписанию в комнате <b>«"+telegram.Escape(room.Title)+"»</b> не прошла: меньше трёх участников с подтверждённой почтой или Telegram.\n\nПопросите остальных подключить канал, а потом проведите жеребьёвку вручную или назначьте новое время.",
 	)
 }
 

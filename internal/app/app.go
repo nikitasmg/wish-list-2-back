@@ -149,6 +149,11 @@ func Run(cfg *config.Config) {
 		defer close(notifierDone)
 		santaUC.NewNotifier(santaRepo, notifyMail, notifyBot, cfg.Notify.SantaPublicURL).Run(notifyCtx, 5*time.Second)
 	}()
+	schedulerDone := make(chan struct{})
+	go func() {
+		defer close(schedulerDone)
+		santaUC.NewScheduler(santaRepo).Run(notifyCtx, time.Minute)
+	}()
 
 	// HTTP server
 	app := fiber.New(fiber.Config{
@@ -176,7 +181,8 @@ func Run(cfg *config.Config) {
 	<-quit
 	log.Println("Shutting down server...")
 	stopNotify()
-	<-notifierDone // дать обработчику дописать статус текущей отправки
+	<-notifierDone  // дать обработчику дописать статус текущей отправки
+	<-schedulerDone // жеребьёвка — одна транзакция; дождаться её коммита или отката
 	if err := app.Shutdown(); err != nil {
 		log.Printf("server shutdown error: %v", err)
 	}
