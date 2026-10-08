@@ -40,12 +40,14 @@ type fakeTG struct {
 	text   string
 	calls  int
 	err    error
+	// msgID — что SendMessage вернёт как message_id.
+	msgID int64
 }
 
-func (f *fakeTG) SendMessage(_ context.Context, chatID int64, text string, _ []telegram.Button) error {
+func (f *fakeTG) SendMessage(_ context.Context, chatID int64, text string, _ []telegram.Button) (int64, error) {
 	f.calls++
 	f.chatID, f.text = chatID, text
-	return f.err
+	return f.msgID, f.err
 }
 
 var chNow = time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
@@ -139,7 +141,7 @@ func validCode(p entity.SantaParticipant, code string, attempts int) entity.Sant
 
 func TestVerifyEmail_Success(t *testing.T) {
 	uc, sr, _, _, room, p := channelUC(t)
-	p.Email = "a@example.com"
+	p.PendingEmail = "a@example.com"
 	sr.ExpectedCalls = nil // перенастроить участника с адресом
 	sr.On("GetRoomBySlug", mock.Anything, "abcdefgh").Return(room, nil)
 	sr.On("GetParticipantByToken", mock.Anything, room.ID, hashToken("tok")).Return(p, nil)
@@ -156,6 +158,9 @@ func TestVerifyEmail_Success(t *testing.T) {
 	assert.True(t, me.Notify.Ready)
 	assert.True(t, me.Notify.EmailVerified)
 	assert.Equal(t, entity.SantaChannelEmail, me.Notify.Channel)
+	assert.Equal(t, "a@example.com", me.Notify.Email)
+	assert.Empty(t, me.Notify.PendingEmail)
+	assert.False(t, me.Notify.EmailPending)
 }
 
 func TestVerifyEmail_WrongCodeCountsAttempt(t *testing.T) {
@@ -298,4 +303,25 @@ func TestEmailQuota_SlidingWindowAndSweep(t *testing.T) {
 	q.take("c", chNow.Add(3*time.Hour)) // чистка: у b не осталось отметок в окне
 	_, kept := q.sent["b"]
 	assert.False(t, kept)
+}
+
+func TestVerifyEmail_AddressTakenMeanwhile(t *testing.T) {
+	uc, sr, _, _, _, p := channelUC(t)
+	sr.On("GetEmailCode", mock.Anything, p.ID).Return(validCode(p, "123456", 0), nil)
+	sr.On("IncEmailCodeAttempts", mock.Anything, p.ID, emailCodeAttempts).Return(true, nil)
+	sr.On("VerifyEmail", mock.Anything, p.ID, hashEmailCode(p.ID, "123456"), chNow, mock.Anything).Return(repo.ErrDuplicate)
+	_, err := uc.VerifyEmail(context.Background(), "abcdefgh", tokAuth, "123456")
+	assert.ErrorIs(t, err, usecase.ErrSantaEmailTaken)
+}
+
+func TestNotifyView_PendingEmailKeepsReady(t *testing.T) {
+	at := chNow
+	v := notifyView(entity.SantaParticipant{
+		Channel: entity.SantaChannelEmail, Email: "old@example.com", EmailVerifiedAt: &at, PendingEmail: "new@example.com",
+	})
+	assert.True(t, v.Ready)
+	assert.True(t, v.EmailVerified)
+	assert.True(t, v.EmailPending)
+	assert.Equal(t, "old@example.com", v.Email)
+	assert.Equal(t, "new@example.com", v.PendingEmail)
 }

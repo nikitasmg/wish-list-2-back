@@ -109,6 +109,11 @@ func (uc *santaUseCase) me(ctx context.Context, room entity.SantaRoom, p entity.
 		return usecase.SantaMe{}, fmt.Errorf("receiver: %w", err)
 	}
 	me.Receiver = &usecase.SantaReceiver{Name: ward.Name, Wishes: ward.Wishes, WishlistURL: ward.WishlistURL}
+	fromSanta, fromReceiver, err := uc.santa.CountUnread(ctx, room.ID, p.ID)
+	if err != nil {
+		return usecase.SantaMe{}, fmt.Errorf("unread: %w", err)
+	}
+	me.Chat = &usecase.SantaChatUnread{FromSanta: fromSanta, FromReceiver: fromReceiver}
 	return me, nil
 }
 
@@ -272,7 +277,8 @@ func notifyView(p entity.SantaParticipant) usecase.SantaNotifyView {
 		Channel:       p.Channel,
 		Email:         p.Email,
 		EmailVerified: p.Email != "" && p.EmailVerifiedAt != nil,
-		EmailPending:  p.Email != "" && p.EmailVerifiedAt == nil,
+		PendingEmail:  p.PendingEmail,
+		EmailPending:  p.PendingEmail != "",
 		Telegram:      p.TgChatID != nil,
 		Ready:         p.Ready(),
 	}

@@ -30,19 +30,27 @@ func insertNotifications(tx *gorm.DB, notes ...entity.SantaNotification) error {
 
 func (r *santaRepo) SetEmail(ctx context.Context, participantID uuid.UUID, email string, code entity.SantaEmailCode) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		res := tx.Model(&SantaParticipantModel{}).Where("id = ?", participantID).Updates(map[string]any{
-			"email":             email,
-			"email_verified_at": nil,
-			"updated_at":        time.Now(),
-		})
-		if res.Error != nil {
-			if isUniqueViolation(res.Error, "idx_santa_participant_email") {
-				return fmt.Errorf("santaRepo.SetEmail: %w", repo.ErrDuplicate)
-			}
-			return santaErr("santaRepo.SetEmail", res.Error)
+		var p SantaParticipantModel
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&p, "id = ?", participantID).Error; err != nil {
+			return santaErr("santaRepo.SetEmail", err)
 		}
-		if res.RowsAffected == 0 {
-			return fmt.Errorf("santaRepo.SetEmail: %w", repo.ErrNotFound)
+		// В email лежат только подтверждённые адреса. Чужой неподтверждённый
+		// адрес не мешает: достанется тому, кто первым введёт код.
+		var taken int64
+		if err := tx.Model(&SantaParticipantModel{}).
+			Where("room_id = ? AND id <> ? AND email = ?", p.RoomID, p.ID, email).
+			Count(&taken).Error; err != nil {
+			return santaErr("santaRepo.SetEmail check", err)
+		}
+		if taken > 0 {
+			return fmt.Errorf("santaRepo.SetEmail: %w", repo.ErrDuplicate)
+		}
+		// Подтверждённый адрес и готовность не трогаем, пока новый не подтверждён.
+		if err := tx.Model(&SantaParticipantModel{}).Where("id = ?", participantID).Updates(map[string]any{
+			"pending_email": email,
+			"updated_at":    time.Now(),
+		}).Error; err != nil {
+			return santaErr("santaRepo.SetEmail", err)
 		}
 		m := SantaEmailCodeModel{
 			ParticipantID: participantID, CodeHash: code.CodeHash, ExpiresAt: code.ExpiresAt,
@@ -92,12 +100,21 @@ func (r *santaRepo) VerifyEmail(ctx context.Context, participantID uuid.UUID, co
 		if del.RowsAffected == 0 {
 			return fmt.Errorf("santaRepo.VerifyEmail: %w", repo.ErrNotFound)
 		}
-		res := tx.Model(&SantaParticipantModel{}).Where("id = ?", participantID).Updates(map[string]any{
-			"email_verified_at": at,
-			"channel":           string(entity.SantaChannelEmail),
-			"updated_at":        at,
-		})
+		// SET читает старые значения строки: email получает прежний pending_email.
+		res := tx.Model(&SantaParticipantModel{}).
+			Where("id = ? AND pending_email IS NOT NULL", participantID).
+			Updates(map[string]any{
+				"email":             gorm.Expr("pending_email"),
+				"pending_email":     nil,
+				"email_verified_at": at,
+				"channel":           string(entity.SantaChannelEmail),
+				"updated_at":        at,
+			})
 		if res.Error != nil {
+			// Тот же адрес успел подтвердить другой участник комнаты.
+			if isUniqueViolation(res.Error, "idx_santa_participant_email") {
+				return fmt.Errorf("santaRepo.VerifyEmail: %w", repo.ErrDuplicate)
+			}
 			return santaErr("santaRepo.VerifyEmail", res.Error)
 		}
 		if res.RowsAffected == 0 {
@@ -213,10 +230,11 @@ func (r *santaRepo) markPending(ctx context.Context, op string, id uuid.UUID, up
 	return nil
 }
 
-func (r *santaRepo) MarkNotificationSent(ctx context.Context, id uuid.UUID) error {
+func (r *santaRepo) MarkNotificationSent(ctx context.Context, id uuid.UUID, tgMessageID *int64) error {
 	return r.markPending(ctx, "santaRepo.MarkNotificationSent", id, map[string]any{
-		"status":     string(entity.SantaNotificationSent),
-		"last_error": "",
+		"status":        string(entity.SantaNotificationSent),
+		"last_error":    "",
+		"tg_message_id": tgMessageID,
 	})
 }
 
@@ -229,4 +247,30 @@ func (r *santaRepo) MarkNotificationFailed(ctx context.Context, id uuid.UUID, at
 		updates["next_try_at"] = *retryAt
 	}
 	return r.markPending(ctx, "santaRepo.MarkNotificationFailed", id, updates)
+}
+
+func (r *santaRepo) PurgeStale(ctx context.Context, now time.Time, keepNotes time.Duration) (int64, error) {
+	db := r.db.WithContext(ctx)
+	done := []string{string(entity.SantaNotificationSent), string(entity.SantaNotificationFailed)}
+	steps := []struct {
+		op    string
+		model any
+		where string
+		args  []any
+	}{
+		// Ссылка и код с истёкшим сроком уже ничего не подтверждают.
+		{"links", &SantaTgLinkModel{}, "expires_at <= ?", []any{now}},
+		{"codes", &SantaEmailCodeModel{}, "expires_at <= ?", []any{now}},
+		// pending не трогаем: они ещё в работе, сколько бы ни ждали.
+		{"notifications", &SantaNotificationModel{}, "status IN ? AND created_at < ?", []any{done, now.Add(-keepNotes)}},
+	}
+	var total int64
+	for _, s := range steps {
+		res := db.Where(s.where, s.args...).Delete(s.model)
+		if res.Error != nil {
+			return total, santaErr("santaRepo.PurgeStale "+s.op, res.Error)
+		}
+		total += res.RowsAffected
+	}
+	return total, nil
 }

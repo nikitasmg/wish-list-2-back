@@ -218,6 +218,10 @@ func (uc *santaUseCase) UpdateRoom(ctx context.Context, ownerID, roomID uuid.UUI
 	if err := validateRoom(check, uc.now()); err != nil {
 		return entity.SantaRoom{}, err
 	}
+	if !sameTime(in.DrawAt, room.DrawAt) {
+		// Новое время — новая попытка: плашка о прошлой неудаче больше не про неё.
+		room.DrawFailedAt = nil
+	}
 	room.Title = in.Title
 	room.Budget = in.Budget
 	room.ExchangeDate = in.ExchangeDate

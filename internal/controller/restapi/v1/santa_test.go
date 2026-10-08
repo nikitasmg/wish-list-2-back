@@ -246,6 +246,17 @@ func (m *MockSantaUC) TelegramLink(ctx context.Context, slug string, auth usecas
 func (m *MockSantaUC) TelegramStart(ctx context.Context, chatID int64, token string) error {
 	return m.Called(ctx, chatID, token).Error(0)
 }
+func (m *MockSantaUC) GetChat(ctx context.Context, slug string, auth usecase.SantaAuth, with usecase.SantaChatWith) (usecase.SantaChat, error) {
+	args := m.Called(ctx, slug, auth, with)
+	return args.Get(0).(usecase.SantaChat), args.Error(1)
+}
+func (m *MockSantaUC) SendChat(ctx context.Context, slug string, auth usecase.SantaAuth, with usecase.SantaChatWith, body string) (usecase.SantaChatMessage, error) {
+	args := m.Called(ctx, slug, auth, with, body)
+	return args.Get(0).(usecase.SantaChatMessage), args.Error(1)
+}
+func (m *MockSantaUC) TelegramReply(ctx context.Context, chatID, replyToMessageID int64, text string) error {
+	return m.Called(ctx, chatID, replyToMessageID, text).Error(0)
+}
 
 func jsonReq(path, body string) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
@@ -337,6 +348,7 @@ func TestTelegramWebhook_IgnoresOtherUpdates(t *testing.T) {
 		assert.Equal(t, http.StatusOK, status, body)
 	}
 	m.AssertNotCalled(t, "TelegramStart", mock.Anything, mock.Anything, mock.Anything)
+	m.AssertNotCalled(t, "TelegramReply", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestTelegramWebhook_DisabledWithoutSecret(t *testing.T) {
@@ -440,4 +452,69 @@ func TestSantaChannelsUnavailableIs503(t *testing.T) {
 	status, body = doReq(t, app, httptest.NewRequest(http.MethodPost, "/api/v1/santa/r/abcdefgh/me/telegram", nil))
 	assert.Equal(t, http.StatusServiceUnavailable, status)
 	assert.Contains(t, body, "подключение Telegram пока не настроено")
+}
+
+func TestSantaChat_Get(t *testing.T) {
+	m := &MockSantaUC{}
+	m.On("GetChat", mock.Anything, "AbCd2345", usecase.SantaAuth{Token: "tok"}, usecase.SantaChatSanta).
+		Return(usecase.SantaChat{With: usecase.SantaChatSanta}, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/santa/r/AbCd2345/me/chat?with=santa", nil)
+	req.Header.Set(v1.SantaTokenHeader, "tok")
+
+	status, body := doReq(t, newSantaApp(m), req)
+
+	assert.Equal(t, http.StatusOK, status)
+	assert.JSONEq(t, `{"data":{"with":"santa","messages":[]}}`, body, "пустой чат — массив, не null")
+}
+
+func TestSantaChat_Send(t *testing.T) {
+	m := &MockSantaUC{}
+	m.On("SendChat", mock.Anything, "AbCd2345", usecase.SantaAuth{Token: "tok"}, usecase.SantaChatReceiver, "Какой размер?").
+		Return(usecase.SantaChatMessage{Mine: true, Body: "Какой размер?"}, nil)
+	req := jsonReq("/api/v1/santa/r/AbCd2345/me/chat", `{"with":"receiver","body":"Какой размер?"}`)
+	req.Header.Set(v1.SantaTokenHeader, "tok")
+
+	status, body := doReq(t, newSantaApp(m), req)
+
+	assert.Equal(t, http.StatusCreated, status)
+	assert.Contains(t, body, `"mine":true`)
+}
+
+func TestSantaChat_Errors(t *testing.T) {
+	for err, want := range map[error]int{
+		usecase.ErrSantaChatLimit: http.StatusTooManyRequests,
+		usecase.ErrSantaNotInDraw: http.StatusConflict,
+		usecase.ErrSantaNotDrawn:  http.StatusConflict,
+	} {
+		m := &MockSantaUC{}
+		m.On("SendChat", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(usecase.SantaChatMessage{}, err)
+		status, body := doReq(t, newSantaApp(m), jsonReq("/api/v1/santa/r/AbCd2345/me/chat", `{"with":"santa","body":"x"}`))
+		assert.Equal(t, want, status, err.Error())
+		assert.Contains(t, body, err.Error())
+	}
+}
+
+func TestTelegramWebhook_ReplyGoesToChat(t *testing.T) {
+	m := &MockSantaUC{}
+	m.On("TelegramReply", mock.Anything, int64(77), int64(500), "Спасибо!").Return(nil)
+	req := jsonReq("/api/v1/telegram/webhook", `{"update_id":2,"message":{"message_id":501,"chat":{"id":77},"text":" Спасибо! ","reply_to_message":{"message_id":500}}}`)
+	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "hook-secret")
+
+	status, _ := doReq(t, newSantaApp(m), req)
+
+	assert.Equal(t, http.StatusOK, status)
+	m.AssertExpectations(t)
+}
+
+func TestTelegramWebhook_ReplyWithoutTextIgnored(t *testing.T) {
+	m := &MockSantaUC{}
+	// Стикер или фото в ответ — текста нет.
+	req := jsonReq("/api/v1/telegram/webhook", `{"message":{"chat":{"id":77},"reply_to_message":{"message_id":500}}}`)
+	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "hook-secret")
+
+	status, _ := doReq(t, newSantaApp(m), req)
+
+	assert.Equal(t, http.StatusOK, status)
+	m.AssertNotCalled(t, "TelegramReply", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }

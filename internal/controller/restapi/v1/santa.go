@@ -48,6 +48,8 @@ func NewSantaRouter(router fiber.Router, jwtSecret, webhookSecret string, uc use
 		emailCodeLimiter(EmailCodePerHour, time.Hour), optional, h.requestEmailCode)
 	api.Post("/r/:slug/me/email/verify", optional, h.verifyEmail)
 	api.Post("/r/:slug/me/telegram", optional, h.telegramLink)
+	api.Get("/r/:slug/me/chat", optional, h.getChat)
+	api.Post("/r/:slug/me/chat", optional, h.sendChat)
 
 	rooms := api.Group("/rooms", middleware.JWTRequired401(jwtSecret))
 	rooms.Get("", h.listRooms)
@@ -98,6 +100,10 @@ func santaError(c *fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusConflict).JSON(response.Error(usecase.ErrSantaDrawn.Error()))
 	case errors.Is(err, usecase.ErrSantaNotDrawn):
 		return c.Status(fiber.StatusConflict).JSON(response.Error(usecase.ErrSantaNotDrawn.Error()))
+	case errors.Is(err, usecase.ErrSantaNotInDraw):
+		return c.Status(fiber.StatusConflict).JSON(response.Error(usecase.ErrSantaNotInDraw.Error()))
+	case errors.Is(err, usecase.ErrSantaChatLimit):
+		return c.Status(fiber.StatusTooManyRequests).JSON(response.Error(usecase.ErrSantaChatLimit.Error()))
 	case errors.Is(err, usecase.ErrSantaAlreadyJoined):
 		return c.Status(fiber.StatusConflict).JSON(response.Error(usecase.ErrSantaAlreadyJoined.Error()))
 	case errors.Is(err, usecase.ErrSantaEmailTaken):
@@ -380,12 +386,42 @@ func (h *santaHandler) remind(c *fiber.Ctx) error {
 	return c.JSON(response.Data(res))
 }
 
+func (h *santaHandler) getChat(c *fiber.Ctx) error {
+	chat, err := h.uc.GetChat(c.Context(), c.Params("slug"), santaAuth(c), usecase.SantaChatWith(c.Query("with")))
+	if err != nil {
+		return santaError(c, err)
+	}
+	if chat.Messages == nil {
+		chat.Messages = []usecase.SantaChatMessage{}
+	}
+	return c.JSON(response.Data(chat))
+}
+
+func (h *santaHandler) sendChat(c *fiber.Ctx) error {
+	var body struct {
+		With string `json:"with"`
+		Body string `json:"body"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(response.Error("invalid input"))
+	}
+	msg, err := h.uc.SendChat(c.Context(), c.Params("slug"), santaAuth(c), usecase.SantaChatWith(body.With), body.Body)
+	if err != nil {
+		return santaError(c, err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(response.Data(msg))
+}
+
 type telegramUpdate struct {
 	Message *struct {
 		Chat struct {
 			ID int64 `json:"id"`
 		} `json:"chat"`
 		Text string `json:"text"`
+		// ReplyToMessage — сообщение бота, на которое ответили (Reply).
+		ReplyToMessage *struct {
+			MessageID int64 `json:"message_id"`
+		} `json:"reply_to_message"`
 	} `json:"message"`
 }
 
@@ -401,10 +437,16 @@ func (h *santaHandler) telegramWebhook(secret string) fiber.Handler {
 			return c.SendStatus(fiber.StatusOK)
 		}
 		text := strings.TrimSpace(u.Message.Text)
-		if text == "/start" || strings.HasPrefix(text, "/start ") {
+		switch {
+		case text == "/start" || strings.HasPrefix(text, "/start "):
 			token := strings.TrimSpace(strings.TrimPrefix(text, "/start"))
 			if err := h.uc.TelegramStart(c.Context(), u.Message.Chat.ID, token); err != nil {
 				log.Printf("santa: telegram start: %v", err)
+			}
+		case u.Message.ReplyToMessage != nil && text != "":
+			// Ответ на уведомление о сообщении чата — пишем в ту же пару.
+			if err := h.uc.TelegramReply(c.Context(), u.Message.Chat.ID, u.Message.ReplyToMessage.MessageID, text); err != nil {
+				log.Printf("santa: telegram reply: %v", err)
 			}
 		}
 		return c.SendStatus(fiber.StatusOK)

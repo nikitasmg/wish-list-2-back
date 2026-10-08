@@ -73,3 +73,23 @@ func BackfillPresentLinks(db *gorm.DB) error {
 	}
 	return nil
 }
+
+// BackfillSantaPendingEmail переносит неподтверждённые адреса участников
+// Тайного Санты в pending_email.
+//
+// До этапа 3 новый адрес сразу писался в email со сбросом подтверждения;
+// теперь в email только подтверждённый, а ждущий кода — в pending_email. Без
+// переноса введённый код не подтвердил бы такой адрес.
+//
+// Идемпотентно: после переноса неподтверждённых email не остаётся.
+func BackfillSantaPendingEmail(db *gorm.DB) error {
+	const query = `
+		UPDATE santa_participants
+		SET pending_email = email, email = NULL
+		WHERE email IS NOT NULL AND email_verified_at IS NULL
+	`
+	if err := db.Exec(query).Error; err != nil {
+		return fmt.Errorf("backfill santa pending_email: %w", err)
+	}
+	return nil
+}

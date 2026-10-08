@@ -25,11 +25,14 @@ type SantaRoom struct {
 	// Budget в рублях; nil — без лимита.
 	Budget       *int       `json:"budget"`
 	ExchangeDate *time.Time `json:"exchangeDate"`
-	// DrawAt хранится с этапа 1, срабатывает с этапа 3.
+	// DrawAt — когда планировщик проведёт жеребьёвку сам; nil — только вручную.
 	DrawAt  *time.Time      `json:"drawAt"`
 	Message string          `json:"message"`
 	Status  SantaRoomStatus `json:"status"`
 	DrawnAt *time.Time      `json:"drawnAt"`
+	// DrawFailedAt — жеребьёвка по DrawAt не прошла: готовых меньше трёх.
+	// Сбрасывается новым временем жеребьёвки и самой жеребьёвкой.
+	DrawFailedAt *time.Time `json:"drawFailedAt"`
 	// LastRemindedAt — когда организатор последний раз нажал «Напомнить».
 	LastRemindedAt *time.Time `json:"lastRemindedAt"`
 	CreatedAt      time.Time  `json:"createdAt"`
@@ -49,8 +52,11 @@ type SantaParticipant struct {
 	GiftReady bool
 	// Channel — куда приходят уведомления; пусто — канал не выбран.
 	Channel SantaChannel
-	// Email в нижнем регистре; пусто — адреса нет.
-	Email           string
+	// Email — подтверждённый адрес в нижнем регистре; пусто — адреса нет.
+	Email string
+	// PendingEmail — новый адрес, ждущий кода. Пока он не подтверждён, письма
+	// идут на Email, а готовность не меняется.
+	PendingEmail    string
 	EmailVerifiedAt *time.Time
 	TgChatID        *int64
 	CreatedAt       time.Time
@@ -112,7 +118,15 @@ const (
 	SantaNotifyReminderFill SantaNotificationKind = "reminder_fill"
 	// SantaNotifyWishesUpdated — подопечный поменял пожелания после жеребьёвки.
 	SantaNotifyWishesUpdated SantaNotificationKind = "wishes_updated"
+	// SantaNotifyDrawFailed — организатору: жеребьёвка по расписанию не прошла.
+	SantaNotifyDrawFailed SantaNotificationKind = "draw_failed"
+	// SantaNotifyChatMessage — новое сообщение анонимного чата; id сообщения —
+	// Payload[SantaPayloadMessageID].
+	SantaNotifyChatMessage SantaNotificationKind = "chat_message"
 )
+
+// SantaPayloadMessageID — ключ id сообщения чата в Payload уведомления.
+const SantaPayloadMessageID = "messageId"
 
 type SantaNotificationStatus string
 
@@ -133,7 +147,10 @@ type SantaNotification struct {
 	Attempts      int
 	NextTryAt     time.Time
 	LastError     string
-	CreatedAt     time.Time
+	// TgMessageID — message_id отправленного в Telegram: по нему бот узнаёт,
+	// на какое сообщение чата ответили.
+	TgMessageID *int64
+	CreatedAt   time.Time
 }
 
 // NewSantaNotification — уведомление в очередь «отправить сейчас».
@@ -142,4 +159,33 @@ func NewSantaNotification(participantID uuid.UUID, kind SantaNotificationKind, n
 		ID: uuid.New(), ParticipantID: participantID, Kind: kind, Payload: map[string]string{},
 		Status: SantaNotificationPending, NextTryAt: now, CreatedAt: now,
 	}
+}
+
+// SantaMessage — сообщение анонимного чата пары «Санта → подопечный».
+type SantaMessage struct {
+	ID         uuid.UUID
+	RoomID     uuid.UUID
+	GiverID    uuid.UUID
+	ReceiverID uuid.UUID
+	// FromGiver — пишет Санта; иначе подопечный.
+	FromGiver bool
+	Body      string
+	CreatedAt time.Time
+	ReadAt    *time.Time
+}
+
+// AuthorID — кто написал.
+func (m SantaMessage) AuthorID() uuid.UUID {
+	if m.FromGiver {
+		return m.GiverID
+	}
+	return m.ReceiverID
+}
+
+// RecipientID — кому написано.
+func (m SantaMessage) RecipientID() uuid.UUID {
+	if m.FromGiver {
+		return m.ReceiverID
+	}
+	return m.GiverID
 }

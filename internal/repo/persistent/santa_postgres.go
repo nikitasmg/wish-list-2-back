@@ -81,12 +81,13 @@ func (r *santaRepo) UpdateRoom(ctx context.Context, room entity.SantaRoom) error
 	res := r.db.WithContext(ctx).Model(&SantaRoomModel{}).
 		Where("id = ? AND status = ?", room.ID, string(entity.SantaRoomOpen)).
 		Updates(map[string]any{
-			"title":         room.Title,
-			"budget":        room.Budget,
-			"exchange_date": room.ExchangeDate,
-			"draw_at":       room.DrawAt,
-			"message":       room.Message,
-			"updated_at":    time.Now(),
+			"title":          room.Title,
+			"budget":         room.Budget,
+			"exchange_date":  room.ExchangeDate,
+			"draw_at":        room.DrawAt,
+			"draw_failed_at": room.DrawFailedAt,
+			"message":        room.Message,
+			"updated_at":     time.Now(),
 		})
 	if res.Error != nil {
 		return santaErr("santaRepo.UpdateRoom", res.Error)
@@ -285,50 +286,140 @@ func (r *santaRepo) Draw(ctx context.Context, roomID uuid.UUID, expected entity.
 		if room.Status != string(expected) {
 			return repo.ErrStatusMismatch
 		}
-		if err := tx.Where("room_id = ?", roomID).Delete(&SantaAssignmentModel{}).Error; err != nil {
-			return santaErr("santaRepo.Draw clear", err)
-		}
-		// Несданные «кому дарить» от прошлой жеребьёвки больше не правда.
-		members := tx.Model(&SantaParticipantModel{}).Select("id").Where("room_id = ?", roomID)
-		if err := tx.Where("status = ? AND kind = ? AND participant_id IN (?)",
-			string(entity.SantaNotificationPending), string(entity.SantaNotifyDrawn), members).
-			Delete(&SantaNotificationModel{}).Error; err != nil {
-			return santaErr("santaRepo.Draw clear notes", err)
-		}
-		var ids []uuid.UUID
-		if err := tx.Model(&SantaParticipantModel{}).
-			Where("room_id = ?", roomID).
-			Where(santaReadySQL).
-			Order("created_at, id").
-			Pluck("id", &ids).Error; err != nil {
-			return santaErr("santaRepo.Draw participants", err)
-		}
-		pairs, err := build(ids)
+		ids, err := readyIDs(tx, roomID)
 		if err != nil {
 			return err
 		}
-		models := make([]SantaAssignmentModel, len(pairs))
-		notes := make([]entity.SantaNotification, len(pairs))
-		for i, p := range pairs {
-			models[i] = SantaAssignmentModel{RoomID: p.RoomID, GiverID: p.GiverID, ReceiverID: p.ReceiverID}
-			notes[i] = note(p.GiverID)
+		return drawLocked(tx, roomID, ids, build, note, time.Now())
+	})
+}
+
+// readyIDs — готовые участники комнаты (канал подтверждён) в порядке вступления.
+func readyIDs(tx *gorm.DB, roomID uuid.UUID) ([]uuid.UUID, error) {
+	var ids []uuid.UUID
+	if err := tx.Model(&SantaParticipantModel{}).
+		Where("room_id = ?", roomID).
+		Where(santaReadySQL).
+		Order("created_at, id").
+		Pluck("id", &ids).Error; err != nil {
+		return nil, santaErr("santaRepo.readyIDs", err)
+	}
+	return ids, nil
+}
+
+// drawLocked — жеребьёвка под уже взятой блокировкой комнаты: стирает
+// прошлые пары и несданные «кому дарить», пишет новый круг, кладёт
+// уведомления и ставит drawn. Ошибка build откатывает транзакцию.
+func drawLocked(tx *gorm.DB, roomID uuid.UUID, ids []uuid.UUID, build func([]uuid.UUID) ([]entity.SantaAssignment, error), note func(giverID uuid.UUID) entity.SantaNotification, now time.Time) error {
+	if err := tx.Where("room_id = ?", roomID).Delete(&SantaAssignmentModel{}).Error; err != nil {
+		return santaErr("santaRepo.Draw clear", err)
+	}
+	// Несданные «кому дарить» прошлой жеребьёвки больше не правда, а «новое
+	// сообщение» — про переписку, которой сейчас не станет.
+	members := tx.Model(&SantaParticipantModel{}).Select("id").Where("room_id = ?", roomID)
+	if err := tx.Where("status = ? AND kind IN ? AND participant_id IN (?)",
+		string(entity.SantaNotificationPending),
+		[]string{string(entity.SantaNotifyDrawn), string(entity.SantaNotifyChatMessage)}, members).
+		Delete(&SantaNotificationModel{}).Error; err != nil {
+		return santaErr("santaRepo.Draw clear notes", err)
+	}
+	// Переписка привязана к паре: у новых пар старые сообщения всплыть не должны.
+	if err := tx.Where("room_id = ?", roomID).Delete(&SantaMessageModel{}).Error; err != nil {
+		return santaErr("santaRepo.Draw clear messages", err)
+	}
+	pairs, err := build(ids)
+	if err != nil {
+		return err
+	}
+	models := make([]SantaAssignmentModel, len(pairs))
+	notes := make([]entity.SantaNotification, len(pairs))
+	for i, p := range pairs {
+		models[i] = SantaAssignmentModel{RoomID: p.RoomID, GiverID: p.GiverID, ReceiverID: p.ReceiverID}
+		notes[i] = note(p.GiverID)
+	}
+	if len(models) > 0 {
+		if err := tx.Create(&models).Error; err != nil {
+			return santaErr("santaRepo.Draw insert", err)
 		}
-		if len(models) > 0 {
-			if err := tx.Create(&models).Error; err != nil {
-				return santaErr("santaRepo.Draw insert", err)
-			}
+	}
+	if err := insertNotifications(tx, notes...); err != nil {
+		return err
+	}
+	if err := tx.Model(&SantaRoomModel{}).Where("id = ?", roomID).Updates(map[string]any{
+		"status":         string(entity.SantaRoomDrawn),
+		"drawn_at":       now,
+		"draw_failed_at": nil,
+		"updated_at":     now,
+	}).Error; err != nil {
+		return santaErr("santaRepo.Draw status", err)
+	}
+	return nil
+}
+
+func (r *santaRepo) DueDrawRooms(ctx context.Context, now time.Time, limit int) ([]uuid.UUID, error) {
+	var ids []uuid.UUID
+	if err := r.db.WithContext(ctx).Model(&SantaRoomModel{}).
+		Where("status = ? AND draw_at IS NOT NULL AND draw_at <= ?", string(entity.SantaRoomOpen), now).
+		Order("draw_at, id").
+		Limit(limit).
+		Pluck("id", &ids).Error; err != nil {
+		return nil, santaErr("santaRepo.DueDrawRooms", err)
+	}
+	return ids, nil
+}
+
+func (r *santaRepo) DrawScheduled(ctx context.Context, roomID uuid.UUID, now time.Time, minReady int, build func([]uuid.UUID) ([]entity.SantaAssignment, error), note func(giverID uuid.UUID) entity.SantaNotification, failNote func(organizerID uuid.UUID) entity.SantaNotification) (repo.ScheduledDrawOutcome, error) {
+	outcome := repo.ScheduledDrawSkipped
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// SKIP LOCKED: комнату держит ручная жеребьёвка или второй экземпляр —
+		// пропускаем; к следующему тику она уже не open. Условие повторяем под
+		// блокировкой: время могли снять или перенести.
+		var rooms []SantaRoomModel
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
+			Where("id = ? AND status = ? AND draw_at IS NOT NULL AND draw_at <= ?", roomID, string(entity.SantaRoomOpen), now).
+			Limit(1).
+			Find(&rooms).Error; err != nil {
+			return santaErr("santaRepo.DrawScheduled lock", err)
 		}
-		if err := insertNotifications(tx, notes...); err != nil {
+		if len(rooms) == 0 {
+			return nil
+		}
+		ids, err := readyIDs(tx, roomID)
+		if err != nil {
 			return err
 		}
-		now := time.Now()
-		if err := tx.Model(&SantaRoomModel{}).Where("id = ?", roomID).Updates(map[string]any{
-			"status":     string(entity.SantaRoomDrawn),
-			"drawn_at":   now,
-			"updated_at": now,
-		}).Error; err != nil {
-			return santaErr("santaRepo.Draw status", err)
+		if len(ids) < minReady {
+			// Время снимаем, иначе планировщик пытался бы каждую минуту.
+			if err := tx.Model(&SantaRoomModel{}).Where("id = ?", roomID).Updates(map[string]any{
+				"draw_at":        nil,
+				"draw_failed_at": now,
+				"updated_at":     now,
+			}).Error; err != nil {
+				return santaErr("santaRepo.DrawScheduled fail", err)
+			}
+			outcome = repo.ScheduledDrawTooFew
+			// У аккаунтов нет почты: написать организатору можно, только если
+			// он сам участник с подтверждённым каналом.
+			var owner []SantaParticipantModel
+			if err := tx.Where("room_id = ? AND user_id = ?", roomID, rooms[0].OwnerID).
+				Where(santaReadySQL).
+				Limit(1).
+				Find(&owner).Error; err != nil {
+				return santaErr("santaRepo.DrawScheduled owner", err)
+			}
+			if len(owner) == 0 {
+				return nil
+			}
+			return insertNotifications(tx, failNote(owner[0].ID))
 		}
+		if err := drawLocked(tx, roomID, ids, build, note, now); err != nil {
+			return err
+		}
+		outcome = repo.ScheduledDrawDone
 		return nil
 	})
+	if err != nil {
+		return repo.ScheduledDrawSkipped, err
+	}
+	return outcome, nil
 }

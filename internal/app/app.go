@@ -53,7 +53,7 @@ func Run(cfg *config.Config) {
 		&persistent.TemplateModel{},
 		&persistent.TemplateLikeModel{},
 		&persistent.SantaRoomModel{}, &persistent.SantaParticipantModel{}, &persistent.SantaAssignmentModel{},
-		&persistent.SantaEmailCodeModel{}, &persistent.SantaTgLinkModel{}, &persistent.SantaNotificationModel{},
+		&persistent.SantaEmailCodeModel{}, &persistent.SantaTgLinkModel{}, &persistent.SantaNotificationModel{}, &persistent.SantaMessageModel{},
 	); err != nil {
 		log.Fatalf("automigrate: %v", err)
 	}
@@ -68,6 +68,9 @@ func Run(cfg *config.Config) {
 	}
 	if err := persistent.BackfillPollChoices(db); err != nil {
 		log.Fatalf("backfill poll choices: %v", err)
+	}
+	if err := persistent.BackfillSantaPendingEmail(db); err != nil {
+		log.Fatalf("backfill santa pending_email: %v", err)
 	}
 
 	// MinIO
@@ -109,7 +112,7 @@ func Run(cfg *config.Config) {
 		}
 		mail = smtpMailer
 	} else if production {
-		log.Println("WARNING: SMTP_HOST не задан — коды на почту Санты не отправляются (ответ 503)")
+		log.Println("WARNING: SMTP_HOST не задан — коды на почту Санты не отправляются (ответ 503), письма уведомлений уходят в повтор и failed")
 	} else {
 		log.Println("WARNING: SMTP_HOST не задан — письма Санты уходят в лог")
 	}
@@ -138,12 +141,18 @@ func Run(cfg *config.Config) {
 	}
 	santaOpts = append(santaOpts, santaUC.WithTelegram(bot, linkBot))
 	santaUseCase := santaUC.New(santaRepo, userRepo, santaOpts...)
+	notifyMail, notifyBot := notifierChannels(production, cfg.Notify.SMTPHost != "", cfg.Notify.TelegramBotToken != "", mail, bot)
 	notifyCtx, stopNotify := context.WithCancel(context.Background())
 	defer stopNotify()
 	notifierDone := make(chan struct{})
 	go func() {
 		defer close(notifierDone)
-		santaUC.NewNotifier(santaRepo, mail, bot, cfg.Notify.SantaPublicURL).Run(notifyCtx, 5*time.Second)
+		santaUC.NewNotifier(santaRepo, notifyMail, notifyBot, cfg.Notify.SantaPublicURL).Run(notifyCtx, 5*time.Second)
+	}()
+	schedulerDone := make(chan struct{})
+	go func() {
+		defer close(schedulerDone)
+		santaUC.NewScheduler(santaRepo).Run(notifyCtx, time.Minute)
 	}()
 
 	// HTTP server
@@ -172,8 +181,22 @@ func Run(cfg *config.Config) {
 	<-quit
 	log.Println("Shutting down server...")
 	stopNotify()
-	<-notifierDone // дать обработчику дописать статус текущей отправки
+	<-notifierDone  // дать обработчику дописать статус текущей отправки
+	<-schedulerDone // жеребьёвка — одна транзакция; дождаться её коммита или отката
 	if err := app.Shutdown(); err != nil {
 		log.Printf("server shutdown error: %v", err)
 	}
+}
+
+// notifierChannels — каналы для обработчика очереди. В продакшене без SMTP или
+// токена бота канала нет (nil), а не лог-заглушка: заглушка молча отмечала бы
+// уведомления отправленными, а так они уходят в повтор и потом в failed.
+func notifierChannels(production, smtpSet, botSet bool, mail usecase.Mailer, bot usecase.TelegramSender) (usecase.Mailer, usecase.TelegramSender) {
+	if production && !smtpSet {
+		mail = nil
+	}
+	if production && !botSet {
+		bot = nil
+	}
+	return mail, bot
 }

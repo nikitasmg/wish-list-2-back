@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"main/internal/entity"
 	"main/pkg/telegram"
 )
@@ -27,6 +29,11 @@ var monthsGen = [...]string{"января", "февраля", "марта", "а�
 
 func roomLink(publicURL, slug string) string {
 	return strings.TrimRight(publicURL, "/") + "/r/" + slug
+}
+
+// organizerLink — комната в кабинете организатора на поддомене.
+func organizerLink(publicURL string, roomID uuid.UUID) string {
+	return strings.TrimRight(publicURL, "/") + "/rooms/" + roomID.String()
 }
 
 // budgetText: «до 3 000 ₽» (неразрывный пробел между разрядами) или «без лимита».
@@ -233,10 +240,77 @@ func wishesUpdatedMessage(room entity.SantaRoom, ward entity.SantaParticipant, l
 	)
 }
 
+func drawFailedMessage(room entity.SantaRoom, link string) message {
+	return compose(
+		"Жеребьёвка не прошла — «"+room.Title+"»",
+		emailView{
+			Heading: "Жеребьёвка по расписанию не прошла",
+			Lines: []string{
+				"В комнате «" + room.Title + "» меньше трёх участников с подтверждённой почтой или Telegram.",
+				"Попросите остальных подключить канал, а потом проведите жеребьёвку вручную или назначьте новое время.",
+			},
+			ButtonText: "Открыть комнату",
+			URL:        link,
+		},
+		"⚠️ Жеребьёвка по расписанию в комнате <b>«"+telegram.Escape(room.Title)+"»</b> не прошла: меньше трёх участников с подтверждённой почтой или Telegram.\n\nПопросите остальных подключить канал, а потом проведите жеребьёвку вручную или назначьте новое время.",
+	)
+}
+
 func botHelloText() string {
 	return "Привет! Я бот Тайного Санты от «просто намекни».\n\nЧтобы получать сюда результат жеребьёвки, откройте страницу своей комнаты и нажмите «Подключить Telegram»."
 }
 
 func botLinkExpiredText() string {
 	return "Эта ссылка устарела или уже использована. Откройте страницу комнаты и нажмите «Подключить Telegram» ещё раз."
+}
+
+// chatFromSantaMessage — подопечному о сообщении Санты. Имени Санты здесь нет
+// и быть не должно: оно тайна до обмена подарками.
+func chatFromSantaMessage(room entity.SantaRoom, body, link string) message {
+	return compose(
+		"Тайный Санта написал вам — «"+room.Title+"»",
+		emailView{
+			Heading:    "Вам пишет ваш Тайный Санта",
+			Lines:      []string{"Сообщение в комнате «" + room.Title + "». Кто он — останется тайной до обмена подарками."},
+			Quote:      body,
+			ButtonText: "Ответить",
+			URL:        link,
+			Footer:     "Ответить можно только на странице комнаты: ответ на это письмо Санта не получит.",
+		},
+		"💬 Вам пишет ваш <b>Тайный Санта</b> (комната «"+telegram.Escape(room.Title)+"»):\n\n<blockquote>"+telegram.Escape(body)+"</blockquote>\n\nЧтобы ответить, ответьте на это сообщение (Reply) — Санта получит ответ и не узнает ваш Telegram.",
+	)
+}
+
+// chatFromWardMessage — Санте о сообщении подопечного.
+func chatFromWardMessage(room entity.SantaRoom, wardName, body, link string) message {
+	return compose(
+		wardName+" написал(а) вам — «"+room.Title+"»",
+		emailView{
+			Heading:    "Вам пишет подопечный: " + wardName,
+			Lines:      []string{"Сообщение в комнате «" + room.Title + "». Ваше имя подопечный не знает."},
+			Quote:      body,
+			ButtonText: "Ответить",
+			URL:        link,
+			Footer:     "Ответить можно только на странице комнаты: ответ на это письмо не дойдёт.",
+		},
+		"💬 Вам пишет подопечный <b>"+telegram.Escape(wardName)+"</b> (комната «"+telegram.Escape(room.Title)+"»):\n\n<blockquote>"+telegram.Escape(body)+"</blockquote>\n\nЧтобы ответить, ответьте на это сообщение (Reply) — подопечный не узнает, кто вы.",
+	)
+}
+
+func botChatSentText() string { return "Отправлено ✓" }
+
+func botChatUnknownText() string {
+	return "Не понял, кому это. Чтобы написать в чат Тайного Санты, ответьте (Reply) на сообщение из чата или напишите на странице комнаты."
+}
+
+func botChatClosedText() string {
+	return "Этот чат закрыт: организатор перезапустил жеребьёвку или удалил комнату."
+}
+
+func botChatLimitText() string {
+	return "Не больше 30 сообщений в час — продолжите чуть позже."
+}
+
+func botChatTooLongText() string {
+	return "Сообщение длиннее 1000 символов — сократите и отправьте ещё раз."
 }

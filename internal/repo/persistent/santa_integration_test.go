@@ -28,6 +28,7 @@ func setupSantaDB(t *testing.T) *gorm.DB {
 		&persistent.SantaEmailCodeModel{},
 		&persistent.SantaTgLinkModel{},
 		&persistent.SantaNotificationModel{},
+		&persistent.SantaMessageModel{},
 	))
 	return db
 }
