@@ -191,13 +191,17 @@ func (uc *santaUseCase) GetRoom(ctx context.Context, ownerID, roomID uuid.UUID) 
 		return usecase.SantaRoomDetails{}, err
 	}
 	views := make([]usecase.SantaParticipantView, len(ps))
+	giftsReady := 0
 	for i, p := range ps {
 		views[i] = usecase.SantaParticipantView{
 			ID: p.ID, Name: p.Name, HasWishes: p.Wishes != "", HasWishlist: p.WishlistURL != "", Ready: p.Ready(),
 			IsOwner: p.UserID != nil && *p.UserID == room.OwnerID, CreatedAt: p.CreatedAt,
 		}
+		if p.GiftReady {
+			giftsReady++
+		}
 	}
-	return usecase.SantaRoomDetails{Room: room, Participants: views}, nil
+	return usecase.SantaRoomDetails{Room: room, Participants: views, GiftsReady: giftsReady}, nil
 }
 
 func (uc *santaUseCase) UpdateRoom(ctx context.Context, ownerID, roomID uuid.UUID, in usecase.SantaRoomInput) (entity.SantaRoom, error) {

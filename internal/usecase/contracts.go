@@ -409,6 +409,8 @@ type SantaParticipantView struct {
 type SantaRoomDetails struct {
 	Room         entity.SantaRoom       `json:"room"`
 	Participants []SantaParticipantView `json:"participants"`
+	// GiftsReady — сколько участников отметили «Подарок готов»; без имён.
+	GiftsReady int `json:"giftsReady"`
 }
 
 // SantaInvite — публичная карточка приглашения.
@@ -493,6 +495,8 @@ type SantaMe struct {
 	Receiver *SantaReceiver `json:"receiver"`
 	// Chat — непрочитанные в чате; nil, пока у участника нет пары.
 	Chat *SantaChatUnread `json:"chat"`
+	// GiftReady — участник отметил, что подарок подопечному готов.
+	GiftReady bool `json:"giftReady"`
 }
 
 type SantaJoinResult struct {
@@ -548,6 +552,9 @@ type SantaUseCase interface {
 	// TelegramReply — ответ в боте (reply) на уведомление о сообщении чата.
 	// Итог участнику сообщает сам бот; ошибка — только сбой базы.
 	TelegramReply(ctx context.Context, chatID, replyToMessageID int64, text string) error
+	// SetGiftReady — отметка «Подарок готов» (её видит организатор числом).
+	// До жеребьёвки — ErrSantaNotDrawn, без пары — ErrSantaNotInDraw.
+	SetGiftReady(ctx context.Context, slug string, auth SantaAuth, ready bool) (SantaMe, error)
 }
 
 // Mailer отправляет письмо; реализации — pkg/mailer.

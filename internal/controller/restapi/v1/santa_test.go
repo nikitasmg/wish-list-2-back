@@ -257,6 +257,10 @@ func (m *MockSantaUC) SendChat(ctx context.Context, slug string, auth usecase.Sa
 func (m *MockSantaUC) TelegramReply(ctx context.Context, chatID, replyToMessageID int64, text string) error {
 	return m.Called(ctx, chatID, replyToMessageID, text).Error(0)
 }
+func (m *MockSantaUC) SetGiftReady(ctx context.Context, slug string, auth usecase.SantaAuth, ready bool) (usecase.SantaMe, error) {
+	args := m.Called(ctx, slug, auth, ready)
+	return args.Get(0).(usecase.SantaMe), args.Error(1)
+}
 
 func jsonReq(path, body string) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
@@ -517,4 +521,31 @@ func TestTelegramWebhook_ReplyWithoutTextIgnored(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, status)
 	m.AssertNotCalled(t, "TelegramReply", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestSantaGiftReady(t *testing.T) {
+	m := &MockSantaUC{}
+	m.On("SetGiftReady", mock.Anything, "AbCd2345", usecase.SantaAuth{Token: "tok"}, true).
+		Return(usecase.SantaMe{Name: "Аня", GiftReady: true}, nil)
+	req := jsonReq("/api/v1/santa/r/AbCd2345/me/gift", `{"ready":true}`)
+	req.Method = http.MethodPut
+	req.Header.Set(v1.SantaTokenHeader, "tok")
+
+	status, body := doReq(t, newSantaApp(m), req)
+
+	assert.Equal(t, http.StatusOK, status)
+	assert.Contains(t, body, `"giftReady":true`)
+}
+
+func TestSantaGiftReady_NotInDraw(t *testing.T) {
+	m := &MockSantaUC{}
+	m.On("SetGiftReady", mock.Anything, mock.Anything, mock.Anything, false).
+		Return(usecase.SantaMe{}, usecase.ErrSantaNotInDraw)
+	req := jsonReq("/api/v1/santa/r/AbCd2345/me/gift", `{"ready":false}`)
+	req.Method = http.MethodPut
+
+	status, body := doReq(t, newSantaApp(m), req)
+
+	assert.Equal(t, http.StatusConflict, status)
+	assert.Contains(t, body, usecase.ErrSantaNotInDraw.Error())
 }
