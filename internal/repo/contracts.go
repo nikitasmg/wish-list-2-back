@@ -245,4 +245,9 @@ type SantaRepo interface {
 	// FindChatNotification — уведомление chat_message, ушедшее в Telegram-чат
 	// chatID сообщением tgMessageID; нет — ErrNotFound.
 	FindChatNotification(ctx context.Context, chatID, tgMessageID int64) (entity.SantaNotification, error)
+	// SetGiftReady — отметка «Подарок готов» участника, который дарит в этой
+	// комнате; под блокировкой комнаты (FOR SHARE), чтобы перезапуск жеребьёвки
+	// не проскочил между проверкой пары и записью. Комната не drawn —
+	// ErrStatusMismatch; пары нет — ErrNotFound.
+	SetGiftReady(ctx context.Context, roomID, participantID uuid.UUID, ready bool) error
 }
