@@ -117,6 +117,19 @@ var ErrDuplicate = errors.New("duplicate")
 // ErrStatusMismatch — комната не в том статусе, которого ждал вызов.
 var ErrStatusMismatch = errors.New("status mismatch")
 
+// ScheduledDrawOutcome — чем кончилась попытка жеребьёвки по расписанию.
+type ScheduledDrawOutcome string
+
+const (
+	// ScheduledDrawSkipped — комната уже не ждёт: разыграна, время сняли или
+	// перенесли, её держит другой экземпляр.
+	ScheduledDrawSkipped ScheduledDrawOutcome = "skipped"
+	ScheduledDrawDone    ScheduledDrawOutcome = "drawn"
+	// ScheduledDrawTooFew — готовых меньше minReady: draw_at снят,
+	// draw_failed_at поставлен.
+	ScheduledDrawTooFew ScheduledDrawOutcome = "too_few"
+)
+
 // ErrTooSoon — повтор раньше разрешённого (напоминание организатора).
 var ErrTooSoon = errors.New("too soon")
 
@@ -126,6 +139,8 @@ type SantaRepo interface {
 	GetRoomBySlug(ctx context.Context, slug string) (entity.SantaRoom, error)
 	// ListRoomsByUser — комнаты, где пользователь владелец или участник, новые сверху.
 	ListRoomsByUser(ctx context.Context, userID uuid.UUID) ([]entity.SantaRoom, error)
+	// UpdateRoom пишет название, бюджет, даты, сообщение и draw_failed_at;
+	// только в open, иначе ErrStatusMismatch.
 	UpdateRoom(ctx context.Context, room entity.SantaRoom) error
 	// DeleteRoom удаляет комнату вместе с участниками и парами.
 	DeleteRoom(ctx context.Context, id uuid.UUID) error
@@ -180,8 +195,17 @@ type SantaRepo interface {
 	// drawn участников комнаты, отдаёт build id ГОТОВЫХ участников (канал
 	// подтверждён) в порядке вступления, пишет пары, кладёт note каждому
 	// дарящему и ставит status=drawn. Ошибка build откатывает всё и
-	// возвращается как есть.
+	// возвращается как есть. Сбрасывает draw_failed_at.
 	Draw(ctx context.Context, roomID uuid.UUID, expected entity.SantaRoomStatus, build func(ids []uuid.UUID) ([]entity.SantaAssignment, error), note func(giverID uuid.UUID) entity.SantaNotification) error
+	// DueDrawRooms — id открытых комнат с draw_at <= now, ранние первыми.
+	DueDrawRooms(ctx context.Context, now time.Time, limit int) ([]uuid.UUID, error)
+	// DrawScheduled — жеребьёвка по расписанию одной транзакцией. Комната
+	// берётся FOR UPDATE SKIP LOCKED и только если всё ещё open с
+	// draw_at <= now, иначе ScheduledDrawSkipped. Готовых меньше minReady —
+	// draw_at = NULL, draw_failed_at = now и failNote организатору, если он
+	// готовый участник комнаты (ScheduledDrawTooFew). Иначе — как Draw
+	// (ScheduledDrawDone).
+	DrawScheduled(ctx context.Context, roomID uuid.UUID, now time.Time, minReady int, build func(ids []uuid.UUID) ([]entity.SantaAssignment, error), note func(giverID uuid.UUID) entity.SantaNotification, failNote func(organizerID uuid.UUID) entity.SantaNotification) (ScheduledDrawOutcome, error)
 	// Remind под блокировкой комнаты: напоминали позже now-cooldown —
 	// ErrTooSoon; иначе ставит last_reminded_at=now и кладёт notes.
 	Remind(ctx context.Context, roomID uuid.UUID, now time.Time, cooldown time.Duration, notes []entity.SantaNotification) error

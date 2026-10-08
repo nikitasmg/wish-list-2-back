@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"main/internal/entity"
+	"main/internal/repo"
 )
 
 type MockSantaRepo struct {
@@ -150,4 +151,15 @@ func (m *MockSantaRepo) LinkTelegram(ctx context.Context, tokenHash string, chat
 func (m *MockSantaRepo) PurgeStale(ctx context.Context, now time.Time, keepNotes time.Duration) (int64, error) {
 	args := m.Called(ctx, now, keepNotes)
 	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockSantaRepo) DueDrawRooms(ctx context.Context, now time.Time, limit int) ([]uuid.UUID, error) {
+	args := m.Called(ctx, now, limit)
+	ids, _ := args.Get(0).([]uuid.UUID)
+	return ids, args.Error(1)
+}
+
+func (m *MockSantaRepo) DrawScheduled(ctx context.Context, roomID uuid.UUID, now time.Time, minReady int, build func([]uuid.UUID) ([]entity.SantaAssignment, error), note func(uuid.UUID) entity.SantaNotification, failNote func(uuid.UUID) entity.SantaNotification) (repo.ScheduledDrawOutcome, error) {
+	args := m.Called(ctx, roomID, now, minReady, build, note, failNote)
+	return args.Get(0).(repo.ScheduledDrawOutcome), args.Error(1)
 }

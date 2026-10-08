@@ -25,11 +25,14 @@ type SantaRoom struct {
 	// Budget в рублях; nil — без лимита.
 	Budget       *int       `json:"budget"`
 	ExchangeDate *time.Time `json:"exchangeDate"`
-	// DrawAt хранится с этапа 1, срабатывает с этапа 3.
+	// DrawAt — когда планировщик проведёт жеребьёвку сам; nil — только вручную.
 	DrawAt  *time.Time      `json:"drawAt"`
 	Message string          `json:"message"`
 	Status  SantaRoomStatus `json:"status"`
 	DrawnAt *time.Time      `json:"drawnAt"`
+	// DrawFailedAt — жеребьёвка по DrawAt не прошла: готовых меньше трёх.
+	// Сбрасывается новым временем жеребьёвки и самой жеребьёвкой.
+	DrawFailedAt *time.Time `json:"drawFailedAt"`
 	// LastRemindedAt — когда организатор последний раз нажал «Напомнить».
 	LastRemindedAt *time.Time `json:"lastRemindedAt"`
 	CreatedAt      time.Time  `json:"createdAt"`
@@ -115,6 +118,8 @@ const (
 	SantaNotifyReminderFill SantaNotificationKind = "reminder_fill"
 	// SantaNotifyWishesUpdated — подопечный поменял пожелания после жеребьёвки.
 	SantaNotifyWishesUpdated SantaNotificationKind = "wishes_updated"
+	// SantaNotifyDrawFailed — организатору: жеребьёвка по расписанию не прошла.
+	SantaNotifyDrawFailed SantaNotificationKind = "draw_failed"
 )
 
 type SantaNotificationStatus string

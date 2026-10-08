@@ -10,16 +10,18 @@ import (
 )
 
 type SantaRoomModel struct {
-	ID             uuid.UUID `gorm:"type:uuid;primaryKey"`
-	OwnerID        uuid.UUID `gorm:"type:uuid;not null;index"`
-	Slug           string    `gorm:"not null;uniqueIndex"`
-	Title          string    `gorm:"not null"`
-	Budget         *int
-	ExchangeDate   *time.Time `gorm:"type:date"`
-	DrawAt         *time.Time
-	Message        string `gorm:"not null;default:''"`
-	Status         string `gorm:"not null;default:open"`
+	ID           uuid.UUID `gorm:"type:uuid;primaryKey"`
+	OwnerID      uuid.UUID `gorm:"type:uuid;not null;index"`
+	Slug         string    `gorm:"not null;uniqueIndex"`
+	Title        string    `gorm:"not null"`
+	Budget       *int
+	ExchangeDate *time.Time `gorm:"type:date"`
+	// Индекс (status, draw_at) — для планировщика: открытые с наступившим временем.
+	DrawAt         *time.Time `gorm:"index:idx_santa_room_draw_due,priority:2"`
+	Message        string     `gorm:"not null;default:''"`
+	Status         string     `gorm:"not null;default:open;index:idx_santa_room_draw_due,priority:1"`
 	DrawnAt        *time.Time
+	DrawFailedAt   *time.Time
 	LastRemindedAt *time.Time
 	CreatedAt      time.Time `gorm:"autoCreateTime"`
 	UpdatedAt      time.Time `gorm:"autoUpdateTime"`
@@ -74,7 +76,7 @@ func toSantaRoomModel(r entity.SantaRoom) SantaRoomModel {
 	return SantaRoomModel{
 		ID: r.ID, OwnerID: r.OwnerID, Slug: r.Slug, Title: r.Title, Budget: r.Budget,
 		ExchangeDate: r.ExchangeDate, DrawAt: r.DrawAt, Message: r.Message,
-		Status: string(r.Status), DrawnAt: r.DrawnAt, LastRemindedAt: r.LastRemindedAt, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+		Status: string(r.Status), DrawnAt: r.DrawnAt, DrawFailedAt: r.DrawFailedAt, LastRemindedAt: r.LastRemindedAt, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
 }
 
@@ -82,7 +84,7 @@ func toSantaRoomEntity(m SantaRoomModel) entity.SantaRoom {
 	return entity.SantaRoom{
 		ID: m.ID, OwnerID: m.OwnerID, Slug: m.Slug, Title: m.Title, Budget: m.Budget,
 		ExchangeDate: m.ExchangeDate, DrawAt: m.DrawAt, Message: m.Message,
-		Status: entity.SantaRoomStatus(m.Status), DrawnAt: m.DrawnAt, LastRemindedAt: m.LastRemindedAt, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		Status: entity.SantaRoomStatus(m.Status), DrawnAt: m.DrawnAt, DrawFailedAt: m.DrawFailedAt, LastRemindedAt: m.LastRemindedAt, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }
 
