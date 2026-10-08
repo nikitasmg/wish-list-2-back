@@ -507,7 +507,9 @@ type Mailer interface {
 	Send(ctx context.Context, to, subject, html, text string) error
 }
 
-// TelegramSender отправляет сообщение в чат; реализации — pkg/telegram.
+// TelegramSender отправляет сообщение в чат и возвращает его message_id;
+// реализации — pkg/telegram. Ошибки, которые повтор не исправит, —
+// errors.Is(err, telegram.ErrPermanent).
 type TelegramSender interface {
-	SendMessage(ctx context.Context, chatID int64, text string, buttons []telegram.Button) error
+	SendMessage(ctx context.Context, chatID int64, text string, buttons []telegram.Button) (int64, error)
 }

@@ -13,6 +13,7 @@ import (
 
 	"main/internal/entity"
 	"main/internal/repo"
+	"main/pkg/telegram"
 	mockrepo "main/mock/repo"
 )
 
@@ -199,4 +200,29 @@ func TestNotifier_MarkAlreadyHandledIsQuiet(t *testing.T) {
 	sent, err := e.n.RunOnce(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 1, sent)
+}
+
+func TestNotifier_TelegramBlockedIsPermanent(t *testing.T) {
+	e := newNotifierEnv(t)
+	e.tg.err = &telegram.APIError{Code: 403, Description: "Forbidden: bot was blocked by the user"}
+	note := entity.NewSantaNotification(e.ward.ID, entity.SantaNotifyWelcome, chNow)
+	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{note}, nil)
+	e.sr.On("MarkNotificationFailed", mock.Anything, note.ID, 1, (*time.Time)(nil), mock.Anything).Return(nil)
+
+	_, err := e.n.RunOnce(context.Background())
+	require.NoError(t, err)
+	e.sr.AssertCalled(t, "MarkNotificationFailed", mock.Anything, note.ID, 1, (*time.Time)(nil), mock.Anything)
+}
+
+func TestNotifier_TelegramTransientRetries(t *testing.T) {
+	e := newNotifierEnv(t)
+	e.tg.err = &telegram.APIError{Code: 429, Description: "Too Many Requests: retry after 5"}
+	note := entity.NewSantaNotification(e.ward.ID, entity.SantaNotifyWelcome, chNow)
+	e.sr.On("ClaimNotifications", mock.Anything, chNow, notifyBatch, notifyLease).Return([]entity.SantaNotification{note}, nil)
+	retry := chNow.Add(time.Minute)
+	e.sr.On("MarkNotificationFailed", mock.Anything, note.ID, 1, &retry, mock.Anything).Return(nil)
+
+	_, err := e.n.RunOnce(context.Background())
+	require.NoError(t, err)
+	e.sr.AssertCalled(t, "MarkNotificationFailed", mock.Anything, note.ID, 1, &retry, mock.Anything)
 }

@@ -149,7 +149,12 @@ func (n *Notifier) deliver(ctx context.Context, note entity.SantaNotification) e
 		if n.tg == nil {
 			return fmt.Errorf("%w: бот не настроен", errPermanent)
 		}
-		return n.tg.SendMessage(ctx, *p.TgChatID, msg.Telegram, []telegram.Button{{Text: msg.ButtonText, URL: msg.URL}})
+		_, err := n.tg.SendMessage(ctx, *p.TgChatID, msg.Telegram, []telegram.Button{{Text: msg.ButtonText, URL: msg.URL}})
+		if errors.Is(err, telegram.ErrPermanent) {
+			// Бот заблокирован или чата нет — повтор через минуту ничего не изменит.
+			return fmt.Errorf("%w: %v", errPermanent, err)
+		}
+		return err
 	}
 	return fmt.Errorf("%w: нет канала", errPermanent)
 }

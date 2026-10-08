@@ -40,12 +40,14 @@ type fakeTG struct {
 	text   string
 	calls  int
 	err    error
+	// msgID — что SendMessage вернёт как message_id.
+	msgID int64
 }
 
-func (f *fakeTG) SendMessage(_ context.Context, chatID int64, text string, _ []telegram.Button) error {
+func (f *fakeTG) SendMessage(_ context.Context, chatID int64, text string, _ []telegram.Button) (int64, error) {
 	f.calls++
 	f.chatID, f.text = chatID, text
-	return f.err
+	return f.msgID, f.err
 }
 
 var chNow = time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)

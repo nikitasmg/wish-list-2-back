@@ -194,7 +194,7 @@ func (uc *santaUseCase) tgReply(ctx context.Context, chatID int64, text string) 
 		return nil
 	}
 	// Сбой ответа не должен ронять вебхук: Telegram повторил бы апдейт.
-	if err := uc.tg.SendMessage(ctx, chatID, text, nil); err != nil {
+	if _, err := uc.tg.SendMessage(ctx, chatID, text, nil); err != nil {
 		log.Printf("santa: telegram reply: %v", err)
 	}
 	return nil
