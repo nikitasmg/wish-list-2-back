@@ -253,7 +253,7 @@ func (n *Notifier) compose(ctx context.Context, note entity.SantaNotification, r
 			return message{}, err
 		}
 		if note.Kind == entity.SantaNotifyDrawn {
-			return drawnMessage(room, ward, link), nil
+			return drawnMessage(room, p, ward, link), nil
 		}
 		return wishesUpdatedMessage(room, ward, link), nil
 	}

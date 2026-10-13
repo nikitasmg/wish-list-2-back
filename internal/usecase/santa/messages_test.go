@@ -29,7 +29,7 @@ func TestRoomLink(t *testing.T) {
 func TestDrawnMessageEscapesUserText(t *testing.T) {
 	room := entity.SantaRoom{Title: "Офис <script>", Slug: "abcdefgh", Budget: intp(2000)}
 	ward := entity.SantaParticipant{Name: "Аня & Ко", Wishes: "<b>книги</b>\nчай", WishlistURL: "javascript:alert(1)"}
-	m := drawnMessage(room, ward, "https://santa.prosto-namekni.ru/r/abcdefgh")
+	m := drawnMessage(room, entity.SantaParticipant{Name: "Лев <i>"}, ward, "https://santa.prosto-namekni.ru/r/abcdefgh")
 
 	assert.Contains(t, m.Subject, "Офис <script>", "тема — простой текст, её кодирует mime")
 	assert.NotContains(t, m.HTML, "<script>")
@@ -39,6 +39,8 @@ func TestDrawnMessageEscapesUserText(t *testing.T) {
 	assert.NotContains(t, m.Telegram, "<b>книги</b>")
 	assert.Contains(t, m.Telegram, "&lt;b&gt;книги&lt;/b&gt;")
 	assert.Contains(t, m.Telegram, "Аня &amp; Ко")
+	assert.Contains(t, m.Telegram, "Лев &lt;i&gt;, вы дарите подарок: <b>Аня &amp; Ко</b>", "обращение по имени того, кому пишем")
+	assert.NotContains(t, m.HTML, "<i>")
 	assert.Contains(t, m.Text, "Аня & Ко")
 	assert.Contains(t, m.Text, "до 2\u00a0000 ₽")
 	assert.Equal(t, "https://santa.prosto-namekni.ru/r/abcdefgh", m.URL)
@@ -46,9 +48,10 @@ func TestDrawnMessageEscapesUserText(t *testing.T) {
 }
 
 func TestDrawnMessageWithoutWishes(t *testing.T) {
-	m := drawnMessage(entity.SantaRoom{Title: "Офис"}, entity.SantaParticipant{Name: "Боря"}, "https://x/r/a")
+	m := drawnMessage(entity.SantaRoom{Title: "Офис"}, entity.SantaParticipant{Name: "Лев"}, entity.SantaParticipant{Name: "Боря"}, "https://x/r/a")
 	assert.Contains(t, m.Text, "пока не написал пожеланий")
-	assert.Contains(t, m.Telegram, "Боря")
+	assert.Contains(t, m.Text, "Лев, вы — Тайный Санта для Боря.")
+	assert.Contains(t, m.Telegram, "Лев, вы дарите подарок: <b>Боря</b>")
 }
 
 func TestEmailCodeMessage(t *testing.T) {

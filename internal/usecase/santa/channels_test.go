@@ -124,7 +124,9 @@ func TestRequestEmailCode_SendFailureDropsCode(t *testing.T) {
 	sr.On("SetEmail", mock.Anything, p.ID, "a@example.com", mock.Anything).Return(nil)
 	sr.On("DeleteEmailCode", mock.Anything, p.ID).Return(nil)
 	err := uc.RequestEmailCode(context.Background(), "abcdefgh", tokAuth, "a@example.com")
-	assert.Error(t, err)
+	// Почтовый сервис лежит — это 503 с понятным текстом, а не «внутренняя ошибка».
+	assert.ErrorIs(t, err, usecase.ErrSantaUnavailable)
+	assert.NotContains(t, err.Error(), "smtp down")
 	sr.AssertCalled(t, "DeleteEmailCode", mock.Anything, p.ID)
 }
 
