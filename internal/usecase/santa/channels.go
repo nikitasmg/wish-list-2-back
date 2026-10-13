@@ -108,7 +108,9 @@ func (uc *santaUseCase) RequestEmailCode(ctx context.Context, slug string, auth 
 		if delErr := uc.santa.DeleteEmailCode(ctx, p.ID); delErr != nil {
 			log.Printf("santa: drop email code: %v", delErr)
 		}
-		return fmt.Errorf("send email code: %w", err)
+		// Упал почтовый сервис, а не мы: причина — в лог, человеку — 503 и запасной путь.
+		log.Printf("santa: send email code: %v", err)
+		return unavailable("не получилось отправить письмо — попробуйте через пару минут или подключите Telegram")
 	}
 	return nil
 }

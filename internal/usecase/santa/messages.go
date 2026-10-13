@@ -154,28 +154,35 @@ func welcomeMessage(room entity.SantaRoom, link string) message {
 		"Вы в Тайном Санте «"+room.Title+"»",
 		emailView{
 			Heading:    "Готово — вы в комнате «" + room.Title + "»",
-			Lines:      append([]string{"Когда организатор проведёт жеребьёвку, сюда придёт имя вашего подопечного."}, roomFacts(room)...),
+			Lines:      append([]string{"Когда организатор проведёт жеребьёвку, сюда придёт имя вашего получателя."}, roomFacts(room)...),
 			ButtonText: "Открыть комнату",
 			URL:        link,
 		},
-		"🎄 Готово — вы в комнате <b>«"+telegram.Escape(room.Title)+"»</b>.\n\nКогда организатор проведёт жеребьёвку, сюда придёт имя вашего подопечного.\n\n"+tgFacts(room),
+		"🎄 Готово — вы в комнате <b>«"+telegram.Escape(room.Title)+"»</b>.\n\nКогда организатор проведёт жеребьёвку, сюда придёт имя вашего получателя.\n\n"+tgFacts(room),
 	)
 }
 
-func drawnMessage(room entity.SantaRoom, ward entity.SantaParticipant, link string) message {
+// drawnMessage — сообщение Санте после жеребьёвки. Обращаемся к нему по имени:
+// один Telegram бывает подключён к двум участникам комнаты, и без имени не
+// понять, кому из них пришло «вы дарите».
+func drawnMessage(room entity.SantaRoom, giver, ward entity.SantaParticipant, link string) message {
 	wishes := ward.Wishes
 	wishlist := ""
 	if isHTTPURL(ward.WishlistURL) {
 		wishlist = ward.WishlistURL
 	}
-	lines := append([]string{"Вы — Тайный Санта для " + ward.Name + "."}, roomFacts(room)...)
+	hello := ""
+	if giver.Name != "" {
+		hello = giver.Name + ", "
+	}
+	lines := append([]string{hello + "вы — Тайный Санта для " + ward.Name + "."}, roomFacts(room)...)
 	if wishes == "" && wishlist == "" {
-		lines = append(lines, "Подопечный пока не написал пожеланий — мы сообщим, когда напишет.")
+		lines = append(lines, "Получатель пока не написал пожеланий — мы сообщим, когда напишет.")
 	}
 
 	var tg strings.Builder
 	tg.WriteString("🎁 Жеребьёвка в комнате <b>«" + telegram.Escape(room.Title) + "»</b> прошла.\n\n")
-	tg.WriteString("Вы дарите подарок: <b>" + telegram.Escape(ward.Name) + "</b>\n\n")
+	tg.WriteString(telegram.Escape(hello) + "вы дарите подарок: <b>" + telegram.Escape(ward.Name) + "</b>\n\n")
 	if wishes != "" {
 		tg.WriteString("Пожелания:\n<blockquote>" + telegram.Escape(wishes) + "</blockquote>\n\n")
 	} else {
@@ -230,7 +237,7 @@ func wishesUpdatedMessage(room entity.SantaRoom, ward entity.SantaParticipant, l
 		ward.Name+" обновил(а) пожелания",
 		emailView{
 			Heading:     ward.Name + " обновил(а) пожелания",
-			Lines:       []string{"Ваш подопечный в комнате «" + room.Title + "» поменял пожелания."},
+			Lines:       []string{"Ваш получатель в комнате «" + room.Title + "» поменял пожелания."},
 			Quote:       ward.Wishes,
 			WishlistURL: wishlist,
 			ButtonText:  "Открыть конверт",
@@ -286,14 +293,14 @@ func chatFromWardMessage(room entity.SantaRoom, wardName, body, link string) mes
 	return compose(
 		wardName+" написал(а) вам — «"+room.Title+"»",
 		emailView{
-			Heading:    "Вам пишет подопечный: " + wardName,
-			Lines:      []string{"Сообщение в комнате «" + room.Title + "». Ваше имя подопечный не знает."},
+			Heading:    "Вам пишет получатель: " + wardName,
+			Lines:      []string{"Сообщение в комнате «" + room.Title + "». Ваше имя получатель не знает."},
 			Quote:      body,
 			ButtonText: "Ответить",
 			URL:        link,
 			Footer:     "Ответить можно только на странице комнаты: ответ на это письмо не дойдёт.",
 		},
-		"💬 Вам пишет подопечный <b>"+telegram.Escape(wardName)+"</b> (комната «"+telegram.Escape(room.Title)+"»):\n\n<blockquote>"+telegram.Escape(body)+"</blockquote>\n\nЧтобы ответить, ответьте на это сообщение (Reply) — подопечный не узнает, кто вы.",
+		"💬 Вам пишет получатель <b>"+telegram.Escape(wardName)+"</b> (комната «"+telegram.Escape(room.Title)+"»):\n\n<blockquote>"+telegram.Escape(body)+"</blockquote>\n\nЧтобы ответить, ответьте на это сообщение (Reply) — получатель не узнает, кто вы.",
 	)
 }
 
