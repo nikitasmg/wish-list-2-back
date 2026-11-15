@@ -18,7 +18,6 @@ FROM alpine:latest
 WORKDIR /app
 
 COPY --from=builder /app/main .
-COPY --from=builder /app/.env .
 
 # ca-certificates for TLS, libwebp for runtime CGO dependency
 RUN apk add --no-cache ca-certificates libwebp

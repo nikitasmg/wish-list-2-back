@@ -73,10 +73,10 @@ func Run(cfg *config.Config) {
 		log.Fatalf("backfill santa pending_email: %v", err)
 	}
 
-	// MinIO
-	fileStorage, err := minioPkg.New(cfg.Minio, cfg.App.MinioPublicURL)
+	// S3 object storage
+	fileStorage, err := minioPkg.New(cfg.S3)
 	if err != nil {
-		log.Fatalf("minio: %v", err)
+		log.Fatalf("s3: %v", err)
 	}
 	fileStorage = minioPkg.NewOptimizing(fileStorage)
 

@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -12,7 +13,7 @@ type Config struct {
 	App    AppConfig
 	DB     DBConfig
 	Auth   AuthConfig
-	Minio  MinioConfig
+	S3     S3Config
 	Notify NotifyConfig
 }
 
@@ -32,10 +33,9 @@ type NotifyConfig struct {
 }
 
 type AppConfig struct {
-	Port           string
-	CORSOrigin     string
-	MinioPublicURL string
-	Env            string
+	Port       string
+	CORSOrigin string
+	Env        string
 }
 
 type DBConfig struct {
@@ -53,12 +53,15 @@ type AuthConfig struct {
 	CookieDomain string
 }
 
-type MinioConfig struct {
-	Endpoint     string
-	BucketName   string
-	RootUser     string
-	RootPassword string
-	UseSSL       bool
+type S3Config struct {
+	Endpoint         string
+	Region           string
+	BucketName       string
+	AccessKeyID      string
+	SecretAccessKey  string
+	UseSSL           bool
+	PublicURL        string
+	AutoCreateBucket bool
 }
 
 func LoadConfig() (*Config, error) {
@@ -66,10 +69,9 @@ func LoadConfig() (*Config, error) {
 
 	cfg := &Config{
 		App: AppConfig{
-			Port:           getEnv("PORT", "8080"),
-			CORSOrigin:     getEnv("CORS_ORIGIN", "https://prosto-namekni.ru"),
-			MinioPublicURL: getEnv("MINIO_PUBLIC_URL", "https://files.prosto-namekni.ru"),
-			Env:            getEnv("APP_ENV", "production"),
+			Port:       getEnv("PORT", "8080"),
+			CORSOrigin: getEnv("CORS_ORIGIN", "https://prosto-namekni.ru"),
+			Env:        getEnv("APP_ENV", "production"),
 		},
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "postgres"),
@@ -84,13 +86,7 @@ func LoadConfig() (*Config, error) {
 			BotToken:     getEnv("BOT_TOKEN", ""),
 			CookieDomain: getEnv("COOKIE_DOMAIN", "prosto-namekni.ru"),
 		},
-		Minio: MinioConfig{
-			Endpoint:     getEnv("MINIO_ENDPOINT", "minio-internal:9000"),
-			BucketName:   getEnv("MINIO_BUCKET_NAME", "wish-list-bucket"),
-			RootUser:     getEnv("MINIO_ROOT_USER", "root"),
-			RootPassword: getEnv("MINIO_ROOT_PASSWORD", "minio_password"),
-			UseSSL:       getEnvAsBool("MINIO_USE_SSL", false),
-		},
+		S3: loadS3Config(),
 		Notify: NotifyConfig{
 			SMTPHost:              getEnv("SMTP_HOST", ""),
 			SMTPPort:              getEnvAsInt("SMTP_PORT", 587),
@@ -143,4 +139,27 @@ func getEnvNonEmpty(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// S3_* settings take precedence; MINIO_* remains supported for local development.
+func loadS3Config() S3Config {
+	bucket := getEnvNonEmpty("S3_BUCKET_NAME", getEnvNonEmpty("MINIO_BUCKET_NAME", "wish-list-bucket"))
+	publicURL := getEnvNonEmpty("S3_PUBLIC_URL", "")
+	if publicURL == "" && getEnvNonEmpty("S3_ENDPOINT", "") == "" {
+		publicURL = strings.TrimRight(getEnvNonEmpty("MINIO_PUBLIC_URL", "https://files.prosto-namekni.ru"), "/") + "/" + bucket
+	}
+	useSSL := getEnvAsBool("MINIO_USE_SSL", false)
+	if getEnvNonEmpty("S3_ENDPOINT", "") != "" {
+		useSSL = true
+	}
+	return S3Config{
+		Endpoint:         getEnvNonEmpty("S3_ENDPOINT", getEnvNonEmpty("MINIO_ENDPOINT", "minio-internal:9000")),
+		Region:           getEnvNonEmpty("S3_REGION", ""),
+		BucketName:       bucket,
+		AccessKeyID:      getEnvNonEmpty("S3_ACCESS_KEY_ID", getEnvNonEmpty("MINIO_ROOT_USER", "")),
+		SecretAccessKey:  getEnvNonEmpty("S3_SECRET_ACCESS_KEY", getEnvNonEmpty("MINIO_ROOT_PASSWORD", "")),
+		UseSSL:           getEnvAsBool("S3_USE_SSL", useSSL),
+		PublicURL:        publicURL,
+		AutoCreateBucket: getEnvAsBool("S3_AUTO_CREATE_BUCKET", false),
+	}
 }
